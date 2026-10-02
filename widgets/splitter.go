@@ -134,7 +134,26 @@ func (s *Splitter) minFor(c widget.Component, set float32) float32 {
 	return widget.MinWidthOf(c)
 }
 
-// mins are the two floors, already reduced to fit if together they are
+// MinWidth is how narrow the splitter itself may be: side by side, both
+// panes' floors and the bar between them; split in rows, the wider of the
+// two, because then they share the whole width rather than dividing it.
+//
+// Without this a window sized from its content got the probe's guess for
+// anything made of splitters, which is what an application assembling its
+// layout out of them is most likely to ask about. A collapsible pane
+// contributes nothing, since it is allowed to close.
+func (s *Splitter) MinWidth() float32 {
+	a, b := s.minFor(s.A, s.MinA), s.minFor(s.B, s.MinB)
+	if !s.sideBySide() {
+		// minFor answers 0 for a row split (MinWidthOf is a width, and the
+		// panes are stacked), so ask the panes directly.
+		a, b = widget.MinWidthOf(s.A), widget.MinWidthOf(s.B)
+		return max(a, b)
+	}
+	return a + b + max(s.bar(), 1)
+}
+
+// mins are the two floors, already reduced to fit if together they are// mins are the two floors, already reduced to fit if together they are
 // wider than there is: a splitter too narrow for both panes shares what
 // it has in proportion rather than giving the first one everything.
 func (s *Splitter) mins(avail float32) (a, b float32) {

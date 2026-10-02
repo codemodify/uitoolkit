@@ -228,6 +228,35 @@ func NewStack(children ...widget.Component) *Stack {
 	return s
 }
 
+// MinWidth is the widest of its pages' minimums, counting the pages that
+// are not showing.
+//
+// A stack shows one page at a time, so there is nothing for the generic
+// probe to read: it narrows a component and watches for it to grow taller,
+// and a stack is as tall as its tallest page whatever its width. Asked
+// about a stack of a message list and a settings page, the probe found the
+// list as tall at a quarter of the width as at full width, concluded that
+// nothing folds, and answered with the *natural* width of the widest page —
+// 973 device pixels for a list that is happy at 296. A splitter holding one
+// then took three quarters of a window for it.
+//
+// Every page is counted, showing or not, because the stack has to be able
+// to show any of them without the window having to grow: that is Qt's rule
+// for QStackedLayout's minimumSize, and the reason this is a floor rather
+// than a measurement of what happens to be on top.
+func (s *Stack) MinWidth() float32 {
+	var w float32
+	for _, ch := range s.Children() {
+		if ch == nil {
+			continue
+		}
+		if m := widget.MinWidthOf(ch); m > w {
+			w = m
+		}
+	}
+	return w + s.Pad*2
+}
+
 func (s *Stack) Measure(c layout.Constraints) paintengine2d.Point {
 	var w, h float32
 	inner := c.Inset(s.Pad*2, s.Pad*2)

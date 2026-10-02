@@ -17,7 +17,17 @@ type TextField struct {
 	widget.Base
 	Text        string
 	Placeholder string
-	OnChange    func(string)
+	// PreferredWidth is the 1x design width the field asks for, in place
+	// of the default 180.
+	//
+	// A field cannot fold, so a layout gives it what it asks for even
+	// where there is less, and the 180 was a floor under any form holding
+	// one however narrow everything beside it was willing to be — a form
+	// of secret fields asking for less still could not go below it.
+	// [SecretField], [SecretArea] and [TokenField] have had this lever;
+	// a plain field had not.
+	PreferredWidth float32
+	OnChange       func(string)
 	// OnInput fires only for text the user put there — typing, backspace,
 	// a paste, a cut, an IME commit, a screen reader's edit — and never
 	// for SetText from the app. It fires after OnChange
@@ -164,7 +174,21 @@ func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(t.Look().Metrics())
-	return c.Constrain(paintengine2d.Pt(style.Dip(t.Look(), 180), h))
+	w := float32(180)
+	if t.PreferredWidth > 0 {
+		w = t.PreferredWidth
+	}
+	return c.Constrain(paintengine2d.Pt(style.Dip(t.Look(), w), h))
+}
+
+// MinWidth is what the field asks for: it has no narrower form, so the
+// width it measures at is also the width below which it stops working.
+func (t *TextField) MinWidth() float32 {
+	w := float32(180)
+	if t.PreferredWidth > 0 {
+		w = t.PreferredWidth
+	}
+	return style.Dip(t.Look(), w)
 }
 
 func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
