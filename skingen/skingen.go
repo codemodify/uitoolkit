@@ -184,8 +184,21 @@ type TextRole struct {
 
 // WindowSpec is the frame the skin asks for.
 type WindowSpec struct {
-	Border  [4]int
-	Caption int
+	// Border is the frame round the window: top, right, bottom, left.
+	//
+	// With ContentBorder set it is the border round the *caption band*
+	// only, and ContentBorder insets the content under it — the skin
+	// format's split border, for a frame wide at the top and narrow
+	// below. A shoulder that runs the window's full width states
+	// Border{} and puts the inset in ContentBorder; stating it once for
+	// both leaves the caption painted short of the shoulder its own
+	// silhouette cuts.
+	//
+	// Border's bottom must be 0 and ContentBorder's top must be 0: the
+	// room between the two rows is window.captionGap, said once.
+	Border        [4]int
+	ContentBorder [4]int
+	Caption       int
 	Layout  string
 	Radius  [4]int
 	Shape   []ShapeRect
@@ -465,7 +478,12 @@ func partsJSON(bs []PartBinding) map[string]any {
 // windowJSON is a window block, or one of its variants.
 func windowJSON(ws *WindowSpec) map[string]any {
 	w := map[string]any{}
-	if ws.Border != [4]int{} {
+	switch {
+	case ws.ContentBorder != [4]int{}:
+		// The split form: one inset for the caption band, one for the
+		// content under it.
+		w["border"] = map[string]any{"caption": ws.Border[:], "content": ws.ContentBorder[:]}
+	case ws.Border != [4]int{}:
 		w["border"] = ws.Border[:]
 	}
 	if ws.Caption > 0 {

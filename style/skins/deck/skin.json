@@ -232,7 +232,10 @@
     }
   },
   "window": {
-    "border": [0, 26, 26, 26],
+    "border": {
+      "caption": [0, 0, 0, 0],
+      "content": [0, 26, 26, 26]
+    },
     "caption": 46,
     "layout": ":minimize,maximize,close",
     "radius": [24, 24, 0, 0],

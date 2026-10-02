@@ -252,8 +252,15 @@ func Deck() *Plan {
 	// a margin of shell inside the cut. The two rectangles overlap by six
 	// pixels so their union has no seam.
 	p.Window = &WindowSpec{
-		Border:  [4]int{0, deckBezel, deckBezel, deckBezel},
-		Caption: deckShoulder,
+		// The shoulder runs the window's full width — the first shape
+		// rect below says so — so the caption band takes no side border
+		// at all, and the bezel insets only the content under it. Stated
+		// as one border for both, the caption was painted a bezel short
+		// of each end of the shoulder it sits in, and the shape's own
+		// corners showed through as bare cut-outs.
+		Border:        [4]int{},
+		ContentBorder: [4]int{0, deckBezel, deckBezel, deckBezel},
+		Caption:       deckShoulder,
 		Layout:  ":minimize,maximize,close",
 		Radius:  [4]int{deckRadTop, deckRadTop, 0, 0},
 		Shape: []ShapeRect{

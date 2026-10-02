@@ -596,10 +596,20 @@ func (w *Window) captionStrip() paintengine2d.Rect {
 
 // The states that drop an app's silhouette drop a look's, and the fitted
 // caption that goes with it comes back with it.
+//
+// Only a look whose caption is *narrower* than the window has one to come
+// back: BeOS's, which is a tab. Deck's shoulder runs the window's full
+// width, so its caption is the same width shaped or maximized — it used to
+// widen here, but only because a single border was insetting the caption
+// band along with the content, which left the shoulder's cut corners bare
+// on a real compositor.
 func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
-	for _, pack := range []string{"deck", "beos"} {
-		t.Run(pack, func(t *testing.T) {
-			r := framedRig(t, pack, 500, 360)
+	for _, pack := range []struct {
+		name   string
+		fitted bool
+	}{{"deck", false}, {"beos", true}} {
+		t.Run(pack.name, func(t *testing.T) {
+			r := framedRig(t, pack.name, 500, 360)
 			if r.w.sysFrame.Shape == nil {
 				t.Fatal("no silhouette to drop")
 			}
@@ -609,8 +619,12 @@ func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
 			if r.w.shapeRaster() != nil || r.w.sysFrame.Shape != nil {
 				t.Fatal("a maximized window kept its look's silhouette")
 			}
-			if got := r.w.captionStrip().Dx(); got <= wide {
+			got := r.w.captionStrip().Dx()
+			switch {
+			case pack.fitted && got <= wide:
 				t.Errorf("maximized caption is %v wide, no wider than the fitted %v", got, wide)
+			case !pack.fitted && got != wide:
+				t.Errorf("maximized caption is %v wide, but a full-width caption was %v shaped", got, wide)
 			}
 			r.o.SimulateWindowState(platform.WindowState{Activated: true})
 			r.a.PumpOnce()
