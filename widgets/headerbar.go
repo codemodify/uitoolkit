@@ -62,6 +62,18 @@ type HeaderBar struct {
 	// It is the toolkit's answer to a sidebar the window's chrome lines
 	// up with, and it ties nothing to anything: a footer, a second tool
 	// bar or a status bar can use the same number.
+	//
+	// It holds under either frame: in a merged caption the room is taken
+	// before the bar's items but never over the window controls, and in a
+	// stacked frame's row it is taken from the row's leading edge instead
+	// of the frame's inset. Whichever owns the start, this is a floor.
+	//
+	// Setting it from inside a layout pass — measuring where something
+	// landed and telling the bar about it — does not reach that frame on
+	// its own, because the caption was laid out before the content. Call
+	// [HeaderBar.Arrange] with the bar's own Bounds() after setting it to
+	// have it in the frame being built; otherwise it shows on the next
+	// one, which on a drag is a frame the user sees.
 	StartWidth float32
 	// OnContextMenu, when set, runs for a right-click on the header bar's
 	// caption space (at, window device pixels) instead of the window menu,
@@ -333,6 +345,15 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 	switch {
 	case h.strip > 0 && h.custom:
 		il, ir := rowInset(s)
+		// StartWidth holds in the stacked row too. It says where the bar's
+		// own items begin, measured from the bar's leading edge, so that
+		// they line up with something below — and what owns the start
+		// before them differs by frame: the window controls in a merged
+		// caption, the frame's own inset in a stacked row. Either way it
+		// is a floor, never a subtraction.
+		if h.StartWidth > il {
+			il = h.StartWidth
+		}
 		rowBox = paintengine2d.XYWH(il, h.strip, max(w-il-ir, 0), max(ht-h.strip, 0))
 	case h.strip > 0:
 		// A stacked frame's caption holding only the title: no row.
