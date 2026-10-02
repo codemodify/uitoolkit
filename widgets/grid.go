@@ -563,12 +563,21 @@ func (f *Form) AddRow(label string, field widget.Component) *Label {
 	f.Place(l, f.n, 0)
 	if field != nil {
 		f.Place(field, f.n, 1)
-		// The label names its field for assistive technology (Qt's buddy).
-		if nm, ok := field.(interface {
-			AccessibleName() string
-			SetAccessibleName(string)
-		}); ok && nm.AccessibleName() == "" {
-			nm.SetAccessibleName(strings.TrimSuffix(strings.TrimSpace(widget.PlainText(label)), ":"))
+		// The label names its field for assistive technology (Qt's buddy)
+		// — but not where the field is itself a piece of text. A label's
+		// accessible name is read *instead of* its text, so a row of
+		// caption and value ("Program:", "/usr/bin/mail") came out as
+		// "Program:", "Program", and the value, which is the whole reason
+		// a consent prompt is on the screen, was never read at all. Qt's
+		// buddy is for something that takes input; a value is read as
+		// what it says.
+		if _, isText := field.(*Label); !isText {
+			if nm, ok := field.(interface {
+				AccessibleName() string
+				SetAccessibleName(string)
+			}); ok && nm.AccessibleName() == "" {
+				nm.SetAccessibleName(strings.TrimSuffix(strings.TrimSpace(widget.PlainText(label)), ":"))
+			}
 		}
 	}
 	f.n++
