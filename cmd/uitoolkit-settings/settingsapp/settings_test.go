@@ -1641,8 +1641,9 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	row := optionsRow(t, w)
 	// The words, in the order they are read: the three that hand a piece
 	// of the window to the desktop, in the order of how much they hand
-	// over, and then the two that are the toolkit's own.
-	want := []string{"OS colors", "OS dialogs", "OS borders", "Animations", "Combo wheel"}
+	// over, then the two that are the toolkit's own, and last the one
+	// about the frame the toolkit draws.
+	want := []string{"OS colors", "OS dialogs", "OS borders", "Animations", "Combo wheel", "Window menu"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
@@ -1666,6 +1667,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		"OS dialogs":  "OS dialogs: the desktop's own Open and Save dialogs",
 		"OS borders":  "OS borders: the desktop's title bar and borders",
 		"OS colors":   "OS colors: follow the desktop's light or dark mode and its accent",
+		"Window menu": "Window menu: the button at the left end of a toolkit-drawn caption",
 	}
 	for word, name := range names {
 		box := findOption(w.Content(), word)

@@ -148,6 +148,7 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	// whatever the preference says (resolveDecorations).
 	a.setDecorationsPref(ap.Decorations)
 	a.SetCaptionButtons(ap.CaptionButtons)
+	a.SetHideWindowMenu(ap.HideWindowMenu)
 	a.SetRenderer(ap.Renderer)
 	// What reached the app from outside is what a cleared
 	// Application.SetTheme goes back to; the application's own level of
@@ -185,6 +186,7 @@ func (a *Application) Appearance() style.Appearance {
 	ap := style.LookAppearance(a.look)
 	ap.Decorations = a.decorPref
 	ap.CaptionButtons = a.captionPref
+	ap.HideWindowMenu = a.hideMenuBtn
 	ap.Renderer = a.renderPref
 	ap.ReduceMotion = style.ReduceMotion()
 	ap.NativeDialogs = style.NativeDialogs()

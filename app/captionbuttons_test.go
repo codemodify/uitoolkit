@@ -170,3 +170,78 @@ func TestWindowHidesEveryCaptionButton(t *testing.T) {
 		t.Errorf("%d buttons left after hiding them all", got)
 	}
 }
+
+// The user's own preference, rather than the application's: Settings'
+// "Window menu", unticked, leaves the button out of every caption the
+// toolkit draws, under whatever layout the desktop asked for.
+//
+// It is the button that goes, not the menu — a right click on the caption
+// still opens it — and it has to run before the keep-above swap, or hiding
+// the button would simply put a different one in the slot.
+func TestHidingTheWindowMenuDropsItsButton(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	// KWin's default: the window menu on the left, the rest on the right.
+	a.SetTitleBarPrefs(platform.TitleBarPrefs{
+		Layout: platform.ParseButtonLayout("menu:minimize,maximize,close"),
+	})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Width: 480, Height: 300, Headless: true,
+		Decorations: platform.DecorationsClient,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("content"))
+	a.PumpOnce()
+	if w.Caption() == nil {
+		t.Skip("no toolkit-drawn caption here")
+	}
+	if !shownIn(w)[platform.CaptionMenu] {
+		t.Skip("this configuration draws no window-menu button")
+	}
+
+	a.SetHideWindowMenu(true)
+	a.PumpOnce()
+	shown := shownIn(w)
+	if shown[platform.CaptionMenu] {
+		t.Error("the window-menu button survived the preference")
+	}
+	// The slot is gone, not refilled.
+	if shown[platform.CaptionKeepAbove] {
+		t.Error("the keep-above button took the window menu's slot; the preference asked for no button there")
+	}
+	// The three that were never in question are untouched.
+	for _, b := range []platform.CaptionButton{
+		platform.CaptionMinimize, platform.CaptionMaximize, platform.CaptionClose,
+	} {
+		if !shown[b] {
+			t.Errorf("hiding the window menu also took %v", b)
+		}
+	}
+	if !a.HideWindowMenu() {
+		t.Error("HideWindowMenu does not report what was set")
+	}
+
+	a.SetHideWindowMenu(false)
+	a.PumpOnce()
+	if !shownIn(w)[platform.CaptionMenu] {
+		t.Error("the button did not come back")
+	}
+}
+
+// The preference travels in the appearance file, so Settings' Apply and a
+// restart agree about it.
+func TestHideWindowMenuRoundTripsThroughTheAppearanceFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	ap := style.DefaultAppearance()
+	if ap.HideWindowMenu {
+		t.Fatal("the default is to leave the desktop's layout alone")
+	}
+	ap.HideWindowMenu = true
+	if err := style.SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	if got := style.LoadAppearance(); !got.HideWindowMenu {
+		t.Error("hideWindowMenu did not survive the file")
+	}
+}

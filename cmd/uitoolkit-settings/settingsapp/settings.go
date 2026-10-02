@@ -819,6 +819,29 @@ func (s *settingsState) optionsRow() widget.Component {
 			s.stage(next)
 		})
 
+	// The window-menu button, and only the button. KWin's default layout
+	// puts an "M" at the left end of every caption and most desktops put
+	// nothing there; a person who does not want it had no way to say so,
+	// because the box that used to ask where the caption buttons go was
+	// taken out on the grounds that the theme places them. Where they go
+	// is the theme's business. Whether this one is there at all is not —
+	// it is the only caption button that opens something rather than
+	// doing something, and the thing it opens is on the right click
+	// anyway.
+	//
+	// It sits last of the six, after the three that hand a piece of the
+	// window to the desktop, because it is about the frame the toolkit
+	// draws and only has an effect while "OS borders" is unticked.
+	menu := s.option("Window menu",
+		"Window menu: the button at the left end of a toolkit-drawn caption",
+		"Off by default on desktops that ask for one, which is KDE. Unticked, the button is left out of captions the toolkit draws. "+
+			"The menu is not lost with it: a right click on the caption or on any caption button still opens it.",
+		!s.staged.HideWindowMenu, func(on bool) {
+			next := s.staged
+			next.HideWindowMenu = !on
+			s.stage(next)
+		})
+
 	shape, glyphs, paint := s.choosers()
 	// The two typefaces, then what rasterizes them, then the icons and
 	// their size, then the shape of the window itself: the text first
@@ -858,7 +881,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// over and the two that do not go down onto the second; at 1024x860
 	// all five fill the first line and the choosers have the block below
 	// to themselves.
-	row := widgets.NewWrap(colours, native, system, motion, wheel)
+	row := widgets.NewWrap(colours, native, system, motion, wheel, menu)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.

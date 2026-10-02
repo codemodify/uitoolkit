@@ -120,6 +120,15 @@ type Appearance struct {
 	// default) or CaptionButtonsTheme (the look's own: the Mac's traffic
 	// lights on the left, GNOME's lone close, KDE's window menu).
 	CaptionButtons CaptionButtonsPref
+	// HideWindowMenu drops the window-menu button from the caption of
+	// every frame the toolkit draws — KDE's "M" on the left, which KWin's
+	// default layout puts there and which most desktops do not.
+	//
+	// Nothing is lost with the button: the window menu is still a right
+	// click on the caption or on any caption button, and still whatever
+	// the desktop's right-click title-bar action is. It is the button
+	// that goes, not the menu.
+	HideWindowMenu bool
 	// Renderer is the paint device a window's surface binds when it is
 	// created: RendererAuto (the GPU where EGL starts, else the CPU),
 	// RendererGPU or RendererCPU. UITK_PAINT overrides it wherever it is

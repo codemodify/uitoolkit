@@ -43,6 +43,10 @@ type appearanceFileJSON struct {
 	Decorations string `json:"decorations,omitempty"`
 	// CaptionButtons: "desktop" (omitted) or "theme".
 	CaptionButtons string `json:"captionButtons,omitempty"`
+	// HideWindowMenu drops the window-menu button from a toolkit-drawn
+	// caption. Left out unless it is on, like every other preference here
+	// whose default is off.
+	HideWindowMenu bool `json:"hideWindowMenu,omitempty"`
 	// Renderer: "auto" (omitted), "gpu" or "cpu" — which paint device a
 	// new window's surface binds. UITK_PAINT overrides it and is never
 	// written back here; see [RendererPref].
@@ -232,6 +236,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	a.FollowDesktop = raw.FollowDesktop
 	a.NativeDialogs = raw.NativeDialogs
 	a.ComboWheel = raw.ComboWheel
+	a.HideWindowMenu = raw.HideWindowMenu
 	a.Decorations = ParseDecorationsPref(raw.Decorations)
 	a.CaptionButtons = ParseCaptionButtonsPref(raw.CaptionButtons)
 	a.Renderer = ParseRendererPref(raw.Renderer)
@@ -315,6 +320,7 @@ func SaveAppearance(a Appearance) error {
 		FollowDesktop:  a.FollowDesktop,
 		NativeDialogs:  a.NativeDialogs,
 		ComboWheel:     a.ComboWheel,
+		HideWindowMenu: a.HideWindowMenu,
 		Decorations:    decorationsJSON(a.Decorations),
 		CaptionButtons: string(ParseCaptionButtonsPref(string(a.CaptionButtons))),
 		Renderer:       string(ParseRendererPref(string(a.Renderer))),

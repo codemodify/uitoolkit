@@ -506,8 +506,47 @@ func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
 	if w.app.captionPref == style.CaptionButtonsTheme && spec.Layout != "" {
 		l = platform.ParseButtonLayout(spec.Layout)
 	}
-	return buttonsToSide(w.keepAboveInMenuSlot(l), spec.ButtonSide)
+	return buttonsToSide(w.keepAboveInMenuSlot(w.dropWindowMenu(l)), spec.ButtonSide)
 }
+
+// dropWindowMenu takes the window-menu button out of l where the user has
+// asked for it gone (style.Appearance.HideWindowMenu, Settings' "Window
+// menu"). The menu itself is untouched: it is still a right click on the
+// caption or on any caption button, and still the desktop's right-click
+// title-bar action.
+//
+// It runs before keepAboveInMenuSlot, so hiding the button does not simply
+// put the keep-above button in the slot instead.
+func (w *Window) dropWindowMenu(l platform.ButtonLayout) platform.ButtonLayout {
+	if !w.app.hideMenuBtn || !l.Has(platform.CaptionMenu) {
+		return l
+	}
+	without := func(bs []platform.CaptionButton) []platform.CaptionButton {
+		out := make([]platform.CaptionButton, 0, len(bs))
+		for _, b := range bs {
+			if b != platform.CaptionMenu {
+				out = append(out, b)
+			}
+		}
+		return out
+	}
+	return platform.ButtonLayout{Left: without(l.Left), Right: without(l.Right)}
+}
+
+// SetHideWindowMenu drops the window-menu button from the caption of every
+// frame the toolkit draws, or puts it back (the user's look.json
+// "hideWindowMenu").
+func (a *Application) SetHideWindowMenu(hide bool) {
+	if a == nil || hide == a.hideMenuBtn {
+		return
+	}
+	a.hideMenuBtn = hide
+	a.titleBarPrefsChanged()
+}
+
+// HideWindowMenu reports whether toolkit-drawn captions leave the
+// window-menu button out (see SetHideWindowMenu).
+func (a *Application) HideWindowMenu() bool { return a != nil && a.hideMenuBtn }
 
 // keepAboveInMenuSlot puts the keep-above button where the window-menu
 // button would go. The window menu itself is not lost with it: it is still

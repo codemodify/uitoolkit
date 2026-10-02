@@ -170,6 +170,9 @@ type Application struct {
 	decorPref style.DecorationsPref
 	tbar      titleBarPrefsCache
 	desktop   platform.DesktopPrefs
+	// hideMenuBtn drops the window-menu button from a toolkit-drawn
+	// caption (style.Appearance.HideWindowMenu).
+	hideMenuBtn bool
 	// captionPref is where toolkit frames put their caption buttons: the
 	// desktop's layout or the look's own (look.json "captionButtons").
 	captionPref style.CaptionButtonsPref
@@ -219,6 +222,7 @@ func New(opts Options) *Application {
 	}
 	var decorPref style.DecorationsPref
 	var captionPref style.CaptionButtonsPref
+	var hideMenuBtn bool
 	if !opts.Headless {
 		// "OS window borders" (Settings' name for the desktop's title bar
 		// and borders), where the caption buttons go and which paint
@@ -228,6 +232,7 @@ func New(opts Options) *Application {
 			ap = style.LoadAppearance()
 		}
 		decorPref, captionPref = ap.Decorations, ap.CaptionButtons
+		hideMenuBtn = ap.HideWindowMenu
 	}
 	// A surface binds its paint device when it is created, so the
 	// preference has to be in place before the first NewWindow. An
@@ -263,6 +268,7 @@ func New(opts Options) *Application {
 		watchLook:   watch,
 		decorPref:   decorPref,
 		captionPref: captionPref,
+		hideMenuBtn: hideMenuBtn,
 		renderPref:  renderPref,
 	}
 	// Ask the desktop for its preferences before the look is built: a
