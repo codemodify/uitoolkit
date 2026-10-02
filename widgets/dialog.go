@@ -158,10 +158,20 @@ func (o *Overlay) Dismissed() {
 // DialogCard is an in-app window with a title, a message and an action
 // row; the look paints its frame and caption.
 func DialogCard(title, body string, actions ...widget.Component) *Panel {
+	// The body scrolls and the action row does not. An Overlay holds its
+	// card to 0.88 of the window, so a card with more text than that
+	// used to lay its last lines and its buttons out past its own foot,
+	// where they could be neither seen nor reached — a long plan, or a
+	// secret with its fingerprint under it, in a small window. The row
+	// keeps its place at the foot and the text moves under it.
+	msg := NewLabel(body)
+	msg.Wrap = true
+	text := NewScrollView(msg)
 	col := NewColumn(
-		NewLabel(body),
+		text,
 		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
 	).WithGap(12).WithPad(4)
+	col.AddFlex(text, 1)
 	p := NewPanel(title, col)
 	p.Window = true
 	p.Raised = true
