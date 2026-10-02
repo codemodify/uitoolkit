@@ -1,6 +1,9 @@
 package platform
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 // Alive says there is somewhere to send the item; Shown says someone is
 // showing it. An application that closes to the tray has to ask the
@@ -58,6 +61,15 @@ func TestStubStatusItemShowsNothing(t *testing.T) {
 // A watcher that is there and will not answer is still read as shown:
 // refusing to close to a tray that works is the worse failure.
 func TestLinuxTrayNotShownWithNoWatcher(t *testing.T) {
+	// Linux's tray, as the name says — and the skip below is not enough
+	// on its own, because it comes after the item has been made. On
+	// macOS NewStatusItem reaches NSStatusItem, which blocks without a
+	// logged-in console session: over SSH it hung for the whole test
+	// timeout and took the rest of the platform package down with it, so
+	// nothing in this package ran on the Mac at all.
+	if runtime.GOOS != "linux" {
+		t.Skip("the SNI tray is Linux's")
+	}
 	it, err := NewStatusItem(StatusItemOptions{ID: "uitoolkit-test", Title: "test"})
 	if err != nil {
 		t.Skip(err)

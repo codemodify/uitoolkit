@@ -157,6 +157,30 @@ func (o *Overlay) Dismissed() {
 
 // DialogCard is an in-app window with a title, a message and an action
 // row; the look paints its frame and caption.
+// DialogContent is a dialog's body over its action row, arranged the way
+// the platforms' own dialogs are: the body scrolls and the row keeps its
+// place at the foot.
+//
+// An [Overlay] holds its card to the window, and a card taller than that
+// used to lay its last lines and its buttons out past its own foot, where
+// they could be neither seen nor reached. The Overlay cannot fix it for a
+// card an application builds — it is handed one component and cannot tell
+// which part of it is the buttons — so this is the piece to build that
+// card out of. [DialogCard] is made of it.
+//
+//	card := widgets.NewPanel("Recovery share", widgets.DialogContent(
+//	    widgets.NewColumn(qr, widgets.NewLabel(words)),
+//	    cancel, save))
+func DialogContent(body widget.Component, actions ...widget.Component) *FlexBox {
+	scroll := NewScrollView(body)
+	col := NewColumn(
+		scroll,
+		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
+	).WithGap(12).WithPad(4)
+	col.AddFlex(scroll, 1)
+	return col
+}
+
 func DialogCard(title, body string, actions ...widget.Component) *Panel {
 	// The body scrolls and the action row does not. An Overlay holds its
 	// card to 0.88 of the window, so a card with more text than that
@@ -166,12 +190,7 @@ func DialogCard(title, body string, actions ...widget.Component) *Panel {
 	// keeps its place at the foot and the text moves under it.
 	msg := NewLabel(body)
 	msg.Wrap = true
-	text := NewScrollView(msg)
-	col := NewColumn(
-		text,
-		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
-	).WithGap(12).WithPad(4)
-	col.AddFlex(text, 1)
+	col := DialogContent(msg, actions...)
 	p := NewPanel(title, col)
 	p.Window = true
 	p.Raised = true

@@ -67,6 +67,17 @@ fi
 args=""
 for a in "$@"; do args+=" \"$a\""; done
 
+# Nothing else may be on the port: the guest fetches run.cmd from it, and
+# another server there answers 404. The run then sits in "waiting for the
+# result" until it times out, and the message it prints blames the guest's
+# login state or Defender — neither of which is wrong. That cost an
+# afternoon once, to a leftover file server from an earlier session.
+if command -v ss >/dev/null && ss -ltn "sport = :$PORT" 2>/dev/null | grep -q ":$PORT"; then
+  echo "port $PORT is already in use; the guest would fetch run.cmd from whatever is there." >&2
+  echo "free it, or set UITK_WIN_VM_PORT to another port." >&2
+  exit 2
+fi
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"; kill %1 2>/dev/null || true' EXIT
 mkdir -p "$work/bin"
