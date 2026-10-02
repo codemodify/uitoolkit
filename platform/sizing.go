@@ -94,3 +94,20 @@ func SetSurfaceSizing(s Surface, sz Sizing) bool { return GeometryOf(s).SetSizin
 // SurfaceSizeLimits is what s told the window system (zero when it cannot
 // say).
 func SurfaceSizeLimits(s Surface) SizeLimits { return GeometryOf(s).SizeLimits() }
+
+// SizeLimitSurface is a surface whose size limits can be restated after it
+// was made.
+//
+// WindowOptions.MinWidth / MinHeight are given as the window is created,
+// which is before the content that decides them exists: a program that
+// wants its window to be no smaller than its content can fit in has
+// nothing to measure yet. This is the way to say it afterwards, once the
+// widgets are there and widget.MinWidthOf can answer.
+//
+// The limits are the visible window in logical pixels, as SizeLimits
+// always is. A backend states them to the window system at once; what the
+// window system then does about a window already smaller is its own
+// business, and differs.
+type SizeLimitSurface interface {
+	SetSizeLimits(SizeLimits)
+}

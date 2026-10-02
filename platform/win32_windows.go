@@ -1075,3 +1075,13 @@ func (s *winSurface) trackLeave() {
 	e.Size = uint32(unsafe.Sizeof(e))
 	procTrackMouse.Call(uintptr(unsafe.Pointer(&e)))
 }
+
+// SetSizeLimits restates the window's limits after it was made
+// ([SizeLimitSurface]). WM_GETMINMAXINFO answers from s.limits, so this is
+// what the window system sees from the next time it asks.
+func (s *winSurface) SetSizeLimits(l SizeLimits) {
+	if s == nil {
+		return
+	}
+	s.limits = l
+}

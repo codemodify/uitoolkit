@@ -4930,6 +4930,18 @@ func (s *wlSurface) applyLimitsLocked() {
 	C.ui_wl_set_max_size(s.top, C.int(max(l.MaxWidth, 0)), C.int(max(l.MaxHeight, 0)))
 }
 
+// SetSizeLimits restates the toplevel's limits after it was made
+// ([SizeLimitSurface]).
+func (s *wlSurface) SetSizeLimits(l SizeLimits) {
+	if s == nil {
+		return
+	}
+	wlMu.Lock()
+	s.limits = l
+	s.applyLimitsLocked()
+	wlMu.Unlock()
+}
+
 // SetShadedHeight pins the toplevel to h logical pixels tall while it is
 // rolled up to its title bar, 0 to let it grow again (FrameShade). A
 // resizable toplevel states a minimum of 200 by 120 whether or not the

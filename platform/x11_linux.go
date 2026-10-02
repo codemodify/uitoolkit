@@ -3449,6 +3449,18 @@ func (s *x11Surface) SetSizing(sz Sizing) bool {
 	return true
 }
 
+// SetSizeLimits restates WM_NORMAL_HINTS after the window was made
+// ([SizeLimitSurface]).
+func (s *x11Surface) SetSizeLimits(l SizeLimits) {
+	if s == nil {
+		return
+	}
+	x11Mu.Lock()
+	s.limits = l
+	s.applySizeHintsLocked()
+	x11Mu.Unlock()
+}
+
 // SizeLimits is what WM_NORMAL_HINTS last said about the visible window
 // (WindowGeometry).
 func (s *x11Surface) SizeLimits() SizeLimits { return s.limits }

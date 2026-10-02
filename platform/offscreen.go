@@ -342,3 +342,12 @@ func (OffscreenBackend) Caps() BackendCaps { return BackendScreenPlace }
 func (OffscreenBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	return NewOffscreen(opts), nil
 }
+
+// SetSizeLimits restates the limits after the surface was made
+// ([SizeLimitSurface]).
+func (o *Offscreen) SetSizeLimits(l SizeLimits) {
+	if o == nil {
+		return
+	}
+	o.limits = l
+}

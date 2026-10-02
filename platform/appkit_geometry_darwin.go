@@ -95,6 +95,16 @@ func (s *akSurface) SetSizing(v Sizing) bool {
 	return true
 }
 
+// SetSizeLimits restates the window's limits after it was made
+// ([SizeLimitSurface]).
+func (s *akSurface) SetSizeLimits(l SizeLimits) {
+	if s == nil {
+		return
+	}
+	s.limits = l
+	s.applyLimits()
+}
+
 func (s *akSurface) SizeLimits() SizeLimits { return s.limits }
 
 // applyLimits tells AppKit the limits, in points, which is what the
