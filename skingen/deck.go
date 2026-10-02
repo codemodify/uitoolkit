@@ -264,7 +264,12 @@ func Deck() *Plan {
 		Layout:  ":minimize,maximize,close",
 		Radius:  [4]int{deckRadTop, deckRadTop, 0, 0},
 		Shape: []ShapeRect{
-			{At: [4]int{0, 0, 0, deckShoulder}, Radius: [4]int{deckRadTop, deckRadTop, 0, 0}, StretchX: true},
+			// The shoulder's underside is rounded too, by the waist it
+			// overhangs: the lip is what the desktop steps in under, and a
+			// square corner there was the one hard angle on a skin whose
+			// every other corner is round. Where the body meets it the
+			// curve is covered, so only the two overhangs show it.
+			{At: [4]int{0, 0, 0, deckShoulder}, Radius: [4]int{deckRadTop, deckRadTop, deckWaist, deckWaist}, StretchX: true},
 			{At: [4]int{deckWaist, deckShoulder - 6, deckWaist, 0},
 				Radius: [4]int{0, 0, deckRadBot, deckRadBot}, StretchX: true, StretchY: true},
 		},
