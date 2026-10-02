@@ -124,3 +124,9 @@ func wipeUint16(u []uint16) {
 // clipboardNativeGetSecret: no bytes path here yet, so the caller falls
 // back to the ordinary read. See the Linux file for what this is for.
 func clipboardNativeGetSecret() ([]byte, bool) { return nil, false }
+
+// clipboardSecretBytesPath reports whether this platform can read a secret
+// from the clipboard without making a string of it. Where it can, a failed
+// read is a failed read: falling back to the string reader would undo the
+// whole point of the bytes path on the try that happens to succeed.
+func clipboardSecretBytesPath() bool { return false }

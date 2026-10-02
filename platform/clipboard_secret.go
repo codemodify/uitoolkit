@@ -257,6 +257,13 @@ func ClipboardGetSecret() []byte {
 	if b, ok := clipboardNativeGetSecret(); ok {
 		return b
 	}
+	if clipboardSecretBytesPath() {
+		// The read failed — a slow owner, a timeout, an empty answer.
+		// Reading again through ClipboardGet would put the passphrase in
+		// the heap as a string on the try that succeeds, which is the
+		// thing the bytes path exists to avoid.
+		return nil
+	}
 	s := ClipboardGet()
 	if s == "" {
 		return nil

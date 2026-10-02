@@ -863,3 +863,14 @@ func lineP(x0, y0, x1, y1 float32) *paintengine2d.Path {
 	p.LineTo(x1, y1)
 	return p
 }
+
+// IconSizeOf is the chrome icon size a look draws marks at (look.json
+// "iconSize"), in 1x design pixels — what a tool button and a browser
+// tab's mark are sized from, so anything else drawing a mark on chrome
+// can agree with them.
+func IconSizeOf(look LookAndFeel) float32 {
+	if c, ok := look.(*Classic); ok && c != nil {
+		return IconSizePixels(c.IconSize())
+	}
+	return IconSizePixels(IconSizeMedium)
+}

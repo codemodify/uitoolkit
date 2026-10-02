@@ -53,6 +53,14 @@ const wlTransferMax = 64 << 20
 func wlReadLoop(read func(buf []byte, ms int) int, deadline time.Time) ([]byte, wlTransfer) {
 	var out []byte
 	buf := make([]byte, 4096)
+	// The staging buffer holds whatever came through it, which for a
+	// passphrase pasted from another program is the passphrase. Zeroed on
+	// the way out so the only copy left is the one the caller took.
+	defer func() {
+		for i := range buf {
+			buf[i] = 0
+		}
+	}()
 	for {
 		remain := time.Until(deadline)
 		if remain <= 0 {

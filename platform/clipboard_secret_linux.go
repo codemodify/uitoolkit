@@ -70,3 +70,19 @@ func clipboardNativeGetSecret() ([]byte, bool) {
 	}
 	return nil, false
 }
+
+// clipboardSecretBytesPath reports whether this platform can read a secret
+// from the clipboard without making a string of it. Where it can, a failed
+// read is a failed read: falling back to the string reader would undo the
+// whole point of the bytes path on the try that happens to succeed.
+func clipboardSecretBytesPath() bool {
+	// Only where there is a display to read from. With no compositor and
+	// no X server the clipboard is this process's own buffer, which
+	// ClipboardGet serves and which never held anything but what this
+	// program put there — falling back to it is right, and refusing to
+	// would mean a paste that silently did nothing.
+	if waylandLive() || (os.Getenv("WAYLAND_DISPLAY") != "" && waylandProbe()) {
+		return true
+	}
+	return x11Live() || os.Getenv("DISPLAY") != ""
+}

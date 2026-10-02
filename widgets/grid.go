@@ -453,11 +453,15 @@ func (g *Grid) rows(cols []float32, avail float32) []float32 {
 
 func sum(v []float32, gap float32) float32 {
 	var s float32
+	n := 0
 	for _, x := range v {
 		s += x
+		if x > 0 {
+			n++
+		}
 	}
-	if len(v) > 1 {
-		s += gap * float32(len(v)-1)
+	if n > 1 {
+		s += gap * float32(n-1)
 	}
 	return s
 }
@@ -495,11 +499,20 @@ func (g *Grid) Arrange(r paintengine2d.Rect) {
 	rows := g.rows(cols, r.Dy())
 	xs := make([]float32, len(cols)+1)
 	for i, w := range cols {
-		xs[i+1] = xs[i] + w + g.colGap()
+		xs[i+1] = xs[i] + w
+		if w > 0 {
+			xs[i+1] += g.colGap()
+		}
 	}
+	// A track nothing visible is in takes no room *and* no gap. A hidden
+	// form row used to leave its RowGap behind, so a form of eight rows
+	// showing three had five gaps too many in it.
 	ys := make([]float32, len(rows)+1)
 	for i, h := range rows {
-		ys[i+1] = ys[i] + h + g.rowGap()
+		ys[i+1] = ys[i] + h
+		if h > 0 {
+			ys[i+1] += g.rowGap()
+		}
 	}
 	g.visible(func(c widget.Component, cell *GridCell) {
 		if cell.Col >= len(cols) || cell.Row >= len(rows) {
@@ -574,6 +587,11 @@ func (r *FormRow) SetVisible(v bool) {
 		r.Field.SetVisible(v)
 	}
 	if r.form != nil {
+		// Not Invalidate: the form has to be measured and arranged again
+		// for the rows under this one to move, and a repaint alone left
+		// them where they were until something else happened to lay the
+		// form out.
+		r.form.RequestLayout()
 		r.form.Invalidate()
 	}
 }

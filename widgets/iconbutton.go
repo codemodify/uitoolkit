@@ -114,6 +114,34 @@ func (b *IconButton) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(h, h))
 }
 
+// markSide is how wide the mark is drawn, in device pixels.
+func (b *IconButton) markSide(r paintengine2d.Rect) float32 {
+	lk := b.Look()
+	face := min(r.Dx(), r.Dy())
+	// The mark is the size the user's icon size asks for, as a tool
+	// button's and a tab's are, clamped to the face it stands on.
+	//
+	// It used to be whatever the face had left after a fixed 8 design
+	// pixels each side — and the face is the look's control height, so on
+	// a compact pack the mark was whatever that left: 6 device pixels on
+	// metal-ocean, 8 on Window Maker, beside tab marks drawn at 16 in the
+	// same strip. look.json's iconSize was not consulted at all.
+	side := min(style.Dip(lk, style.IconSizeOf(lk)), face-style.Dip(lk, 6))
+	if b.Pad > 0 {
+		// A pad the application states still means what it said: the
+		// mark is the face less that much on each side.
+		side = face - style.Dip(lk, b.Pad)*2
+	}
+	// Never smaller than it can be seen at, and never past the face.
+	if floor := min(style.Dip(lk, 10), face); side < floor {
+		side = floor
+	}
+	if side > face {
+		side = face
+	}
+	return side
+}
+
 // paintIcon draws the mark on the face the engine has already drawn,
 // centred, in the colour the label would have been.
 func (b *IconButton) paintIcon(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) {
@@ -121,11 +149,7 @@ func (b *IconButton) paintIcon(ctx *paintengine2d.Context, r paintengine2d.Rect,
 		return
 	}
 	lk := b.Look()
-	pad := style.Dip(lk, 8)
-	if b.Pad > 0 {
-		pad = style.Dip(lk, b.Pad)
-	}
-	side := min(r.Dx(), r.Dy()) - pad*2
+	side := b.markSide(r)
 	if side <= 0 {
 		return
 	}

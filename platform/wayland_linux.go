@@ -4299,17 +4299,21 @@ func uitkWlDataSend(id C.uintptr_t, fd C.int) {
 		C.ui_wl_close_fd(fd)
 		return
 	}
-	text, _ := c.clip.get()
-	wlSendSelection(fd, text)
+	b, _ := c.clip.getBytes()
+	wlSendSelection(fd, b)
 }
 
 // wlSendSelection writes the selection to the requesting client's pipe
 // and always closes it. The write is non-blocking with a deadline: this
 // runs on the UI thread, and a receiver that stops reading must not be
 // able to hang the application (or silently truncate a large paste).
-func wlSendSelection(fd C.int, text string) {
+// It takes bytes, not a string: every paste another client asked for used
+// to read the cache with get (which makes a string of it) and turn that
+// back into bytes to write, so each paste of a passphrase left two copies
+// of it in the heap that nothing could wipe. The slice it is handed is the
+// cache's own, written straight to the pipe.
+func wlSendSelection(fd C.int, b []byte) {
 	defer C.ui_wl_close_fd(fd)
-	b := []byte(text)
 	if len(b) == 0 {
 		return
 	}
@@ -4388,11 +4392,11 @@ func uitkWlPrimSend(id C.uintptr_t, fd C.int) {
 		C.ui_wl_close_fd(fd)
 		return
 	}
-	text, ok := c.prim.get()
+	b, ok := c.prim.getBytes()
 	if !ok {
-		text, _ = c.clip.get()
+		b, _ = c.clip.getBytes()
 	}
-	wlSendSelection(fd, text)
+	wlSendSelection(fd, b)
 }
 
 //export uitkWlPrimCancelled
@@ -4694,7 +4698,12 @@ func wlReadFDBytes(c *wlConn, request func(fd int)) ([]byte, bool) {
 	// an acknowledgement of data the application never received, after
 	// which the source may delete the original.
 	if !how.ok() {
-		return out, false
+		// A partial read is dropped, so it is zeroed first: it may be the
+		// first half of somebody's passphrase.
+		for i := range out {
+			out[i] = 0
+		}
+		return nil, false
 	}
 	return out, true
 }

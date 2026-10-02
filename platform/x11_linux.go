@@ -665,6 +665,14 @@ static int ui_get_prop(Display* d, Window w, Atom prop, unsigned char** data, un
 }
 
 static void ui_xfree(void* p) { if (p) XFree(p); }
+// ui_zero clears a buffer before it is freed. memset through a volatile
+// pointer so the compiler cannot drop a write to memory it can see is
+// about to be released, which is exactly what it would do here.
+static void ui_zero(void* p, size_t n) {
+	if (!p || !n) return;
+	volatile unsigned char* q = (volatile unsigned char*)p;
+	while (n--) *q++ = 0;
+}
 
 static void ui_refresh_mapping(XEvent* e) {
 	if (e->type == MappingNotify) {
@@ -2548,7 +2556,15 @@ func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
 		c.wipePasteLocked()
 		return
 	}
-	defer C.ui_xfree(unsafe.Pointer(data))
+	// Zeroed before it is freed, not just freed: XFree does not clear the
+	// buffer, so the value Xlib read the selection into would be left in
+	// the heap for anything that got that allocation next. It is the same
+	// reason this file stopped handing C.CString a secret on the serving
+	// side.
+	defer func() {
+		C.ui_zero(unsafe.Pointer(data), C.size_t(max(n, 0)))
+		C.ui_xfree(unsafe.Pointer(data))
+	}()
 	if fmtb == 8 {
 		c.wipePasteLocked()
 		c.pasteData = C.GoBytes(unsafe.Pointer(data), C.int(n))
