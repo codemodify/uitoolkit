@@ -270,11 +270,22 @@ func TestLookWatchFollowsPackFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	pack := filepath.Join(dir, "theme.json")
+	// Each write is stamped further back than the one before it.
+	//
+	// Both used to be stamped at now-2s — past the settle window, which
+	// is what that is for, but also within a whisker of each other. The
+	// two bodies below are the same length, so the watcher's (size,
+	// mtime) stamp came out identical whenever the two times rounded
+	// together, and the edit was invisible. Linux's nanosecond stamps
+	// hide it; NTFS rounds coarsely enough to lose it, so the Windows VM
+	// failed here about one run in three.
+	age := 2 * time.Second
 	write := func(body string) {
 		if err := os.WriteFile(pack, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		past := time.Now().Add(-2 * time.Second)
+		past := time.Now().Add(-age)
+		age += 2 * time.Second
 		_ = os.Chtimes(pack, past, past)
 	}
 	write(`{"palette":"dark","metrics":{"scroll":12},"colors":{"accent":"#112233"}}`)
