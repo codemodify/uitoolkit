@@ -78,9 +78,12 @@ type Button struct {
 	// button, [NewToolButton] for a tight icon-and-label one, or let the
 	// row fold with [NewWrap]. docs/recipes.md has the table.
 	//
-	// For an icon-only button, reach for [ToolIconBtn]; an icon with no
-	// text here would be a button with a centred empty label and a mark
-	// off to one side.
+	// For an icon-only button, which this is not — an icon with no text
+	// here is a button with a centred empty label and a mark off to one
+	// side — the answer depends on whether it has to look like a button:
+	// [NewIconButton] is a push button that is only a mark, square and
+	// framed, and [ToolIconBtn] is a tool bar's item, flat until the
+	// pointer is over it. docs/recipes.md has the table.
 	Icon    style.ToolIcon
 	OnClick func()
 	// Painter and Shaper are the skin's way in: the art, and where the

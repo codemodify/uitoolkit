@@ -22,9 +22,15 @@ import (
 // The value comes from a function rather than a field, so the widget
 // holds nothing between paints unless it is asked to: a locked vault
 // answers nil and the label is empty on the next frame without anyone
-// having to clear it. What it does keep — the buffer it drew from — is
-// dropped and zeroed by [SecretLabel.Hide], which is what an application
-// calls when it locks.
+// having to clear it.
+//
+// Masked — which is the usual state — it keeps no bytes at all. It takes
+// the rune count from what Value hands it and lets the bytes go, because
+// a row of bullets needs a number and not a secret. It holds the value
+// only while [SecretLabel.Reveal] is set, and drops it again the first
+// time it is asked for anything with Reveal off, when it leaves its
+// window, and on [SecretLabel.Hide]. Hide stays, for a vault that locks
+// while a value is on the screen.
 type SecretLabel struct {
 	widget.Base
 	// Value is asked for the bytes to show. It is called on paint and
@@ -60,7 +66,14 @@ type SecretLabel struct {
 	// would move the row under the reader's hand.
 	Lines bool
 
+	// buf is the value, held only while it is being shown in the clear.
+	// Masked, the label needs no bytes at all — see refresh.
 	buf []byte
+	// runes is how many runes the value had when it was last asked for,
+	// and had is whether there was one. They are all a masked label
+	// needs, and they say nothing about what the value was.
+	runes int
+	had   bool
 }
 
 // NewSecretLabel shows what value returns.
@@ -74,8 +87,8 @@ func NewSecretLabel(value func() []byte) *SecretLabel {
 // application calls it when the vault locks; the next paint asks Value
 // again, which by then answers nothing.
 func (l *SecretLabel) Hide() {
-	WipeBytes(l.buf)
-	l.buf = l.buf[:0]
+	l.wipe()
+	l.runes, l.had = 0, false
 	l.Invalidate()
 }
 
@@ -83,7 +96,25 @@ func (l *SecretLabel) Hide() {
 // lay a row out, or to say "32 characters".
 func (l *SecretLabel) Len() int {
 	l.refresh()
-	return utf8.RuneCount(l.buf)
+	return l.runes
+}
+
+// wipe zeroes the buffer and empties it, keeping the capacity so a label
+// redrawn every second does not leave a trail of old values behind it.
+func (l *SecretLabel) wipe() {
+	WipeBytes(l.buf)
+	l.buf = l.buf[:0]
+}
+
+// SetHost wipes the buffer when the label leaves its window, so a page
+// thrown away without [SecretLabel.Hide] does not keep what it drew. A
+// label being mounted keeps whatever it has: it is about to paint it.
+func (l *SecretLabel) SetHost(h widget.Host) {
+	if h == nil {
+		l.wipe()
+		l.runes, l.had = 0, false
+	}
+	l.Base.SetHost(h)
 }
 
 // refresh pulls the current value in, over the top of the last one.
@@ -95,6 +126,19 @@ func (l *SecretLabel) refresh() {
 	var now []byte
 	if l.Value != nil {
 		now = l.Value()
+	}
+	// Masked, the label draws a row of bullets: it needs to know how many
+	// runes there were and whether there were any, and nothing else. It
+	// used to copy the value in regardless, so an application showing a
+	// vault item's fields masked held a second copy of every one of them
+	// for as long as the item was open, and had to remember to call Hide
+	// on each label on every way the item could go. The count is taken
+	// from the caller's bytes without keeping them, and anything the
+	// buffer still holds from a spell of being revealed is wiped now.
+	l.runes, l.had = utf8.RuneCount(now), len(now) > 0
+	if !l.Reveal {
+		l.wipe()
+		return
 	}
 	if len(now) > cap(l.buf) {
 		WipeBytes(l.buf[:cap(l.buf)])
@@ -119,13 +163,13 @@ func (l *SecretLabel) font() *style.Font {
 // can be measured and drawn like any other text while the value cannot.
 func (l *SecretLabel) mask() string {
 	if l.MaskLen > 0 {
-		if len(l.buf) == 0 {
+		if !l.had {
 			return ""
 		}
 		return strings.Repeat("•", l.MaskLen)
 	}
-	if n := utf8.RuneCount(l.buf); n > 0 {
-		return strings.Repeat("•", n)
+	if l.runes > 0 {
+		return strings.Repeat("•", l.runes)
 	}
 	return ""
 }
