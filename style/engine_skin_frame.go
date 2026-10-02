@@ -66,7 +66,22 @@ func (skinEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		spec.Button = paintengine2d.Pt(side, 0)
 		spec.CloseButton = paintengine2d.Point{}
 		spec.ButtonPad = Insets{Right: skinWhole(spec.Caption * 0.2), Left: skinWhole(spec.Caption * 0.2)}
-		if full := float32(math.Round(float64(l.S(24)))); spec.Caption < full {
+		art := skinCaptionButtonArt(sk, st.Role)
+		switch {
+		case art != nil:
+			// A skin that draws its own caption button gets the button its
+			// art is, scaled with the skin and stood in the middle of the
+			// band — not a fraction of the band with the art stretched to
+			// fill it. Every shipped skin's button art is smaller than its
+			// caption and none of them is square: Deck's is a disc 24x28 in
+			// a 46-pixel caption and came out a tall oval, and Nocturne's is
+			// 56x30 and was drawn 21 wide.
+			h := min(skinWhole(art.H*s), spec.Caption)
+			if h >= l.S(skinCaptionMin) {
+				spec.Button = paintengine2d.Pt(max(skinWhole(h*art.W/art.H), l.S(skinCaptionMin)), h)
+				spec.ButtonPad.Top = float32(math.Floor(float64(spec.Caption-h) * 0.5))
+			}
+		case spec.Caption < float32(math.Round(float64(l.S(24)))):
 			// A button with no height of its own is the caption's height,
 			// and a frame gives such a button at least 24 pixels to be —
 			// which, under a band shorter than that, grows the band rather
@@ -115,6 +130,21 @@ func (sk *Skin) windowFor(role string) *SkinWindow {
 
 // framePart is one of the frame's parts for a window of role: the variant's
 // rebinding where it has one, the skin's own part otherwise.
+// skinCaptionButtonArt is the sprite a skin draws its caption buttons with,
+// or nil where it leaves them to the base pack. Its natural size is what
+// the button is proportioned from.
+func skinCaptionButtonArt(sk *Skin, role string) *SkinSprite {
+	p := sk.framePart("caption.button", role)
+	if p == nil {
+		return nil
+	}
+	sp := p.States["normal"]
+	if sp == nil || sp.W <= 0 || sp.H <= 0 {
+		return nil
+	}
+	return sp
+}
+
 func (sk *Skin) framePart(name, role string) *SkinPart {
 	if w := sk.windowFor(role); w != nil {
 		if p := w.Parts[name]; p != nil {
