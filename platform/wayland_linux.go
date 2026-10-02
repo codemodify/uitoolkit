@@ -4369,11 +4369,16 @@ func uitkWlDataCancelled(id C.uintptr_t) {
 	// selection. Dropping the source without dropping the cached text
 	// made ClipboardGet keep returning what this app copied long ago.
 	c.clip.invalidate()
+	c.clipSecret = false
 	if c.dataSrc != nil {
 		C.ui_wl_data_source_destroy(c.dataSrc)
 		c.dataSrc = nil
 	}
 	c.clipKeepLocked()
+	// Another client has the selection, so a secret this process put
+	// there is gone from it. The held copy ends — without clearing, which
+	// would empty a clipboard that is no longer ours.
+	go forgetHeldSecret()
 }
 
 // clipKeepLocked drops the "hold the connection open for the clipboard"

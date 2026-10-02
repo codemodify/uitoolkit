@@ -55,6 +55,12 @@ func ClipboardPrimaryGet() string {
 // another application's paste cannot hang on a selection nobody is
 // listening for.
 func ClipboardSet(s string) {
+	// An ordinary copy ends the held secret. Nothing used to: the clip
+	// stayed "held" for the rest of its timeout, so a paste into a
+	// SecretField read the old secret instead of what had just been
+	// copied, ClipboardHoldsSecret went on saying yes, and the clear at
+	// the timeout emptied a clipboard this one no longer owned.
+	forgetHeldSecret()
 	clipMu.Lock()
 	clip = s
 	clipMu.Unlock()

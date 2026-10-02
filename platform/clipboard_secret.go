@@ -303,3 +303,19 @@ func ClipboardHoldsSecret() bool {
 	secretMu.Unlock()
 	return held != nil && !held.Cleared()
 }
+
+// forgetHeldSecret drops and wipes the held secret without touching the
+// clipboard, for when something else has taken it: another copy of this
+// program's, or the window system telling us the selection is gone.
+//
+// Clearing would be wrong here — what is on the clipboard is no longer
+// ours to empty. The copy in this process still is, and it goes.
+func forgetHeldSecret() {
+	secretMu.Lock()
+	held := secretHeld
+	secretHeld = nil
+	secretMu.Unlock()
+	if held != nil {
+		held.forget()
+	}
+}

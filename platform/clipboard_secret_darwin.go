@@ -70,6 +70,15 @@ static void uitk_pb_zfree(char *p, int n) {
 	free(p);
 }
 
+// uitk_pb_change_count is NSPasteboard's changeCount: it rises on every
+// write by anyone, so an unchanged value means the pasteboard still holds
+// what this process put there.
+static long uitk_pb_change_count(void) {
+	@autoreleasepool {
+		return (long)[[NSPasteboard generalPasteboard] changeCount];
+	}
+}
+
 static void uitk_pb_clear(void) {
 	@autoreleasepool {
 		[[NSPasteboard generalPasteboard] clearContents];
@@ -81,6 +90,7 @@ import "C"
 import "unsafe"
 
 func clipboardNativeSetSecret(b []byte) {
+	defer func() { akPbChange = int64(C.uitk_pb_change_count()) }()
 	if len(b) == 0 {
 		C.uitk_pb_set_secret(nil, 0)
 		return
@@ -88,7 +98,21 @@ func clipboardNativeSetSecret(b []byte) {
 	C.uitk_pb_set_secret(unsafe.Pointer(&b[0]), C.int(len(b)))
 }
 
-func clipboardNativeClear() { C.uitk_pb_clear() }
+// akPbChange is the pasteboard's changeCount as of the last secret copy.
+var akPbChange int64
+
+func clipboardNativeClear() {
+	// Only while the pasteboard is still ours. clearContents takes
+	// whatever is there, and after the timeout — thirty seconds in a
+	// password manager — that is as likely to be something the person
+	// copied since. The toolkit's own promise is that a clear "does
+	// nothing if something else has since taken the clipboard".
+	if c := int64(C.uitk_pb_change_count()); akPbChange != 0 && c != akPbChange {
+		return
+	}
+	C.uitk_pb_clear()
+	akPbChange = 0
+}
 
 // clipboardNativeGetSecret reads the general pasteboard as bytes, without
 // making a Go string of it.

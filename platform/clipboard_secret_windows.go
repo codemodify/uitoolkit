@@ -44,6 +44,7 @@ func registerClipboardFormat(name string) uintptr {
 }
 
 func clipboardNativeSetSecret(b []byte) {
+	defer func() { winClipSeq = clipboardSeq() }()
 	// UTF-16 without going through a Go string: a string of the
 	// passphrase could not be wiped, and this one can.
 	u := utf16FromBytes(b)
@@ -89,11 +90,31 @@ func setClipboardFlag(format uintptr, payload []byte) {
 	}
 }
 
+// winClipSeq is GetClipboardSequenceNumber as of the last secret copy.
+// Windows bumps it on every change by anyone, so an unchanged number
+// means the clipboard still holds what this process put there.
+var winClipSeq uint32
+
+func clipboardSeq() uint32 {
+	r, _, _ := procGetClipboardSeq.Call()
+	return uint32(r)
+}
+
 func clipboardNativeClear() {
+	// Only while the clipboard is still ours. EmptyClipboard takes
+	// whatever is there, and after the timeout — thirty seconds in a
+	// password manager — that is as likely to be something the person
+	// copied since. The toolkit's own promise is that a clear "does
+	// nothing if something else has since taken the clipboard"; it was
+	// not keeping it.
+	if seq := clipboardSeq(); winClipSeq != 0 && seq != winClipSeq {
+		return
+	}
 	withClipboard(func() bool {
 		procEmptyClipboard.Call()
 		return true
 	})
+	winClipSeq = 0
 }
 
 // utf16FromBytes encodes UTF-8 bytes as a NUL-terminated UTF-16 buffer,

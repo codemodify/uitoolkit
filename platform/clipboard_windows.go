@@ -38,6 +38,7 @@ var (
 	procOpenClipboard    = user32.NewProc("OpenClipboard")
 	procCloseClipboard   = user32.NewProc("CloseClipboard")
 	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
+	procGetClipboardSeq  = user32.NewProc("GetClipboardSequenceNumber")
 	procGetClipboardData = user32.NewProc("GetClipboardData")
 	procSetClipboardData = user32.NewProc("SetClipboardData")
 	procIsFormatAvail    = user32.NewProc("IsClipboardFormatAvailable")
