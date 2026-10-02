@@ -73,7 +73,7 @@ extern void uitkWlDndEnter(uintptr_t id, uint32_t serial, struct wl_surface *s, 
 extern void uitkWlDndLeave(uintptr_t id);
 extern void uitkWlDndMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
 extern void uitkWlDndDrop(uintptr_t id);
-extern void uitkWlDataSend(uintptr_t id, int fd);
+extern void uitkWlDataSend(uintptr_t id, char *mime, int fd);
 extern void uitkWlDataCancelled(uintptr_t id);
 extern void uitkWlPrimOffer(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer);
 extern void uitkWlPrimOfferMime(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer, char *mime);
@@ -776,8 +776,10 @@ static void ui_wl_ddev_listen(struct wl_data_device *d, uintptr_t id) {
 
 static void uitk_dsrc_target(void *data, struct wl_data_source *s, const char *mime) { (void)data; (void)s; (void)mime; }
 static void uitk_dsrc_send(void *data, struct wl_data_source *s, const char *mime, int32_t fd) {
-	(void)s; (void)mime;
-	uitkWlDataSend((uintptr_t)data, fd);
+	(void)s;
+	// The mime matters: a request for the password-manager hint must be
+	// answered with the word "secret", not with the selection.
+	uitkWlDataSend((uintptr_t)data, (char *)mime, fd);
 }
 static void uitk_dsrc_cancelled(void *data, struct wl_data_source *s) {
 	(void)s;
@@ -1301,6 +1303,10 @@ type wlConn struct {
 	dataSrc     *C.struct_wl_data_source
 	clipOffer   *C.struct_wl_data_offer
 	clipMime    string
+	// clipSecret is set while what this process offers is a passphrase:
+	// the password-manager hint is answered with the word "secret" then,
+	// and with nothing otherwise.
+	clipSecret  bool
 	clip        clipCache
 	pendingOff  *C.struct_wl_data_offer
 	pendingMime string
@@ -4293,14 +4299,45 @@ func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
 }
 
 //export uitkWlDataSend
-func uitkWlDataSend(id C.uintptr_t, fd C.int) {
+func uitkWlDataSend(id C.uintptr_t, mime *C.char, fd C.int) {
 	c := wlConnBy(id)
 	if c == nil {
 		C.ui_wl_close_fd(fd)
 		return
 	}
+	if b, ok := wlHintAnswer(c, mime); ok {
+		wlSendSelection(fd, b)
+		return
+	}
 	b, _ := c.clip.getBytes()
 	wlSendSelection(fd, b)
+}
+
+// wlHintAnswer is the reply to a request for the password-manager hint,
+// and whether this was one.
+//
+// The convention — KeePassXC writes it, Klipper reads it — is that the
+// hint's *value* is the word "secret". The offer advertised the type and
+// then answered it with the selection like any other, so Klipper asked
+// for the hint, found a passphrase where it looks for "secret", took the
+// copy for an ordinary one and kept it in the history it saves to disk.
+// Every other reader that asked for the hint was handed the passphrase a
+// second time too. X11 has always answered it correctly; this is the
+// Wayland side catching up.
+func wlHintAnswer(c *wlConn, mime *C.char) ([]byte, bool) {
+	if mime == nil {
+		return nil, false
+	}
+	return wlHintAnswerFor(c, C.GoString(mime))
+}
+
+// wlHintAnswerFor is wlHintAnswer with the type already in Go, which is
+// what makes the rule testable without a C string.
+func wlHintAnswerFor(c *wlConn, mime string) ([]byte, bool) {
+	if c == nil || !c.clipSecret || mime != wlPasswordHintMime {
+		return nil, false
+	}
+	return []byte("secret"), true
 }
 
 // wlSendSelection writes the selection to the requesting client's pipe
@@ -4557,6 +4594,10 @@ func wlDisableTextInput(c *wlConn) {
 // that advertises x-kde-passwordManagerHint is a password. A manager
 // that does not know the type sees an ordinary text offer, which is why
 // the timeout in [ClipboardSetSecret] is the thing actually relied on.
+// wlPasswordHintMime is the mime type a clipboard manager looks for to
+// know a copy is a password, and whose value must be the word "secret".
+const wlPasswordHintMime = "x-kde-passwordManagerHint"
+
 func wlClipSetSecret(b []byte) bool { return wlClipSetSel(b, true) }
 
 func wlClipSet(s string) bool { return wlClipSetSel([]byte(s), false) }
@@ -4571,6 +4612,7 @@ func wlClipSetSel(b []byte, secret bool) bool {
 	}
 	wlMu.Lock()
 	c.clip.setBytes(b)
+	c.clipSecret = secret
 	if !secret {
 		c.prim.setBytes(b)
 	}
@@ -4594,7 +4636,7 @@ func wlClipSetSel(b []byte, secret bool) bool {
 	C.free(unsafe.Pointer(utf))
 	C.free(unsafe.Pointer(plain))
 	if secret {
-		hint := C.CString("x-kde-passwordManagerHint")
+		hint := C.CString(wlPasswordHintMime)
 		C.ui_wl_data_offer_mime(src, hint)
 		C.free(unsafe.Pointer(hint))
 	}
