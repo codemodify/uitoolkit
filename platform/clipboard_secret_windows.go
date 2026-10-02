@@ -121,12 +121,72 @@ func wipeUint16(u []uint16) {
 	}
 }
 
-// clipboardNativeGetSecret: no bytes path here yet, so the caller falls
-// back to the ordinary read. See the Linux file for what this is for.
-func clipboardNativeGetSecret() ([]byte, bool) { return nil, false }
+// clipboardNativeGetSecret reads CF_UNICODETEXT as UTF-8 bytes without
+// making a Go string of it.
+//
+// The ordinary read goes through syscall.UTF16ToString, which builds a
+// string, so a passphrase pasted from another program — a terminal, or
+// another password manager — was in this process's heap as a string that
+// nothing could wipe. This decodes into a byte slice the caller owns and
+// zeroes everything it worked through on the way.
+func clipboardNativeGetSecret() ([]byte, bool) {
+	var out []byte
+	ok := withClipboard(func() bool {
+		if r, _, _ := procIsFormatAvail.Call(cfUnicodeText); r == 0 {
+			// Nothing textual: empty, not unavailable.
+			return true
+		}
+		h, _, _ := procGetClipboardData.Call(cfUnicodeText)
+		if h == 0 {
+			return false
+		}
+		out = winSecretFromGlobal(h)
+		return true
+	})
+	return out, ok && len(out) > 0
+}
+
+// winSecretFromGlobal is winTextFromGlobal without the string.
+//
+// The clipboard's own buffer belongs to whichever program owns the
+// selection, so it is read and not written; what this zeroes is the
+// UTF-16 copy and the runes it decoded through, which are this process's.
+func winSecretFromGlobal(h uintptr) []byte {
+	ptr, _, _ := procGlobalLock.Call(h)
+	if ptr == 0 {
+		return nil
+	}
+	defer procGlobalUnlock.Call(h)
+	src := lparamAs[[1 << 20]uint16](ptr)
+	n := 0
+	for n < len(src) && src[n] != 0 {
+		n++
+	}
+	if n == 0 {
+		return nil
+	}
+	u := make([]uint16, n)
+	copy(u, src[:n])
+	runes := utf16.Decode(u)
+	out := make([]byte, 0, n*3)
+	var buf [4]byte
+	for _, r := range runes {
+		out = append(out, buf[:utf8.EncodeRune(buf[:], r)]...)
+	}
+	for i := range u {
+		u[i] = 0
+	}
+	for i := range runes {
+		runes[i] = 0
+	}
+	for i := range buf {
+		buf[i] = 0
+	}
+	return out
+}
 
 // clipboardSecretBytesPath reports whether this platform can read a secret
 // from the clipboard without making a string of it. Where it can, a failed
 // read is a failed read: falling back to the string reader would undo the
 // whole point of the bytes path on the try that happens to succeed.
-func clipboardSecretBytesPath() bool { return false }
+func clipboardSecretBytesPath() bool { return true }

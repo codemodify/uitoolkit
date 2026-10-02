@@ -40,6 +40,36 @@ static void uitk_pb_set_secret(const void *bytes, int len) {
 	}
 }
 
+// uitk_pb_get_n is uitk_pb_get with the length, so the caller can copy
+// the bytes without walking for a NUL and can zero what it was given.
+// The caller frees it with uitk_pb_zfree.
+static char *uitk_pb_get_n(int *n) {
+	@autoreleasepool {
+		*n = 0;
+		NSString *s = [[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString];
+		if (!s) return NULL;
+		const char *u = [s UTF8String];
+		if (!u) return NULL;
+		size_t len = strlen(u);
+		char *out = malloc(len ? len : 1);
+		if (!out) return NULL;
+		memcpy(out, u, len);
+		*n = (int)len;
+		return out;
+	}
+}
+
+// uitk_pb_zfree clears a buffer before releasing it: free() does not, and
+// a passphrase left in a freed allocation is readable by whatever gets
+// that memory next. Volatile so the clearing is not optimised away as a
+// write to memory about to be released.
+static void uitk_pb_zfree(char *p, int n) {
+	if (!p) return;
+	volatile unsigned char *q = (volatile unsigned char *)p;
+	for (int i = 0; i < n; i++) q[i] = 0;
+	free(p);
+}
+
 static void uitk_pb_clear(void) {
 	@autoreleasepool {
 		[[NSPasteboard generalPasteboard] clearContents];
@@ -60,12 +90,29 @@ func clipboardNativeSetSecret(b []byte) {
 
 func clipboardNativeClear() { C.uitk_pb_clear() }
 
-// clipboardNativeGetSecret: no bytes path here yet, so the caller falls
-// back to the ordinary read. See the Linux file for what this is for.
-func clipboardNativeGetSecret() ([]byte, bool) { return nil, false }
+// clipboardNativeGetSecret reads the general pasteboard as bytes, without
+// making a Go string of it.
+//
+// The ordinary read is C.GoString of a strdup'd buffer, which is a Go
+// string — unwipeable — and then free()s the C copy without clearing it,
+// which leaves a second copy in whatever gets that allocation next. This
+// copies the bytes out and zeroes the C buffer before releasing it.
+func clipboardNativeGetSecret() ([]byte, bool) {
+	var n C.int
+	p := C.uitk_pb_get_n(&n)
+	if p == nil || n <= 0 {
+		if p != nil {
+			C.uitk_pb_zfree(p, n)
+		}
+		return nil, false
+	}
+	out := C.GoBytes(unsafe.Pointer(p), n)
+	C.uitk_pb_zfree(p, n)
+	return out, true
+}
 
 // clipboardSecretBytesPath reports whether this platform can read a secret
 // from the clipboard without making a string of it. Where it can, a failed
 // read is a failed read: falling back to the string reader would undo the
 // whole point of the bytes path on the try that happens to succeed.
-func clipboardSecretBytesPath() bool { return false }
+func clipboardSecretBytesPath() bool { return true }
