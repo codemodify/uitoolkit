@@ -544,7 +544,43 @@ func alignIn(c widget.Component, box paintengine2d.Rect, h, v layout.Align) pain
 type Form struct {
 	Grid
 	labels []*Label
+	rows   []*FormRow
 	n      int
+}
+
+// FormRow is one caption-and-field row, for showing and hiding the two
+// together.
+//
+// Hiding the field alone leaves its caption behind, and a form whose
+// fields depend on a choice — what a keyslot of each kind takes, what a
+// protocol needs — otherwise shows every field it might ever need, or is
+// torn down and built again. [Form.Row] returns one.
+type FormRow struct {
+	Label *Label
+	Field widget.Component
+	form  *Form
+}
+
+// SetVisible shows or hides the caption and the field together. The grid
+// closes the row's gap, so nothing is left where the row was.
+func (r *FormRow) SetVisible(v bool) {
+	if r == nil {
+		return
+	}
+	if r.Label != nil {
+		r.Label.SetVisible(v)
+	}
+	if r.Field != nil {
+		r.Field.SetVisible(v)
+	}
+	if r.form != nil {
+		r.form.Invalidate()
+	}
+}
+
+// Visible reports whether the row is showing.
+func (r *FormRow) Visible() bool {
+	return r != nil && r.Label != nil && r.Label.Visible()
 }
 
 // NewForm is an empty form.
@@ -558,6 +594,19 @@ func NewForm() *Form {
 
 // AddRow adds a labelled field and returns the label.
 func (f *Form) AddRow(label string, field widget.Component) *Label {
+	return f.Row(label, field).Label
+}
+
+// Row adds a caption-and-field row and returns a handle to both, for
+// showing and hiding them together ([FormRow]).
+func (f *Form) Row(label string, field widget.Component) *FormRow {
+	l := f.addRow(label, field)
+	r := &FormRow{Label: l, Field: field, form: f}
+	f.rows = append(f.rows, r)
+	return r
+}
+
+func (f *Form) addRow(label string, field widget.Component) *Label {
 	l := NewLabel(label)
 	f.labels = append(f.labels, l)
 	f.Place(l, f.n, 0)
