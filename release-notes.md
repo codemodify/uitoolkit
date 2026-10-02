@@ -7,6 +7,120 @@ about the problem it solved.
 
 ---
 
+## 0.23.2
+
+What two applications asked for after 0.23.1, and what running the suite
+on every platform found.
+
+0.23.1 closed most of secretvault's and comms-mail's open items; both
+audited it from scratch and sent back what was left, including one thing
+0.23.1 had broken. The rest of this release came from running the tests
+on Windows and macOS rather than from either report.
+
+New: `Window.SetMinSize` and `MinSize`; `BrowserTabs.Align`;
+`widgets.Share` and `TrackShare`; `widgets.DialogContent`;
+`widgets.FormRow` and `Form.Row`; `platform.SizeLimitSurface` and
+`SecureInputHeldSurface`; `style.TabLabelInkOf`, `TabContentInsetOf` and
+`IconSizeOf`.
+
+### A secret was still in the heap after the clipboard said it was gone
+
+`SecretClip.Clear` dropped the clipboard's reference first — so
+`ClipboardHoldsSecret` answered false at once — then told the window
+system, which is a round trip to a compositor, an X server or the Windows
+clipboard, and only after that zeroed the bytes. For the whole of that
+trip the passphrase was in the heap while every way of asking said
+nothing was held.
+
+It had been on the flaky-test list for weeks. It was never flaky: a quiet
+Linux box wins the race, a loaded Windows VM loses it every time, and
+nobody had looked at why. The copy is zeroed first now, before anything
+slow happens, and the application's callback runs last — so "it is gone"
+means the clipboard and not only this copy.
+
+### A secret never becomes a Go string on any platform
+
+0.23.1 did Linux. Windows decoded `CF_UNICODETEXT` through
+`syscall.UTF16ToString`, which builds a string on the way to bytes;
+macOS read `C.GoString` of a `strdup`'d buffer and then `free`d it
+without clearing, leaving a second copy for whatever got that allocation
+next. Both have a bytes path now, each zeroing what it worked through.
+The Wayland *serving* side is bytes too: every paste another client asked
+for used to go out through a string and back, two copies per paste.
+
+### Browser tabs
+
+- **A tab's title is set against its mark**, not centred on the tab.
+  Chrome, Firefox, Safari and VS Code all do it that way; the toolkit
+  centred it because a browser tab is drawn by the same engine hook as a
+  notebook tab. `BrowserTabs.Align` says where it goes and starts at
+  `AlignStart`.
+- **The selected tab merges with what is under it.** Chrome's shape fills
+  it with the surface *below* the strip so the tab, the row under it and
+  the page read as one. That is the tool bar's colour — and plenty of
+  packs state the same colour for tool bar and title bar, so the tab came
+  out exactly the colour of the strip it stood in and only its outline
+  marked it. Measured on Gruvbox Light, Catppuccin Latte, Gruvbox,
+  Catppuccin Mocha, Nord and Solarized Light.
+
+### Sizing from content
+
+`widget.MinWidthOf` is meant to let a program size a window from what is
+in it. Three things stopped it, and all three are fixed:
+
+- a **wrapper** that holds one thing and passes everything through
+  answered whatever that thing measured — 320 for a splitter, against the
+  848 its panes needed, and `SetMinSize`'s own doc recommends that line;
+- a **stated minimum did not last**: every backend recomputes its limits
+  from the options the window was made with, on a resize, a change of
+  resize policy, or a Wayland window being rolled up;
+- **`Splitter` and `TextField`** did not answer for themselves.
+
+`widgets.Share(weight)` is a grid column for cells that wrap to the width
+they are given: flexible when space is divided, never asked what it would
+like to be. The obvious fix is not available — `Measure` ends in
+`Constrain`, so a bounded answer cannot be told from a clamped one, and a
+button in such a column came back a third of its width.
+
+### Smaller things the two applications found
+
+- A **hidden form row** kept its gap: the grid counted the row among its
+  tracks, so a form of eight rows showing three had five gaps too many.
+  `FormRow.SetVisible` also asks for a layout rather than only a repaint.
+- An **`IconButton`'s mark** was the face less a fixed inset, and the face
+  is the control height — so on a compact pack it came out 6 device
+  pixels, beside tab marks drawn at 16 in the same strip. It is the icon
+  size now, clamped to the face.
+- **A tall dialog keeps its buttons**, and `widgets.DialogContent` is that
+  arrangement on its own, for a card an application builds itself.
+- **X11 read its own copy as the last paste** — a regression 0.23.1
+  introduced, and the reason to read a release's own report.
+
+### What running the tests everywhere found
+
+The suite now runs on Linux, Windows 10, Windows 11 and macOS, 25
+packages and about 2830 tests on each.
+
+**`NSStatusItem` had been hanging the whole `platform` package on
+macOS.** A Linux tray test had no build tag and skipped only after making
+a status item; on macOS that blocks without a logged-in console session,
+so the package timed out and nothing in it ran. Every macOS pass for
+`platform` — the clipboard, the window code, secure input — was vacuous
+for as long as that was true. It runs in 15 seconds now.
+
+`tools/test-windows.sh` checks its port is free before it starts: anything
+else listening answers the guest's fetch with a 404, and the run then
+waits out its timeout and blames the guest's login state or Defender,
+neither of which is wrong.
+
+### Still open
+
+Caps Lock cannot be reported before the first key on Wayland: a surface
+cannot be asked, and the state arrives with the first key event. That is
+the protocol. Font fallback remains declined.
+
+---
+
 ## 0.23.1
 
 Two applications' gap lists, worked through end to end, and a title bar
