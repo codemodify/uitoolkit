@@ -109,19 +109,49 @@ func (c *SecretClip) Clear() {
 		secretHeld = nil
 	}
 	secretMu.Unlock()
+	// The copy is zeroed before the window system is told anything.
+	//
+	// It used to be the other way round: secretHeld was dropped, so
+	// ClipboardHoldsSecret answered false at once, then
+	// clipboardNativeClear talked to the compositor or the X server or
+	// the Windows clipboard — and only then was the secret wiped. For the
+	// whole of that round trip the passphrase was still in the heap while
+	// the API said nothing was held. It is a small window on a quiet
+	// machine, which is why it read as a flaky test rather than a bug;
+	// on a loaded VM it is wide enough to see every time.
+	fn := c.wipe()
 	if mine {
 		clipboardNativeClear()
 	}
-	c.forget()
+	// The callback last, so an application told "it is gone" can rely on
+	// the clipboard itself being clear and not only this copy.
+	if fn != nil {
+		fn()
+	}
 }
 
 // forget wipes the buffer and stops the timer, without touching the
 // clipboard.
 func (c *SecretClip) forget() {
+	if fn := c.wipe(); fn != nil {
+		fn()
+	}
+}
+
+// wipe zeroes the copy, marks it cleared and stops its timer, and hands
+// back the application's callback to be run outside the lock.
+//
+// The callback is the application's and runs on whatever goroutine
+// cleared the copy — the timer's, most often — so holding the clip's lock
+// across it would let it deadlock by asking this copy anything about
+// itself. It is returned rather than called so the caller can also choose
+// *when* to run it; [SecretClip.Clear] waits until the clipboard itself
+// is clear.
+func (c *SecretClip) wipe() func() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.cleared {
-		c.mu.Unlock()
-		return
+		return nil
 	}
 	c.cleared = true
 	if c.timer != nil {
@@ -134,14 +164,7 @@ func (c *SecretClip) forget() {
 	c.data = nil
 	fn := c.onClear
 	c.onClear = nil
-	c.mu.Unlock()
-	// Outside the lock: the callback is the application's, it runs on
-	// whatever goroutine cleared the copy — the timer's, most often — and
-	// holding the clip's lock across it would let it deadlock by asking
-	// this copy anything about itself.
-	if fn != nil {
-		fn()
-	}
+	return fn
 }
 
 // OnCleared installs a callback for the moment this copy goes: the

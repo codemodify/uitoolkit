@@ -115,3 +115,28 @@ func TestZeroTimeoutIsTheDefault(t *testing.T) {
 		t.Fatal("a zero timeout cleared it at once")
 	}
 }
+
+// The copy is wiped before the API stops saying it is held, not after.
+//
+// Clear dropped secretHeld first — so ClipboardHoldsSecret answered false
+// at once — then told the window system, and only then zeroed the bytes.
+// For the whole of that round trip to a compositor, an X server or the
+// Windows clipboard, the passphrase was still in the heap while every way
+// of asking said nothing was held. It read as a flaky test on a quiet
+// machine and failed every time on a loaded VM.
+func TestASecretIsWipedBeforeItStopsBeingHeld(t *testing.T) {
+	t.Cleanup(ClipboardClear)
+	for i := 0; i < 50; i++ {
+		b := []byte("hunter2")
+		c := ClipboardSetSecret(b, 0)
+		c.Clear()
+		// Clear has returned, so there is no race left to lose: by the
+		// time anything can observe "not held", the bytes are zero.
+		if ClipboardHoldsSecret() {
+			t.Fatalf("round %d: still held after Clear", i)
+		}
+		if !bytes.Equal(b, make([]byte, len(b))) {
+			t.Fatalf("round %d: not held, but the buffer still reads %q", i, b)
+		}
+	}
+}
