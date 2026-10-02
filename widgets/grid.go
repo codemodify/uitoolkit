@@ -21,6 +21,24 @@ const (
 	// TrackFlex shares the space left after the other tracks, by weight
 	// (WPF "*"); it never shrinks below its content.
 	TrackFlex
+	// TrackShare is TrackFlex for a cell that has no natural width worth
+	// asking for: it is measured at the share it is given rather than
+	// unbounded, and contributes only its minimum to the grid's own
+	// width.
+	//
+	// A cell that wraps to the width it is offered — a long key, a
+	// recovery share, an invite drawn from its bytes — answers an
+	// unbounded measure with one long line, and an Auto or Flex column
+	// takes that as the width it wants. The grid then reports a width
+	// nothing can give it and the cell is cut off at the column's edge.
+	//
+	// It cannot be fixed by measuring such a cell bounded instead:
+	// Measure ends in Constrain, so a bounded answer cannot be told apart
+	// from a clamped one, and a control that genuinely cannot shrink —
+	// a button — would report the width it was squeezed to and lose its
+	// floor. The cell has to say that its natural width is not a number
+	// worth having, which is what this is.
+	TrackShare
 )
 
 // Track sizes one grid row or column.
@@ -38,6 +56,11 @@ func Px(v float32) Track { return Track{Mode: TrackPx, Size: v} }
 
 // Flex is a track that takes a weight's share of the leftover space.
 func Flex(weight float32) Track { return Track{Mode: TrackFlex, Size: weight} }
+
+// Share is a track for cells that wrap to the width they are given: it
+// takes a weight's share like [Flex], and its cells are measured at that
+// share rather than unbounded ([TrackShare]).
+func Share(weight float32) Track { return Track{Mode: TrackShare, Size: weight} }
 
 // GridCell is where a grid child sits: its cell, its span and how it is
 // aligned inside the cells it covers (by default it stretches across and
@@ -210,7 +233,7 @@ func solve(ts []Track, n int, content, minc []float32, spans [][3]float32, gap, 
 			}
 			return true
 		}
-		if !grow(TrackFlex) {
+		if !grow(TrackShare) && !grow(TrackFlex) {
 			grow(TrackAuto)
 		}
 	}
@@ -242,7 +265,10 @@ func solve(ts []Track, n int, content, minc []float32, spans [][3]float32, gap, 
 	fixed := gap * float32(max(n-1, 0))
 	var flex []int
 	for i := 0; i < n; i++ {
-		if trackAt(ts, i).Mode == TrackFlex {
+		// A share track is a flex track for the purpose of dividing what
+		// is left; what it does differently is upstream, where it is not
+		// asked for a natural width at all.
+		if m := trackAt(ts, i).Mode; m == TrackFlex || m == TrackShare {
 			flex = append(flex, i)
 			continue
 		}
@@ -319,6 +345,21 @@ func (g *Grid) columns(avail float32) []float32 {
 	}
 	var spans [][3]float32
 	g.visible(func(c widget.Component, cell *GridCell) {
+		// A share column's cell is not asked what it would like to be:
+		// it wraps to whatever it is given, so its unbounded answer is
+		// one long line and means nothing. Its floor is all it has to
+		// say about width.
+		if cell.ColSpan == 1 && cell.Col < nc && trackAt(g.Cols, cell.Col).Mode == TrackShare {
+			if m := widget.MinWidthOf(c); m > content[cell.Col] {
+				content[cell.Col] = m
+			}
+			if minc != nil {
+				if m := widget.MinWidthOf(c); m > minc[cell.Col] {
+					minc[cell.Col] = m
+				}
+			}
+			return
+		}
 		natural := c.Measure(layout.Unbounded())
 		w := ceilPx(natural.X)
 		if cell.ColSpan == 1 {
