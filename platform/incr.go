@@ -72,5 +72,9 @@ func AppendINCRPiece(dst, piece []byte) (out []byte, done bool) {
 		}
 		return dst, true
 	}
-	return append(dst, piece...), false
+	// appendWiping, not append: an INCR transfer is how a *large*
+	// selection arrives, which for a secret field is a private key, and
+	// plain append leaves every array the transfer outgrew in the heap
+	// holding the start of it.
+	return appendWiping(dst, piece), false
 }

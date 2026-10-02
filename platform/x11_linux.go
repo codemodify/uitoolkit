@@ -2598,6 +2598,12 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 		}
 		var done bool
 		c.incrRecv.buf, done = AppendINCRPiece(c.incrRecv.buf, piece)
+		// Each piece Xlib read is zeroed before it is released: XFree
+		// does not clear it, and for a long secret every piece holds part
+		// of it. The one-shot path has done this since 0.23.1.
+		for i := range piece {
+			piece[i] = 0
+		}
 		if done {
 			c.wipePasteLocked()
 			c.pasteData = append([]byte(nil), c.incrRecv.buf...)

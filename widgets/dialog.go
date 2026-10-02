@@ -173,10 +173,32 @@ func (o *Overlay) Dismissed() {
 //	    cancel, save))
 func DialogContent(body widget.Component, actions ...widget.Component) *FlexBox {
 	scroll := NewScrollView(body)
-	col := NewColumn(
-		scroll,
-		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
-	).WithGap(12).WithPad(4)
+	// The card is as tall as what it holds, up to what the window allows.
+	//
+	// A scroll view offered a height takes all of it, and an Overlay
+	// measures its card in 0.8 of the window — so a dialog built of this
+	// was that tall whatever it held, and a one-line confirmation came
+	// out 560 pixels tall in a 700-pixel window. It scrolls when there is
+	// more than there is room for, which is the point, and otherwise it
+	// asks for what it has.
+	scroll.ShrinkToContent = true
+
+	// One action that lays itself out — a ButtonBox, which arranges a
+	// dialog's buttons the way the look's platform does — is given the
+	// width rather than squeezed to its natural size at the right end of
+	// a row. A ButtonBox put in a justified row loses the whole point of
+	// it: its left-hand group, Help and a destructive button under Mac
+	// and GNOME looks, is no longer apart from the rest.
+	var foot widget.Component
+	if len(actions) == 1 {
+		if _, ok := actions[0].(*ButtonBox); ok {
+			foot = actions[0]
+		}
+	}
+	if foot == nil {
+		foot = NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd)
+	}
+	col := NewColumn(scroll, foot).WithGap(12).WithPad(4)
 	col.AddFlex(scroll, 1)
 	return col
 }

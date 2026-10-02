@@ -78,7 +78,7 @@ func wlReadLoop(read func(buf []byte, ms int) int, deadline time.Time) ([]byte, 
 			}
 			return out, wlTransferFailed
 		}
-		out = append(out, buf[:n]...)
+		out = appendWiping(out, buf[:n])
 		if len(out) > wlTransferMax {
 			return out, wlTransferTooBig
 		}
