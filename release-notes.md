@@ -7,6 +7,155 @@ about the problem it solved.
 
 ---
 
+## 0.23.1
+
+Two applications' gap lists, worked through end to end, and a title bar
+that was wrong in three separate ways.
+
+**This release removes public API.** It is numbered as a patch, so read
+this paragraph before taking it. `skingen.Minim`, `MinimClassic`,
+`MinimSilver`, `Marquee`, `Lantern`, `PixFontRunes` and `PixFontSprite`
+are gone, and so is the whole `skingen/panel` package; the five theme
+packs those plans drew — `minim`, `minim-classic`, `minim-silver`,
+`marquee` and `lantern` — are gone with them. They were art for the music
+player, which lives in its own repository now, and they went with it.
+`skingen.Plans()` returns three. Anything importing `skingen/panel` will
+not compile against this version.
+
+### The five player skins went with the player
+
+The toolkit keeps the three that are worked examples of the *format*:
+Nocturne drawn from paths, Cassette from whole pixels, Deck cut to a
+shape that is not a rectangle. The five that dressed one particular
+application were a different job — as complete as that application needed
+and no more — and they belong beside it.
+
+Two skin-format rules lost their only shipped exercise and gained tests
+of their own instead: a caption shorter than 24 design pixels, and the
+`caption.title` plate. Both are pinned now on a skin built for the
+purpose, so neither depends on anybody's art.
+
+### A title bar that was wrong three times over
+
+Deck's, and each fault hid the next.
+
+- **The caption was painted short of its shoulder.** Deck's outline is a
+  full-width shoulder over a body drawn in on both sides, and its frame
+  stated one border for the whole window — which insets the caption band
+  along with the content. The shape's own top corners, already cut by the
+  compositor, showed through as bare cut-outs beside the title. The skin
+  format has had a split border since the panel skins needed one;
+  `skingen` can write one now.
+- **The caption buttons were stretched.** A skin's caption button was
+  sized as a fraction of the band and given the band's whole height, which
+  is right only for art drawn to fill a caption. None of the three shipped
+  skins is: Deck's is a disc 24x28 in a 46-pixel caption and came out a
+  tall oval, and Nocturne's is 56x30 and was drawn 21 wide. A skin's
+  button is the shape its art is now, stood in the middle of the band.
+- **The shoulder was square underneath.** `docs/skins.md` has said since
+  the skin was drawn that "the desktop steps in under both shoulders and
+  every corner is round" — every corner except the two the lips ended in.
+
+None of the three was caught by a test, which is why all three reached a
+screenshot. Two have tests now; the third is a value in an art plan
+rather than a rule.
+
+### Browser tabs
+
+- **A tab's marks no longer repaint its chrome.** A tab with an icon or a
+  close button had its label placed by painting the whole tab a second
+  time, shifted, and clipping to the room left over — which assumed a
+  tab's face looks the same wherever you put it. A slanted tab is a
+  trapezoid, so the second pass painted its flat body over the tab's own
+  slope: trailing edges vanished and stray diagonals were left across the
+  strip. Measured on Window Maker, Breeze Night, the web engine's packs
+  and BeOS. New: `style.TabLabelInkOf` and `style.TabContentInsetOf`,
+  which are what the strip needed to place a word and a mark itself.
+- **A tab's edge follows the chrome it is drawn on.** A pack states one
+  neutral border grey; an application that tints its chrome moved the
+  surfaces and not the border, so a selected tab was outlined in flat
+  #e2e2e2 against a blue-tinted strip. The edge keeps the pack's
+  lightness and takes the surface's colour, and a pack that tints nothing
+  paints exactly what it painted before.
+
+### What comms-mail asked for
+
+- **`HeaderBar.StartWidth` holds under a stacked frame.** It reserved
+  room only where the application's bar *is* the caption; under an era
+  that stacks the frame the row was placed at the frame's inset and the
+  field was dropped, so a mail client's buttons sat over the pane they
+  were asked to begin after.
+- **`Stack.MinWidth`.** A stack shows one page at a time, so the generic
+  probe has nothing to read and answered with the widest page's *natural*
+  width — 973 device pixels for a list happy at 296. It is the widest of
+  its pages' floors now, counting pages that are not showing, which is
+  Qt's rule for `QStackedLayout`.
+- `Button.Icon`'s doc no longer contradicts `docs/recipes.md` about
+  icon-only buttons.
+
+### What secretvault asked for
+
+- **A masked `SecretLabel` keeps no copy.** It called `Value` on every
+  measure and paint and copied the answer whether it was revealed or not,
+  so an application showing an item's fields masked held a second copy of
+  every one of them until it remembered to call `Hide`. Masked, it now
+  takes the rune count and lets the bytes go.
+- **A secret on the Linux clipboard is never a Go string.** Owning a
+  selection means holding the value, so the question was never whether a
+  copy exists but whether anything can wipe it. Both owners hold bytes
+  and zero them when the selection is given up, cleared or replaced; the
+  X11 serving path also stopped copying through `C.CString`, into a
+  buffer `free()` does not zero. Pasting another program's secret has a
+  bytes path too.
+- **A focus-in no longer says the lock keys are off.** No backend puts
+  modifiers on a focus-in, and the window noted them from it anyway: a
+  prompt opened with Caps Lock on read the lock correctly, then the
+  focus-in told every watcher it was off. The mark appeared and went
+  before the first keystroke.
+- **Secure input says what is in effect.** The grab follows the focus and
+  a retake can fail, and none of that was reported, so an application
+  could not say "the keyboard is not held" without being wrong on X11
+  every time. New: `Window.SecureInputHeld`, `Window.OnSecureInput`,
+  `platform.SecureInputHeldSurface`. A request made before the window is
+  mapped is also recorded rather than retried for a quarter of a second
+  against a window that cannot be grabbed yet.
+- **A window's minimum size can be stated after it is made.**
+  `WindowOptions.MinWidth` is given before the content that decides it
+  exists. New: `Window.SetMinSize` / `MinSize` and
+  `platform.SizeLimitSurface`, implemented on all four backends.
+  `Splitter.MinWidth` and `TextField.PreferredWidth` come with it, so
+  `widget.MinWidthOf(content)` is an answer a program can act on.
+- **A form's rows can be shown and hidden** (`Form.Row`, `FormRow`), and
+  **a form's value is read as itself** rather than as its caption — a row
+  of "Program:" and "/usr/bin/mail" was read "Program:", "Program", and
+  the value, which is the whole reason a consent prompt is on the screen,
+  was never read at all.
+- **A tall dialog keeps its buttons in view.** `DialogCard`'s body
+  scrolls and its action row stays at the foot; the buttons used to be
+  laid out past the card, outside the window, where a click or a Tab
+  landed nowhere.
+
+### Also
+
+`Settings` grows a **Window menu** option, which leaves the window-menu
+button out of captions the toolkit draws (`look.json` `hideWindowMenu`).
+The menu is not lost with it: a right click on the caption still opens
+it.
+
+### Known not done
+
+`Grid` still measures a cell in a `Flex` column with no maximum width, so
+the column's natural width is one long line for a widget that would wrap.
+Bounding that pass was tried and backed out: widgets end `Measure` with
+`Constrain`, so a bounded measure cannot tell "I wrapped" from "I was
+clamped", and a button in a flex column came back a third of its width.
+It wants a track mode that means "measure at the share" rather than a
+change to the natural pass. Heights are already measured at the real
+column width, so wrapping widgets lay out correctly; it is the reported
+width that is wrong.
+
+---
+
 ## 0.23.0
 
 Five samples that are meant to look like applications people use, and
