@@ -56,7 +56,29 @@ func MinWidthOf(c Component) float32 {
 		return m.MinWidth()
 	}
 	natural := c.Measure(layout.Unbounded())
-	return MinWidthByProbe(c, natural)
+	w := MinWidthByProbe(c, natural)
+	// A floor the probe cannot see past. The probe reads only the
+	// component's own measurements, and a wrapper that passes everything
+	// through to one child — a key handler, a drop target, a watcher, the
+	// commonest thing an application writes — measures as whatever that
+	// child measures. A Splitter unbounded measures a fixed 320x200, so a
+	// wrapper round one answered 320 however much its panes needed: a
+	// window sized from that line let itself shrink to a third of what
+	// its content could live with.
+	//
+	// Only for a component with exactly one child, which is what a
+	// pass-through wrapper is: it holds one thing and gives it everything
+	// it has, so it cannot be narrower than that thing. A container with
+	// several is not safe to treat this way — it may lay them out in a
+	// way that is narrower than the widest of them, and the containers
+	// that know (Column, Grid, Splitter, ScrollView, Wrap) answer for
+	// themselves above and never reach here.
+	if kids := c.Children(); len(kids) == 1 {
+		if ch := MinWidthOf(kids[0]); ch > w {
+			w = ch
+		}
+	}
+	return w
 }
 
 // MinWidthByProbe is [MinWidthOf]'s fallback, exported for a container

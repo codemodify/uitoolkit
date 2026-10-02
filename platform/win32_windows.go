@@ -1084,4 +1084,5 @@ func (s *winSurface) SetSizeLimits(l SizeLimits) {
 		return
 	}
 	s.limits = l
+	stateLimits(&s.opts, l)
 }

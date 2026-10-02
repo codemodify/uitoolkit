@@ -2790,11 +2790,16 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 		x11Mu.Unlock()
 		return false, false
 	}
-	if sel == c.atomClipboard && c.ownClip {
-		x11Mu.Unlock()
-		return true, true
-	}
-	if sel == c.atomPrimary && c.ownPrim {
+	// A selection this program owns is answered from what it serves: no
+	// round trip, and no asking the server for something it would ask us
+	// for. Both readers take pasteData afterwards, so the served bytes
+	// are put there — without this the readers took whatever the last
+	// paste from another program had left, so Ctrl+C then Ctrl+V between
+	// two of a program's own fields pasted something else entirely.
+	if (sel == c.atomClipboard && c.ownClip) || (sel == c.atomPrimary && c.ownPrim) {
+		c.wipePasteLocked()
+		c.pasteData = append([]byte(nil), c.clipData...)
+		c.pasteDone = true
 		x11Mu.Unlock()
 		return true, true
 	}
@@ -3461,6 +3466,7 @@ func (s *x11Surface) SetSizeLimits(l SizeLimits) {
 	}
 	x11Mu.Lock()
 	s.limits = l
+	stateLimits(&s.opts, l)
 	s.applySizeHintsLocked()
 	x11Mu.Unlock()
 }

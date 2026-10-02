@@ -4938,6 +4938,7 @@ func (s *wlSurface) SetSizeLimits(l SizeLimits) {
 	}
 	wlMu.Lock()
 	s.limits = l
+	stateLimits(&s.sizeOpts, l)
 	s.applyLimitsLocked()
 	wlMu.Unlock()
 }

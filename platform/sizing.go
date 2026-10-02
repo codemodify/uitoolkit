@@ -111,3 +111,20 @@ func SurfaceSizeLimits(s Surface) SizeLimits { return GeometryOf(s).SizeLimits()
 type SizeLimitSurface interface {
 	SetSizeLimits(SizeLimits)
 }
+
+// stateLimits records limits a program stated after the window was made
+// ([SizeLimitSurface]) in the options the limits are recomputed from.
+//
+// Without this a stated floor lasted only until the next thing that
+// recomputed them — a resize by the program, a change of resize policy,
+// rolling a Wayland window up — because every one of those calls
+// limitsFor with the original WindowOptions, which still held what the
+// window was created with. A program that stated its floor and then
+// resized had lost it.
+func stateLimits(opts *WindowOptions, l SizeLimits) {
+	if opts == nil {
+		return
+	}
+	opts.MinWidth, opts.MinHeight = l.MinWidth, l.MinHeight
+	opts.MaxWidth, opts.MaxHeight = l.MaxWidth, l.MaxHeight
+}

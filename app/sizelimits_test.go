@@ -45,4 +45,22 @@ func TestAWindowsFloorCanBeStatedFromItsContent(t *testing.T) {
 	if gotH != 80 {
 		t.Errorf("stating a width changed the height floor to %g, want 80", gotH)
 	}
+
+	// And it lasts. The backends recompute their limits from the options
+	// the window was made with on every resize and on a change of resize
+	// policy, so a floor stated afterwards used to survive only until the
+	// next one of those — a program that stated its floor and then
+	// resized had lost it.
+	w.SetSize(900, 650)
+	a.PumpOnce()
+	if againW, _ := w.MinSize(); int(againW) != int(logical+0.5) {
+		t.Errorf("after a resize the floor is %g, want the stated %g", againW, logical)
+	}
+	if s, ok := w.Surface().(interface{ SetSizing(platform.Sizing) }); ok {
+		s.SetSizing(platform.SizingResizable)
+		a.PumpOnce()
+		if againW, _ := w.MinSize(); int(againW) != int(logical+0.5) {
+			t.Errorf("after a sizing change the floor is %g, want the stated %g", againW, logical)
+		}
+	}
 }

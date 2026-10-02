@@ -102,6 +102,7 @@ func (s *akSurface) SetSizeLimits(l SizeLimits) {
 		return
 	}
 	s.limits = l
+	stateLimits(&s.opts, l)
 	s.applyLimits()
 }
 

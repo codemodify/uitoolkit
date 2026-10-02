@@ -350,4 +350,5 @@ func (o *Offscreen) SetSizeLimits(l SizeLimits) {
 		return
 	}
 	o.limits = l
+	stateLimits(&o.opts, l)
 }
