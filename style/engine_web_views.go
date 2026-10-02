@@ -260,7 +260,7 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 			ctx.DrawPath(clr, paintengine2d.Fill(c.titleBar))
 		}
 		ctx.DrawPath(fluentTabPath(b, top, r, ear, true), paintengine2d.Fill(c.toolBar))
-		ctx.DrawPath(fluentTabPath(b.Inset(px*0.5), top+px*0.5, r, ear, false), paintengine2d.Paint{Color: c.border0, Style: paintengine2d.StyleStroke,
+		ctx.DrawPath(fluentTabPath(b.Inset(px*0.5), top+px*0.5, r, ear, false), paintengine2d.Paint{Color: edgeOn(c.border0, c.toolBar), Style: paintengine2d.StyleStroke,
 			Stroke: paintengine2d.Stroke{Width: px, Cap: paintengine2d.CapButt, Join: paintengine2d.JoinRound, MiterLimit: 4}})
 		fg = c.toolBarText
 	case st.Disabled():
@@ -284,6 +284,45 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 			_, w := c.ring(l)
 			winRing(ctx, fb, max(r-l.S(2), 0), w, paintengine2d.Fill(webA(c.focus, c.focusA)))
 		}
+	}
+}
+
+// edgeOn is a border colour for an outline drawn on surface: the pack's own
+// border at its own lightness, carrying the surface's colour.
+//
+// A pack states one neutral border grey and uses it everywhere, which is
+// right while its surfaces are neutral too. An application that tints its
+// chrome (uitoolkit.Options.Chrome) moves the surfaces and not the border,
+// and a selected browser tab was then outlined in flat grey against a
+// tinted strip — a dirty sliver down the side of the tab, which is what it
+// looked like.
+//
+// So the border keeps its lightness, which is what makes it read as an
+// edge, and takes the surface's distance from grey. A neutral surface has
+// none to give and the border comes back unchanged, so every pack that
+// tints nothing paints exactly what it painted before.
+func edgeOn(border, surface paintengine2d.Color) paintengine2d.Color {
+	l := luma(surface)
+	dr, dg, db := surface.R-l, surface.G-l, surface.B-l
+	// Exactly unchanged on a neutral surface, rather than unchanged to
+	// within a rounding error: a pack that tints nothing has to paint the
+	// same bytes it painted before, and half a step at an 8-bit boundary
+	// is still a different pixel.
+	abs := func(v float32) float32 {
+		if v < 0 {
+			return -v
+		}
+		return v
+	}
+	if max(max(abs(dr), abs(dg)), abs(db)) < 1.0/512 {
+		return border
+	}
+	clamp := func(v float32) float32 { return min(max(v, 0), 1) }
+	return paintengine2d.Color{
+		R: clamp(border.R + dr),
+		G: clamp(border.G + dg),
+		B: clamp(border.B + db),
+		A: border.A,
 	}
 }
 
