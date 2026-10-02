@@ -259,10 +259,11 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 			clr.AddRect(paintengine2d.XYWH(b.Max.X-ear, b.Min.Y, ear, b.Dy()-ear-px))
 			ctx.DrawPath(clr, paintengine2d.Fill(c.titleBar))
 		}
-		ctx.DrawPath(fluentTabPath(b, top, r, ear, true), paintengine2d.Fill(c.toolBar))
-		ctx.DrawPath(fluentTabPath(b.Inset(px*0.5), top+px*0.5, r, ear, false), paintengine2d.Paint{Color: edgeOn(c.border0, c.toolBar), Style: paintengine2d.StyleStroke,
+		fill, ink := c.mergedTabSurface()
+		ctx.DrawPath(fluentTabPath(b, top, r, ear, true), paintengine2d.Fill(fill))
+		ctx.DrawPath(fluentTabPath(b.Inset(px*0.5), top+px*0.5, r, ear, false), paintengine2d.Paint{Color: edgeOn(c.border0, fill), Style: paintengine2d.StyleStroke,
 			Stroke: paintengine2d.Stroke{Width: px, Cap: paintengine2d.CapButt, Join: paintengine2d.JoinRound, MiterLimit: 4}})
-		fg = c.toolBarText
+		fg = ink
 	case st.Disabled():
 		fg = webA(c.titleBarText, 0.3)
 	default:
@@ -287,7 +288,35 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 }
 
-// edgeOn is a border colour for an outline drawn on surface: the pack's own
+// mergedTabSurface is what a merged tab's selected tab is filled with, and
+// the ink for its word.
+//
+// Chrome's shape works by filling the selected tab with the surface
+// *below* the strip, so the tab, the row under it and the page read as one
+// continuous surface with a channel cut through the strip. That is the
+// tool bar's colour where a pack has a tool bar distinct from its title
+// bar — which is the case the shape was drawn for.
+//
+// Plenty of packs state the same colour for both. For those the selected
+// tab came out exactly the colour of the strip it stands in: nothing
+// merged, no channel appeared, and the only thing marking the tab was its
+// outline, which reads as a misdrawn box rather than a tab. Measured on
+// Gruvbox Light, Catppuccin Latte, Gruvbox, Catppuccin Mocha, Nord and
+// Solarized Light, all of which state window a shade apart from the two.
+//
+// So where there is nothing to merge into, the window's own surface is
+// taken: it is what is actually under the strip in an application whose
+// tabs are its caption, which is what these tabs are usually for. A pack
+// that states all three alike (Adwaita) is unchanged, because there is
+// nothing to tell apart.
+func (c *webSet) mergedTabSurface() (fill, ink paintengine2d.Color) {
+	if c.toolBar == c.titleBar && c.window != c.titleBar {
+		return c.window, c.text
+	}
+	return c.toolBar, c.toolBarText
+}
+
+// edgeOn is a border colour// edgeOn is a border colour for an outline drawn on surface: the pack's own
 // border at its own lightness, carrying the surface's colour.
 //
 // A pack states one neutral border grey and uses it everywhere, which is

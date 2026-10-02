@@ -51,6 +51,16 @@ type BrowserTabs struct {
 	// runs into the row below, or Firefox's floating card, which stands
 	// clear of it. [style.TabsMerged] is the default.
 	Shape style.TabShape
+	// Align is where a tab's title sits in the room left to it, once a
+	// mark and a close button have taken theirs.
+	//
+	// AlignStart by default, which is what every browser does: Chrome,
+	// Firefox, Safari and VS Code all set a tab's title against its
+	// favicon and let it elide at the other end. The toolkit used to
+	// centre it, because a browser tab is drawn by the same engine hook
+	// as a notebook tab and a notebook tab is centred — which is right
+	// for Qt's and GTK's tabs and wrong for these.
+	Align style.Align
 	widget.Base
 	tabs []BrowserTab
 	sel  int
@@ -627,11 +637,20 @@ func (t *BrowserTabs) tabState(i int) style.ControlState {
 // close button's room at its right end when the tab has one.
 func (t *BrowserTabs) labelBox(i int, s paintengine2d.Rect, g stripGeom) paintengine2d.Rect {
 	lb := s
+	// The ends the tab's own outline occupies, plus room for the word not
+	// to touch what is beside it. A centred label never reached these, so
+	// they did not matter until the title could be set against one end.
+	in := style.TabContentInsetOf(t.Look(), s) + t.dip(10)
+	lb.Min.X += in
+	lb.Max.X -= in
 	if t.closable(i, g) {
 		lb.Max.X = t.closeRect(s).Min.X - t.dip(2)
 	}
 	if r := t.iconRect(i, s); !r.Empty() {
-		lb.Min.X = r.Max.X + t.dip(4)
+		lb.Min.X = r.Max.X + t.dip(6)
+	}
+	if lb.Max.X < lb.Min.X {
+		lb.Max.X = lb.Min.X
 	}
 	return lb
 }
@@ -702,12 +721,11 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 		st := t.tabState(i)
 		lb := t.labelBox(i, s, g)
 		text, _ := t.label(i, lb)
-		if lb == s {
-			style.DrawBrowserTabOf(lk, ctx, r, st, text, sel, t.Shape)
-		} else {
-			// A mark or a close button has taken room at one end, so the
-			// label does not belong in the middle of the tab. The face is
-			// painted bare and the word placed in the room that is left.
+		{
+			// The face is painted bare and the word placed in the room
+			// that is left, in one path for every tab: the engine centres
+			// a label on the tab it is given, and a browser tab's title
+			// is set against its mark.
 			//
 			// It used to be done by painting the whole tab a second time,
 			// shifted, and clipping to that room — which assumed a tab's
@@ -718,7 +736,7 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 			// diagonals were left across the strip, in every such look.
 			style.DrawBrowserTabOf(lk, ctx, r, st, "", sel, t.Shape)
 			if text != "" {
-				lk.DrawLabel(ctx, lb, text, style.TabLabelInkOf(lk, st, sel), style.AlignCenter)
+				lk.DrawLabel(ctx, lb, text, style.TabLabelInkOf(lk, st, sel), t.Align)
 			}
 		}
 		t.paintIcon(ctx, i, s, sel)
