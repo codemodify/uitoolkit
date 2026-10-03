@@ -518,7 +518,10 @@ func TestSkinsWithTheSameArtPathDoNotCollide(t *testing.T) {
 // every sprite inside the sheet it names. The loader cannot check the last
 // one — it does not decode the art — so this is where it is checked.
 func TestBuiltinSkinsAreSound(t *testing.T) {
-	skins := ListSkins()
+	// The toolkit's own, not everything this process can paint: these
+	// rules are about what ships here, and ListSkins also carries the
+	// application's registered skins and the user's.
+	skins := BuiltinSkins()
 	if len(skins) < 2 {
 		t.Fatalf("expected the shipped skins, got %v", skins)
 	}

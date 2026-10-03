@@ -1,6 +1,7 @@
 package style
 
 import (
+	"strconv"
 	"bytes"
 	"io/fs"
 	"math"
@@ -132,6 +133,7 @@ func InvalidateSkinCache() {
 	skinCache.grids = map[pixelGridKey]*pixelGrid{}
 	skinCache.gen = IconGeneration()
 	skinCache.mu.Unlock()
+	skinRegGen.Add(1)
 	invalidateSkinPacks()
 }
 
@@ -145,7 +147,7 @@ func (sk *Skin) sheetImage(file string) *paintengine2d.Image {
 	if sk == nil || sk.fsys == nil || file == "" {
 		return nil
 	}
-	key := sk.Name + "\x00" + sk.Dir + "\x00" + file
+	key := sk.Name + "\x00" + sk.Dir + "\x00" + strconv.FormatUint(sk.gen, 10) + "\x00" + file
 	c := skinCache
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -3073,6 +3073,21 @@ func (s *x11Surface) Position() (int, int, bool) {
 	if s.closed {
 		return 0, 0, false
 	}
+	return s.positionLocked()
+}
+
+// positionLocked is where the visible window is, in the logical pixels
+// Move speaks: the configure's coordinates translated to the root where
+// they are frame-relative, plus the frame's own margin, and converted as
+// a *position* rather than as a size.
+//
+// EventMove used to do its own arithmetic and got all three of those
+// wrong: it reported the shadow margin's worth short — (396,238) for a
+// window at (420,250) under Breeze at 1.75 — and LogicalPixels clamps a
+// negative, so a window on a monitor left of the origin came back at
+// zero. One conversion, used by both, is the only way those stay in
+// agreement.
+func (s *x11Surface) positionLocked() (int, int, bool) {
 	x, y := s.posX, s.posY
 	if !s.posKnown || !s.posRoot {
 		var rx, ry C.int
@@ -3533,12 +3548,8 @@ func (s *x11Surface) SetSizeLimits(l SizeLimits) {
 // moveEventLocked is EventMove for where the window now is, in the
 // logical pixels Position and Move speak.
 func (s *x11Surface) moveEventLocked() Event {
-	sc := s.conn.displayScale()
-	return Event{
-		Kind:   EventMove,
-		Width:  LogicalPixels(s.posX, sc),
-		Height: LogicalPixels(s.posY, sc),
-	}
+	x, y, _ := s.positionLocked()
+	return Event{Kind: EventMove, Width: x, Height: y}
 }
 
 // SendsMoveEvents: X11 tells a client where the window manager put its

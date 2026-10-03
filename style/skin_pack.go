@@ -1,6 +1,7 @@
 package style
 
 import (
+	"sync/atomic"
 	"embed"
 	"io"
 	"io/fs"
@@ -274,10 +275,25 @@ func ListSkins() []ThemePack {
 			builtin = append(builtin, sk)
 		}
 	}
+	// The application's own, which LoadSkin and LoadTheme have found
+	// since 0.23.3 and this did not: a generic skin picker showed every
+	// skin except the ones the program it is in had registered, and an
+	// application had to keep a list of its own beside the toolkit's.
+	// In lookup order — the application's after the toolkit's, and the
+	// user's after both, so whoever wins a name is last to be listed.
+	app := make([]*Skin, 0, len(skinRegistry.appOrder))
+	for _, name := range skinRegistry.appOrder {
+		if sk, ok := skinRegistry.app[name]; ok {
+			app = append(app, sk)
+		}
+	}
 	skinRegistry.mu.RUnlock()
 
-	out := make([]ThemePack, 0, len(builtin))
+	out := make([]ThemePack, 0, len(builtin)+len(app))
 	for _, sk := range builtin {
+		out = append(out, sk.Pack())
+	}
+	for _, sk := range app {
 		out = append(out, sk.Pack())
 	}
 	for _, sk := range sortedUserSkins() {
@@ -455,7 +471,13 @@ func skinFor(l *Classic) *Skin {
 	if l == nil {
 		return nil
 	}
-	v := l.Memo(skinLookKey{}, func() any {
+	// The key carries the registry's generation, so a look resolved
+	// before a skin was registered or replaced resolves again after.
+	// Without it the memo held the *old* Skin for the life of the look:
+	// re-registering an id reported the new pack everywhere and went on
+	// painting the old artwork. Registrations happen at start-up, so the
+	// handful of extra memo entries a bump leaves behind costs nothing.
+	v := l.Memo(skinLookKey{gen: skinRegGen.Load()}, func() any {
 		sk, ok := LoadSkin(l.Pack())
 		if !ok {
 			return (*Skin)(nil)
@@ -466,7 +488,11 @@ func skinFor(l *Classic) *Skin {
 	return sk
 }
 
-type skinLookKey struct{}
+type skinLookKey struct{ gen uint64 }
+
+// skinRegGen rises whenever the set of skins this process can paint
+// changes: a registration, a replacement, an invalidation.
+var skinRegGen atomic.Uint64
 
 // snapshotSkinFS copies an fs.FS into memory, so an archive can be closed
 // while its art stays readable.
@@ -530,3 +556,26 @@ func (i memSkinInfo) Mode() fs.FileMode  { return 0o444 }
 func (i memSkinInfo) ModTime() time.Time { return time.Time{} }
 func (i memSkinInfo) IsDir() bool        { return false }
 func (i memSkinInfo) Sys() any           { return nil }
+
+// BuiltinSkins are the skins shipped with the toolkit, in the order they
+// are embedded — not the application's ([RegisterSkin]) and not the
+// user's.
+//
+// [ListSkins] is what a picker wants: everything this process can paint.
+// This is for the rules that apply to what ships here, which an
+// application's skin has no business being held to.
+func BuiltinSkins() []ThemePack {
+	skinRegistry.mu.RLock()
+	skins := make([]*Skin, 0, len(skinRegistry.order))
+	for _, name := range skinRegistry.order {
+		if sk, ok := skinRegistry.builtin[name]; ok {
+			skins = append(skins, sk)
+		}
+	}
+	skinRegistry.mu.RUnlock()
+	out := make([]ThemePack, 0, len(skins))
+	for _, sk := range skins {
+		out = append(out, sk.Pack())
+	}
+	return out
+}

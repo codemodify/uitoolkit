@@ -48,6 +48,7 @@ func RegisterSkin(sk *Skin) error {
 	skinRegistry.app[clean] = sk
 	skinRegistry.mu.Unlock()
 	RegisterPack(pack)
+	skinRegGen.Add(1)
 	InvalidateSkinCache()
 	return nil
 }

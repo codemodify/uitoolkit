@@ -1,6 +1,7 @@
 package style
 
 import (
+	"sync/atomic"
 	"archive/zip"
 	"bytes"
 	"encoding/json"
@@ -103,6 +104,13 @@ func joinKey(base, k string) string {
 // bindings from the toolkit's parts to it. Everything in it is immutable
 // once loaded, so one Skin is shared by every look built from it.
 type Skin struct {
+	// gen tells two loads of the same name apart. A skin's assets are
+	// cached by name, directory and file, and two in-memory
+	// registrations of one id have the same name and no directory at
+	// all: without this they share a cache entry, so re-registering a
+	// skin left the old artwork being painted. Set by the loaders.
+	gen uint64
+
 	// Name is the pack id: the directory's name, not a value in the file,
 	// so a skin cannot claim another pack's id by editing its manifest.
 	Name string
@@ -707,6 +715,9 @@ func LoadSkinFS(fsys fs.FS, name string) (*Skin, error) {
 
 // parseSkin decodes and validates a manifest. Every error it returns names
 // the key it came from.
+// skinGen hands out the identity that tells two loads of one name apart.
+var skinGen atomic.Uint64
+
 func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 	var doc skinFileJSON
 	if err := decodeSkinJSON("", raw, &doc); err != nil {
@@ -722,6 +733,7 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 	}
 
 	sk := &Skin{
+		gen: skinGen.Add(1),
 		Name:    name,
 		Version: doc.Skin,
 		Label:   strings.TrimSpace(doc.Label),
