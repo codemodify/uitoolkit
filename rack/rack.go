@@ -371,9 +371,59 @@ func (r *Rack) rebond(i int, carried []int) {
 		if !ok {
 			continue
 		}
+		// Pane 0 is the root — an app adds its windows main-first, and
+		// the main one is what the rest hang from. Bonding it to a
+		// satellite it happened to be moved beside put the root *under*
+		// the satellite: the satellite was then outside the root's
+		// subtree, so the next drag of the main window left it behind.
+		//
+		// The snap still happens; it is turned round. The other pane
+		// hangs from this one instead, with the same geometry, and so
+		// does whatever was already hanging from it.
+		if i == 0 {
+			r.hangFrom(i, j)
+			return
+		}
 		p.To, p.Bond = j, bond
 		p.Box = bond.Place(other.Box, p.Box.W, p.Box.H)
 		return
+	}
+}
+
+// hangFrom makes pane j, and the component it belongs to, hang from pane
+// i without moving anything: the bond is read the other way round, and
+// the path from j up to its own root is reversed so no pane ends up with
+// two anchors.
+func (r *Rack) hangFrom(i, j int) {
+	// Reverse the chain above j first, so j itself is free to take a new
+	// anchor: a -> b -> c becomes a <- b <- c, leaving c (which is j) as
+	// the component's root.
+	for at := j; ; {
+		p := r.Pane(at)
+		if p == nil || p.To < 0 {
+			break
+		}
+		up := p.To
+		upp := r.Pane(up)
+		if upp == nil {
+			break
+		}
+		bond, ok := Snap(p.Box, upp.Box, r.Reach)
+		p.To, p.Bond = -1, Bond{}
+		if ok {
+			upp.To, upp.Bond = at, bond
+		} else {
+			upp.To, upp.Bond = -1, Bond{}
+		}
+		at = up
+	}
+	// Now hang j from i, reading the bond from i's side.
+	pj, pi := r.Pane(j), r.Pane(i)
+	if pj == nil || pi == nil {
+		return
+	}
+	if bond, ok := Snap(pi.Box, pj.Box, r.Reach); ok {
+		pj.To, pj.Bond = i, bond
 	}
 }
 
