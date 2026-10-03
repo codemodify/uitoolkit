@@ -414,27 +414,43 @@ func (r *Rack) rebond(i int, carried []int) {
 // the path from j up to its own root is reversed so no pane ends up with
 // two anchors.
 func (r *Rack) hangFrom(i, j int) {
-	// Reverse the chain above j first, so j itself is free to take a new
-	// anchor: a -> b -> c becomes a <- b <- c, leaving c (which is j) as
-	// the component's root.
-	for at := j; ; {
+	// The chain from j up to its own root is read *before* any of it is
+	// changed, each pane with the parent it had.
+	//
+	// Reversing a link and then stepping to the pane it pointed at means
+	// following the link just written: the walk goes back where it came
+	// from and the two panes reverse each other for ever. That hung
+	// Rack.MoveTo outright whenever the root joined a component of more
+	// than one pane — and with the move callback added in 0.23.3, that
+	// is the application freezing mid-drag. Reading p.To again while
+	// walking has the same fault one step later, because the previous
+	// turn has already rewritten it.
+	type link struct{ node, parent int }
+	chain := make([]link, 0, len(r.panes))
+	seen := make(map[int]bool, len(r.panes))
+	for at := j; !seen[at]; {
+		seen[at] = true
 		p := r.Pane(at)
 		if p == nil || p.To < 0 {
 			break
 		}
-		up := p.To
-		upp := r.Pane(up)
-		if upp == nil {
-			break
+		chain = append(chain, link{at, p.To})
+		at = p.To
+	}
+	// Walk it the other way: each pane takes the one below it as its
+	// anchor, so what was j's root ends up hanging from j.
+	for _, l := range chain {
+		p, up := r.Pane(l.node), r.Pane(l.parent)
+		if p == nil || up == nil {
+			continue
 		}
-		bond, ok := Snap(p.Box, upp.Box, r.Reach)
+		bond, ok := Snap(p.Box, up.Box, r.Reach)
 		p.To, p.Bond = -1, Bond{}
 		if ok {
-			upp.To, upp.Bond = at, bond
+			up.To, up.Bond = l.node, bond
 		} else {
-			upp.To, upp.Bond = -1, Bond{}
+			up.To, up.Bond = -1, Bond{}
 		}
-		at = up
 	}
 	// Now hang j from i, reading the bond from i's side.
 	pj, pi := r.Pane(j), r.Pane(i)

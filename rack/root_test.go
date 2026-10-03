@@ -1,6 +1,9 @@
 package rack
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // Pane 0 is the root: an application adds its windows main-first, and the
 // rest hang from the main one. A snap that joins two separate components
@@ -85,5 +88,63 @@ func TestTheNearestAnchorWins(t *testing.T) {
 	}
 	if to != near {
 		t.Errorf("it bonded to %d, want the nearest anchor %d", to, near)
+	}
+}
+
+// Main joining a component of several panes: it stays the root, every
+// pane ends up under it, and the walk terminates.
+//
+// The first version of hangFrom reversed a link and then stepped to the
+// pane it had just pointed at, following the link it had itself written:
+// the two panes reversed each other for ever and Rack.MoveTo never
+// returned. With the move callback added in 0.23.3 that is an
+// application freezing in the middle of a drag.
+func TestMainJoiningAMultiPaneComponentTerminates(t *testing.T) {
+	for _, join := range []string{"root", "leaf"} {
+		t.Run(join, func(t *testing.T) {
+			done := make(chan struct{})
+			var r *Rack
+			var main, list, eq int
+			go func() {
+				defer close(done)
+				r = New(10)
+				main = r.Add("Main", Box{X: 0, Y: 0, W: 200, H: 100})
+				list = r.Add("List", Box{X: 500, Y: 0, W: 200, H: 100})
+				eq = r.Add("EQ", Box{X: 500, Y: 100, W: 200, H: 100})
+				r.Attach(eq, list, SideBottom)
+				// Beside the component's root, or beside its leaf.
+				if join == "root" {
+					r.MoveTo(main, 300, 0)
+				} else {
+					r.MoveTo(main, 300, 100)
+				}
+			}()
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("MoveTo never returned")
+			}
+
+			if to := r.Pane(main).To; to != -1 {
+				t.Errorf("the root is bonded to %d", to)
+			}
+			// Every pane hangs from the root, and nothing is its own
+			// ancestor: the reversal left one tree, not a ring.
+			sub := r.subtree(main)
+			for _, want := range []int{list, eq} {
+				if !contains(sub, want) {
+					t.Errorf("pane %d is not under the root: %v", want, sub)
+				}
+			}
+			for _, i := range []int{main, list, eq} {
+				hops := 0
+				for at := i; at >= 0; hops++ {
+					if hops > 8 {
+						t.Fatalf("pane %d walks a cycle up its anchors", i)
+					}
+					at = r.Pane(at).To
+				}
+			}
+		})
 	}
 }
