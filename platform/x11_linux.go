@@ -2599,8 +2599,17 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 		var piece []byte
 		if data != nil && n > 0 && fmtb == 8 {
 			piece = C.GoBytes(unsafe.Pointer(data), C.int(n))
-			C.ui_xfree(unsafe.Pointer(data))
-		} else if data != nil {
+			// Xlib's buffer is cleared before it is released, which is
+			// the half that matters: XFree does not clear it, so every
+			// piece of a long paste — a private key arriving in 4 KiB
+			// steps — was left in freed memory for whatever got that
+			// allocation next. handleSelNotify has done this for the
+			// one-shot path since 0.23.1; v0.23.3 added a loop here that
+			// zeroed the *Go copy* after appending it, which is not the
+			// copy anything else can reach.
+			C.ui_zero(unsafe.Pointer(data), C.size_t(n))
+		}
+		if data != nil {
 			C.ui_xfree(unsafe.Pointer(data))
 		}
 		// A drop's data arrives in the same pieces as a paste's, into
@@ -2610,9 +2619,7 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 		}
 		var done bool
 		c.incrRecv.buf, done = AppendINCRPiece(c.incrRecv.buf, piece)
-		// Each piece Xlib read is zeroed before it is released: XFree
-		// does not clear it, and for a long secret every piece holds part
-		// of it. The one-shot path has done this since 0.23.1.
+		// The Go copy goes too, now that it has been appended.
 		for i := range piece {
 			piece[i] = 0
 		}
@@ -2623,7 +2630,7 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 				c.incrRecv.buf[i] = 0
 			}
 			c.pasteDone = true
-			c.incrRecv = incrRecvState{}
+			c.dropINCRLocked()
 		}
 		return
 	}
@@ -2720,6 +2727,20 @@ func (c *x11Conn) clearClipboard() {
 	c.wipeClipLocked()
 	c.keep = false
 	C.ui_flush(c.dpy)
+}
+
+// dropINCRLocked ends an INCR transfer and zeroes what it had read.
+//
+// A transfer that does not finish inside its paste's deadline is simply
+// abandoned, and what it had read so far stayed in the buffer until some
+// later paste overwrote it. For an ordinary selection that is untidy; for
+// a passphrase or a key it is the thing the whole secret path exists to
+// prevent.
+func (c *x11Conn) dropINCRLocked() {
+	for i := range c.incrRecv.buf {
+		c.incrRecv.buf[i] = 0
+	}
+	c.incrRecv = incrRecvState{}
 }
 
 // wipePasteLocked zeroes whatever a paste read back and drops it. A
@@ -2840,7 +2861,11 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 	c.pasteDone = false
 	c.wipePasteLocked()
 	c.pasteWant = sel
-	c.incrRecv = incrRecvState{}
+	// Whatever a previous transfer had read goes with it. One that ran
+	// past its paste's deadline used to sit in incrRecv holding the part
+	// it had — the start of a private key — until the next paste happened
+	// to replace it.
+	c.dropINCRLocked()
 	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp, c.selectionTimeLocked())
 	C.ui_flush(c.dpy)
 	deadline := time.Now().Add(timeout)

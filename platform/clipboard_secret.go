@@ -310,12 +310,33 @@ func ClipboardHoldsSecret() bool {
 //
 // Clearing would be wrong here — what is on the clipboard is no longer
 // ours to empty. The copy in this process still is, and it goes.
-func forgetHeldSecret() {
+func forgetHeldSecret() { forgetHeldSecretIf(nil) }
+
+// forgetHeldSecretIf ends the held secret, but only if it is still the
+// one the caller means. A nil clip means whichever is held.
+//
+// The window system tells us a selection was lost on its own schedule,
+// and on Wayland that word arrives on a goroutine. By the time it runs,
+// the program may have copied something else — so ending "whatever is
+// held" can end a copy made in between, which is a passphrase the user
+// has just put there going quietly missing. Naming the copy makes the
+// end apply to the one that was actually lost.
+func forgetHeldSecretIf(c *SecretClip) {
 	secretMu.Lock()
 	held := secretHeld
+	if held == nil || (c != nil && held != c) {
+		secretMu.Unlock()
+		return
+	}
 	secretHeld = nil
 	secretMu.Unlock()
-	if held != nil {
-		held.forget()
-	}
+	held.forget()
+}
+
+// HeldSecret is the secret this process has on the clipboard, or nil.
+// It is how a backend names the copy it is reporting on.
+func heldSecret() *SecretClip {
+	secretMu.Lock()
+	defer secretMu.Unlock()
+	return secretHeld
 }

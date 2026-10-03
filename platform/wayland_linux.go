@@ -4375,10 +4375,25 @@ func uitkWlDataCancelled(id C.uintptr_t) {
 		c.dataSrc = nil
 	}
 	c.clipKeepLocked()
-	// Another client has the selection, so a secret this process put
-	// there is gone from it. The held copy ends — without clearing, which
-	// would empty a clipboard that is no longer ours.
-	go forgetHeldSecret()
+	// Another client has the Wayland selection, so a secret this process
+	// put there is gone from *that* one. The held copy ends with it —
+	// without clearing, which would empty a selection no longer ours.
+	//
+	// Unless this process is still serving the same secret on X11, which
+	// on any desktop running XWayland it probably is: the copy took both,
+	// and a compositor bridging the X11 owner's copy to Wayland cancels
+	// our own source as a matter of course. Ending the held copy then
+	// would stop the timer that is the only thing left to clear X11.
+	// The copy that was on the selection when it was cancelled, named
+	// now: by the time the goroutine runs the program may have copied
+	// something else, and ending whatever is held would end that instead.
+	lost := heldSecret()
+	go func() {
+		if x11StillServesTheSecret() {
+			return
+		}
+		forgetHeldSecretIf(lost)
+	}()
 }
 
 // clipKeepLocked drops the "hold the connection open for the clipboard"
