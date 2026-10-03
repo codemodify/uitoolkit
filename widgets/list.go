@@ -505,7 +505,11 @@ func (l *ListView) rowRect(i int) paintengine2d.Rect {
 	}
 	rh := l.rowH()
 	y := float32(i)*rh - l.OffsetY
-	return paintengine2d.XYWH(0, y, l.inner().Dx(), rh)
+	// rowsW, not the whole viewport: a row stops where the scroll bar's
+	// gutter starts, which is where it is painted to and where a click
+	// lands. Reporting the gutter as part of the row put the accessible
+	// rectangle a gutter wider than the row anyone can see.
+	return paintengine2d.XYWH(0, y, l.rowsW(), rh)
 }
 
 func (l *ListView) invalidateRow(i int) {

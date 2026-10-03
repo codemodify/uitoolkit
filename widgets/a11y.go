@@ -31,8 +31,20 @@ func rangeNode(n *a11y.Node, min, max, now, step float64) {
 
 // item builds the node of item i of view c, with a local box.
 func item(c widget.Component, i int, role a11y.Role, name string, local paintengine2d.Rect) *a11y.Node {
+	return itemIn(c, i, role, name, local, c.LocalBounds())
+}
+
+// itemIn is item for a view whose items live in a viewport of their own —
+// a list's rows inside its frame, or inside the slot a skin named for
+// them.
+//
+// What counts as offscreen is the viewport, not the whole component: a
+// row scrolled out of the rows area is still inside the component, so
+// testing against that said every row was on screen however far it had
+// been scrolled away.
+func itemIn(c widget.Component, i int, role a11y.Role, name string, local, view paintengine2d.Rect) *a11y.Node {
 	n := &a11y.Node{ID: widget.ItemID(c, i), Role: role, Name: name, Bounds: widget.LocalToWindow(c, local)}
-	if !local.Overlaps(c.LocalBounds()) {
+	if !local.Overlaps(view) {
 		n.State |= a11y.StateOffscreen
 	}
 	return n
@@ -436,7 +448,13 @@ func (l *ListView) Describe(n *a11y.Node) {
 
 func (l *ListView) AccessibleItems() []*a11y.Node {
 	out := make([]*a11y.Node, 0, l.Count)
-	in := l.inner().Min
+	// fromView, not a translate by inner().Min: inner() is in view space
+	// and its origin is (0,0) there, so the translate moved nothing and
+	// a list with padding — a skin that named a rows slot, or any framed
+	// list — reported every row at the component's own corner instead of
+	// where it is drawn.
+	pad := l.pad()
+	view := fromView(l.inner(), pad)
 	for i := 0; i < l.Count; i++ {
 		text := ""
 		if l.ItemText != nil {
@@ -449,7 +467,7 @@ func (l *ListView) AccessibleItems() []*a11y.Node {
 				text = strings.TrimPrefix(text+", "+d, ", ")
 			}
 		}
-		n := item(l, i, a11y.RoleListItem, text, l.rowRect(i).Translate(in))
+		n := itemIn(l, i, a11y.RoleListItem, text, fromView(l.rowRect(i), pad), view)
 		n.State |= a11y.StateSelectable
 		if l.IsSelected(i) {
 			n.State |= a11y.StateSelected
@@ -561,7 +579,12 @@ func (t *TableView) Describe(n *a11y.Node) {
 // cells (item ids: headers first, then rows, then cells).
 func (t *TableView) AccessibleItems() []*a11y.Node {
 	widths := t.colWidths()
-	in := t.inner().Min
+	// As for a list: inner() is view space with origin (0,0), so the
+	// translate by its Min moved nothing and a framed table reported its
+	// rows at the component's corner rather than inside the frame.
+	fr := t.frame()
+	in := paintengine2d.Pt(fr.Left, fr.Top)
+	view := fromView(t.inner(), fr)
 	cols := len(t.Columns)
 	out := make([]*a11y.Node, 0, cols+t.RowCount)
 	x := in.X
@@ -574,8 +597,8 @@ func (t *TableView) AccessibleItems() []*a11y.Node {
 		x += w
 	}
 	for r := 0; r < t.RowCount; r++ {
-		rr := t.rowRect(r).Translate(in)
-		row := item(t, cols+r, a11y.RoleRow, "", rr)
+		rr := fromView(t.rowRect(r), fr)
+		row := itemIn(t, cols+r, a11y.RoleRow, "", rr, view)
 		row.Index, row.Count = r+1, t.RowCount
 		row.State |= a11y.StateSelectable
 		if t.IsSelected(r) {
