@@ -63,3 +63,27 @@ func TestPaneZeroStaysTheRoot(t *testing.T) {
 		}
 	})
 }
+
+// The nearest qualifying anchor wins, not whichever was added first.
+//
+// Snap weighs the edges within one candidate, but nothing ranked the
+// candidates against each other, so rebond took the first that qualified
+// in insertion order: an anchor eight pixels away beat one the pane was
+// already flush with.
+func TestTheNearestAnchorWins(t *testing.T) {
+	r := New(10)
+	_ = r.Add("Main", Box{X: 0, Y: 0, W: 100, H: 100})
+	// far qualifies at six pixels; near is already flush.
+	far := r.Add("Far", Box{X: 294, Y: 0, W: 100, H: 100})
+	near := r.Add("Near", Box{X: 500, Y: 0, W: 100, H: 100})
+	sat := r.Add("Sat", Box{X: 408, Y: 0, W: 100, H: 100})
+
+	r.MoveTo(sat, 400, 0) // flush with near's left edge, 6 short of far's right
+	to := r.Pane(sat).To
+	if to == far {
+		t.Errorf("it took the anchor 6 px away because that pane was added first")
+	}
+	if to != near {
+		t.Errorf("it bonded to %d, want the nearest anchor %d", to, near)
+	}
+}

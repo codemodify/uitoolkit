@@ -363,6 +363,15 @@ func (r *Rack) rebond(i int, carried []int) {
 		return
 	}
 	p.To, p.Bond = -1, Bond{}
+	// The nearest qualifying anchor, not the first one in insertion
+	// order. Snap already weighs the edges within one candidate, but
+	// nothing ranked the candidates against each other: an anchor eight
+	// pixels away won over one the pane was already flush with, purely
+	// because it had been added first.
+	//
+	// Nearest is measured as how far the pane would have to move to take
+	// the bond, which is the thing a person sees.
+	best, bestAt, bestMove := Bond{}, -1, 0
 	for j, other := range r.panes {
 		if j == i || !other.Shown || contains(carried, j) {
 			continue
@@ -371,6 +380,16 @@ func (r *Rack) rebond(i int, carried []int) {
 		if !ok {
 			continue
 		}
+		at := bond.Place(other.Box, p.Box.W, p.Box.H)
+		move := abs(at.X-p.Box.X) + abs(at.Y-p.Box.Y)
+		if bestAt >= 0 && move >= bestMove {
+			continue
+		}
+		best, bestAt, bestMove = bond, j, move
+	}
+	if bestAt >= 0 {
+		j, bond := bestAt, best
+		other := r.panes[j]
 		// Pane 0 is the root — an app adds its windows main-first, and
 		// the main one is what the rest hang from. Bonding it to a
 		// satellite it happened to be moved beside put the root *under*
@@ -386,9 +405,9 @@ func (r *Rack) rebond(i int, carried []int) {
 		}
 		p.To, p.Bond = j, bond
 		p.Box = bond.Place(other.Box, p.Box.W, p.Box.H)
-		return
 	}
 }
+
 
 // hangFrom makes pane j, and the component it belongs to, hang from pane
 // i without moving anything: the bond is read the other way round, and
