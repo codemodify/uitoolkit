@@ -56,7 +56,13 @@ func (w *Window) OnLockKeys(fn func(caps, num bool)) {
 // change. Every event with modifiers goes through it, which is what
 // makes the state current without polling anything.
 func (w *Window) noteLockKeys(mods platform.Modifiers) {
-	caps, num := mods.CapsLock(), mods.NumLock()
+	w.noteLockState(mods.CapsLock(), mods.NumLock())
+}
+
+// noteLockState records the lock keys as the window system reports them
+// and tells every watcher about a change, whether the news came from an
+// event's modifiers or from asking the backend outright.
+func (w *Window) noteLockState(caps, num bool) {
 	if w.lockKnown && caps == w.lockCaps && num == w.lockNum {
 		return
 	}

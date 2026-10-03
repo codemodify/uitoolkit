@@ -155,6 +155,21 @@ func (o *Overlay) Dismissed() {
 	}
 }
 
+// splitButtonBox finds the one ButtonBox among the actions, and what
+// else there is.
+func splitButtonBox(actions []widget.Component) (*ButtonBox, []widget.Component) {
+	var bb *ButtonBox
+	rest := make([]widget.Component, 0, len(actions))
+	for _, a := range actions {
+		if b, ok := a.(*ButtonBox); ok && bb == nil {
+			bb = b
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return bb, rest
+}
+
 // DialogCard is an in-app window with a title, a message and an action
 // row; the look paints its frame and caption.
 // DialogContent is a dialog's body over its action row, arranged the way
@@ -189,13 +204,23 @@ func DialogContent(body widget.Component, actions ...widget.Component) *FlexBox 
 	// a row. A ButtonBox put in a justified row loses the whole point of
 	// it: its left-hand group, Help and a destructive button under Mac
 	// and GNOME looks, is no longer apart from the rest.
+	// A ButtonBox anywhere among the actions takes the width, not only
+	// one handed over by itself. A dialog's foot often holds something
+	// beside the buttons — "Caps Lock is on", a progress note — and that
+	// is exactly the foot that most needs the box to lay itself out: the
+	// box keeps its left-hand group apart (Help, and a destructive button
+	// under Mac and GNOME looks) only if it has the room to.
 	var foot widget.Component
-	if len(actions) == 1 {
-		if _, ok := actions[0].(*ButtonBox); ok {
-			foot = actions[0]
+	if bb, rest := splitButtonBox(actions); bb != nil {
+		if len(rest) == 0 {
+			foot = bb
+		} else {
+			// What else there is on the left, the box filling the rest.
+			row := NewRow(append(append([]widget.Component{}, rest...), bb)...).WithGap(8)
+			row.AddFlex(bb, 1)
+			foot = row
 		}
-	}
-	if foot == nil {
+	} else {
 		foot = NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd)
 	}
 	col := NewColumn(scroll, foot).WithGap(12).WithPad(4)

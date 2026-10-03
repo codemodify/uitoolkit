@@ -3869,6 +3869,15 @@ func uitkWlKeyMods(id C.uintptr_t, dep, lat, lock, group C.uint32_t) {
 	}
 	C.ui_xkb_update_mask(c.xkbState, dep, lat, lock, group)
 	c.mods = wlMods(c)
+	// Tell the focused window. The compositor sends this right after
+	// enter, before any key, which is exactly when a prompt that warns
+	// about Caps Lock needs it — and nothing used to carry it in, so the
+	// window asked its surface during the first layout, before the
+	// compositor had said anything, was answered "off", and heard
+	// nothing more until the first keystroke.
+	if s := wlSurfBy(C.uintptr_t(c.keySurf)); s != nil {
+		s.popRoot().push(Event{Kind: EventLockKeys, Mods: c.mods})
+	}
 }
 
 //export uitkWlExplicitRelease

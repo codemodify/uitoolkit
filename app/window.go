@@ -1087,6 +1087,11 @@ func (w *Window) dispatch(ev platform.Event) {
 			return
 		}
 		w.Close()
+	case platform.EventLockKeys:
+		// The window system saying what the locks are, rather than a
+		// keystroke implying it. This is how a window learns the state
+		// it opened in.
+		w.noteLockKeys(ev.Mods)
 	case platform.EventMove:
 		// Where the desktop put the window. Nothing here lays anything
 		// out again — the window has not changed shape — but anything

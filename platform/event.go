@@ -211,6 +211,15 @@ const (
 	// backend sends this for no window, and [MoveEventSurface] is how to
 	// ask in advance rather than waiting for an event that will not come.
 	EventMove
+	// EventLockKeys: Caps Lock or Num Lock is now as Mods says, reported
+	// by the window system rather than inferred from a keystroke.
+	//
+	// It is how a window learns the state it *opened* in. A Wayland
+	// compositor sends wl_keyboard.modifiers right after enter, before
+	// any key — the one moment a passphrase prompt needs it, because the
+	// warning exists for the first passphrase and not the second — and
+	// until this there was nothing to carry that into the window.
+	EventLockKeys
 	EventClose
 	EventExpose
 	EventFocusIn

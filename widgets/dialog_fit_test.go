@@ -60,3 +60,32 @@ func TestAButtonBoxKeepsItsLayoutInADialog(t *testing.T) {
 		t.Errorf("the button box got %g of %d; it was squeezed instead of laying itself out", got, W)
 	}
 }
+
+// A ButtonBox beside something else in the foot still lays itself out.
+//
+// A dialog's foot often holds a word as well as its buttons — "Caps Lock
+// is on", a progress note — and that is the foot that most needs the box
+// to keep its left-hand group apart. The first version of this gave the
+// width to a box only when it was handed over alone, so the common case
+// was the one left squeezed.
+func TestAButtonBoxKeepsItsLayoutBesideOtherActions(t *testing.T) {
+	bb := NewButtonBox()
+	bb.AddButton(NewButton("Help", nil), RoleHelp)
+	bb.AddButton(NewButton("Cancel", nil), RoleReject)
+	bb.AddButton(NewButton("OK", nil), RoleAccept)
+	note := NewLabel("Caps Lock is on")
+	content := DialogContent(NewLabel("Body"), note, bb)
+	content.SetLook(style.DarkLook())
+	content.SetHost(&host{})
+	const W = 600
+	content.Arrange(paintengine2d.XYWH(0, 0, W, 300))
+
+	nw := widget.DeviceBounds(note).Dx()
+	got := widget.DeviceBounds(bb).Dx()
+	if got < (W-nw)*0.6 {
+		t.Errorf("the button box got %g of the %g left beside the note; it was squeezed", got, W-nw)
+	}
+	if widget.DeviceBounds(note).Max.X > widget.DeviceBounds(bb).Min.X+1 {
+		t.Error("the note and the buttons overlap")
+	}
+}
