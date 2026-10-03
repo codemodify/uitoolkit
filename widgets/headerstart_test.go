@@ -33,7 +33,7 @@ func TestSplitterReportsOnTheDragNotTheLayout(t *testing.T) {
 	}
 
 	div := sp.divider()
-	sp.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(div.Min.X + 1, 20), Button: platform.ButtonLeft})
+	sp.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(div.Min.X+1, 20), Button: platform.ButtonLeft})
 	sp.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(420, 20)})
 	if calls == 0 {
 		t.Fatal("dragging the divider said nothing")

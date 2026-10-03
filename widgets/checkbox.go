@@ -42,7 +42,7 @@ func (c *Checkbox) SetChecked(v bool) {
 		c.OnChange(v)
 	}
 	if c.user.is() && c.OnInput != nil {
-		c.OnInput(v)
+		c.user.fire(func() { c.OnInput(v) })
 	}
 }
 

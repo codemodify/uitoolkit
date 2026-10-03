@@ -46,7 +46,7 @@ func (r *RadioButton) SetSelected(v bool) {
 		r.OnChange(v)
 	}
 	if r.user.is() && r.OnInput != nil {
-		r.OnInput(v)
+		r.user.fire(func() { r.OnInput(v) })
 	}
 }
 

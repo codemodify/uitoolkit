@@ -37,3 +37,19 @@ func (u *userEdit) did(set func()) {
 
 // is reports whether the change being made is the user's.
 func (u *userEdit) is() bool { return u.on }
+
+// fire runs an OnInput callback with the flag put down for the duration.
+//
+// Whatever the callback does to the control is the *application's* doing,
+// not the user's: an application that normalises a value by calling
+// SetValue from inside OnInput is making a programmatic change, and
+// OnInput must not fire again for it. The flag used to stay up for the
+// whole callback, so one key press produced two OnInput calls — and a
+// callback that always adjusts the value recurses until the value stops
+// moving, or until the stack runs out.
+func (u *userEdit) fire(run func()) {
+	was := u.on
+	u.on = false
+	run()
+	u.on = was
+}

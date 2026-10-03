@@ -42,7 +42,7 @@ func (s *Switch) SetOn(v bool) {
 		s.OnChange(v)
 	}
 	if s.user.is() && s.OnInput != nil {
-		s.OnInput(v)
+		s.user.fire(func() { s.OnInput(v) })
 	}
 }
 

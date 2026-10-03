@@ -262,18 +262,32 @@ func solve(ts []Track, n int, content, minc []float32, spans [][3]float32, gap, 
 		}
 		return w
 	}
-	fixed := gap * float32(max(n-1, 0))
+	// Gaps only between the tracks that take room, which is the same
+	// count the placement uses. Reserving one per track left a flexible
+	// track short by a gap for every hidden one, so a grid with a hidden
+	// column did not reach its own right edge — 392 of 400, with one of
+	// three columns hidden.
+	//
+	// A flexible track is counted as taking room: it is about to be given
+	// some. A fixed or content track is counted when it has any.
+	var fixed float32
 	var flex []int
+	participating := 0
 	for i := 0; i < n; i++ {
 		// A share track is a flex track for the purpose of dividing what
 		// is left; what it does differently is upstream, where it is not
 		// asked for a natural width at all.
 		if m := trackAt(ts, i).Mode; m == TrackFlex || m == TrackShare {
 			flex = append(flex, i)
+			participating++
 			continue
 		}
 		fixed += out[i]
+		if out[i] > 0 {
+			participating++
+		}
 	}
+	fixed += gap * float32(max(participating-1, 0))
 	if len(flex) == 0 {
 		return out
 	}

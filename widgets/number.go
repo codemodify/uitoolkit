@@ -100,7 +100,7 @@ func (n *NumberField) SetValue(v float64) {
 		n.OnChange(v)
 	}
 	if n.user.is() && n.OnInput != nil {
-		n.OnInput(v)
+		n.user.fire(func() { n.OnInput(v) })
 	}
 }
 

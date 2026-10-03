@@ -105,7 +105,7 @@ func (t *TextArea) SetText(s string) {
 		t.OnChange(s)
 	}
 	if t.user.is() && t.OnInput != nil {
-		t.OnInput(s)
+		t.user.fire(func() { t.OnInput(s) })
 	}
 }
 

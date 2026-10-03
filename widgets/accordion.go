@@ -59,7 +59,7 @@ func (e *Expander) SetExpanded(v bool) {
 		e.OnToggle(v)
 	}
 	if e.user.is() && e.OnInput != nil {
-		e.OnInput(v)
+		e.user.fire(func() { e.OnInput(v) })
 	}
 }
 
