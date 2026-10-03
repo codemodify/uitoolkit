@@ -50,7 +50,16 @@ func itemState(view Component, selected, hovered, current bool) style.ControlSta
 	}
 	focused := false
 	if h := view.Host(); h != nil {
-		focused = h.Focus() == view
+		f := h.Focus()
+		// The identity Init established, not the receiver.
+		//
+		// A view embedded in an outer component — the commonest way to
+		// extend a ListView — passes its *inner* receiver here, while
+		// the host's focus is the outer component that Init was called
+		// with. The comparison then never matched: the rows of a focused
+		// list drew as unfocused and inactive, and an application had to
+		// work out the focus itself to paint its own rows correctly.
+		focused = f == view || f == selfOf(view)
 	}
 	if focused && active {
 		if current {
@@ -60,4 +69,13 @@ func itemState(view Component, selected, hovered, current bool) style.ControlSta
 		st |= style.StateInactive
 	}
 	return st
+}
+
+// selfOf is the component Init was given, which is the one the rest of
+// the tree knows: for a view embedded in a wrapper, the wrapper.
+func selfOf(c Component) Component {
+	if s, ok := c.(interface{ me() Component }); ok {
+		return s.me()
+	}
+	return c
 }

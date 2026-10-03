@@ -46,12 +46,23 @@ var skinRegistry = struct {
 	builtin map[string]*Skin
 	order   []string
 
+	// app holds skins the application registered ([RegisterSkin]). They
+	// are kept apart from the built-ins: "built in" means shipped with
+	// the toolkit, and the checks that hold a shipped skin to the
+	// format's rules are about those, not about whatever a program
+	// embedded. They are found after the user's and before the
+	// toolkit's, so an application can override a shipped skin and a
+	// person can still override the application.
+	app      map[string]*Skin
+	appOrder []string
+
 	user    map[string]*Skin
 	userGen uint64
 	userDir string
 	userAt  time.Time
 }{
 	builtin: map[string]*Skin{},
+	app:     map[string]*Skin{},
 	user:    map[string]*Skin{},
 }
 
@@ -236,7 +247,10 @@ func LoadSkin(name string) (*Skin, bool) {
 		return sk, true
 	}
 	skinRegistry.mu.RLock()
-	sk, ok := skinRegistry.builtin[clean]
+	sk, ok := skinRegistry.app[clean]
+	if !ok {
+		sk, ok = skinRegistry.builtin[clean]
+	}
 	skinRegistry.mu.RUnlock()
 	return sk, ok
 }

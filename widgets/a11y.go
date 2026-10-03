@@ -837,10 +837,38 @@ func (p *PopupMenu) AccessibleItems() []*a11y.Node {
 		if i == p.focus || i == p.hover {
 			n.State |= a11y.StateSelected
 		}
-		n.Actions = n.Actions.With(a11y.ActionDefault)
+		// Not on a disabled row: advertising an action that is refused
+		// is the same fault as advertising one that does nothing.
+		if !it.Disabled {
+			n.Actions = n.Actions.With(a11y.ActionDefault)
+		}
 		out = append(out, n)
 	}
 	return out
+}
+
+// AccessibleAction runs a menu item, which is what the row said it could
+// do ([widget.AccessibleActor]).
+//
+// The rows advertised a default action and the menu implemented no way
+// to perform one: a screen reader or an automation tool asking for it
+// got false and nothing happened, while a click or Return on the same
+// row worked. It goes through activate, the same path keyboard and
+// pointer input take, so a submenu opens, a check or radio updates,
+// OnPick is consulted and the menu closes exactly as they would.
+func (p *PopupMenu) AccessibleAction(i int, a a11y.Action) bool {
+	if p == nil || p.dead || a != a11y.ActionDefault {
+		return false
+	}
+	if i < 0 || i >= len(p.Items) {
+		return false
+	}
+	it := p.Items[i]
+	if it == nil || it.Separator || it.Disabled {
+		return false
+	}
+	p.activate(i)
+	return true
 }
 
 // ---- the item with the keyboard focus ------------------------------------------
