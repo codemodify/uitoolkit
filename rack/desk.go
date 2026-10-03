@@ -42,11 +42,21 @@ type Desk struct {
 	// back on the very next look, decides the user must have dragged the
 	// window there, and takes it out of the stack it was just put into.
 	pending []int
+	// inFollow guards against a move event arriving while Follow is
+	// moving windows: every satellite it places reports its own move, and
+	// without this each one would start another pass.
+	inFollow bool
 	// Moved runs after Follow has moved anything, so a player can repaint
 	// the line that says where its panes are.
 	Moved func()
 }
 
+// Patience is measured in looks because Follow used to be the only way a
+// Desk ran, and an application chose how often to call it: 25 looks is
+// 1.75 seconds at a 70 ms pulse and a quarter of that at 17 ms. Where the
+// desktop reports moves the question mostly goes away — a window that
+// arrives says so — and the count remains for the polling case.
+//
 // movePatience is how many looks a window gets to arrive where it was asked
 // to go before the rack gives up and takes the desktop's answer instead. A
 // window manager that refuses a move — a tiled window, a maximized one —
@@ -63,7 +73,29 @@ func (d *Desk) Add(name string, w *app.Window) int {
 	d.wins = append(d.wins, w)
 	d.want = append(d.want, d.Rack.Pane(i).Box)
 	d.pending = append(d.pending, 0)
+	// Follow the desktop's own word where it gives one, so the satellites
+	// move with the drag rather than catching up on the application's
+	// next tick. An application that polls Follow keeps working: this is
+	// the same call, made at the moment there is something to do.
+	if w != nil && w.SendsMoveEvents() {
+		w.OnMove(func(int, int) { d.followFromEvent() })
+	}
 	return i
+}
+
+// followFromEvent is Follow, run because the desktop said a window moved.
+//
+// Coalesced to one pass per batch of events: a drag delivers a configure
+// for every step, and each one would otherwise walk every pane and ask
+// the window system to move the satellites again. The flag is cleared by
+// the pass itself, so the next batch runs one more.
+func (d *Desk) followFromEvent() {
+	if d == nil || d.inFollow {
+		return
+	}
+	d.inFollow = true
+	defer func() { d.inFollow = false }()
+	d.Follow()
 }
 
 // Window is the window of pane i, or nil.
@@ -183,6 +215,16 @@ func (d *Desk) Apply() {
 		}
 		if p.Box.X == d.want[i].X && p.Box.Y == d.want[i].Y {
 			d.want[i] = p.Box
+			continue
+		}
+		// Where the window actually is, not only where it was last asked
+		// to go. After the desktop moves a window itself, want still
+		// holds the stale request, so Apply asked for that old position
+		// again — a request racing the drag the user is still making.
+		// Nothing to do when it is already there.
+		if box := d.boxOf(w); !box.Empty() && box.X == p.Box.X && box.Y == p.Box.Y {
+			d.want[i] = p.Box
+			d.pending[i] = 0
 			continue
 		}
 		if w.Move(p.Box.X, p.Box.Y) {

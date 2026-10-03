@@ -2002,8 +2002,13 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		// Where the window manager put the window, for whoever asks
 		// ([WindowGeometry.Position]): a drag that carries a window needs it, and
 		// a saved layout keeps a floating panel's place with it.
+		wasX, wasY, knew := s.posX, s.posY, s.posKnown
 		s.posX, s.posY = int(C.ui_cfg_x(xe)), int(C.ui_cfg_y(xe))
 		s.posRoot, s.posKnown = C.ui_cfg_synthetic(xe) != 0, true
+		// A move with no resize used to produce no event at all, so an
+		// application keeping other windows beside this one had nothing
+		// to react to and had to poll Position on a timer.
+		moved := knew && (s.posX != wasX || s.posY != wasY)
 		w, h := int(C.ui_cfg_w(xe)), int(C.ui_cfg_h(xe))
 		resized := w != s.img.Width || h != s.img.Height
 		// A resize step the window manager asked a sync for is answered
@@ -2032,7 +2037,14 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 			sc := s.conn.displayScale()
 			s.geomLW = LogicalPixels(s.geomW, sc)
 			s.geomLH = LogicalPixels(s.geomH, sc)
-			return []Event{{Kind: EventResize, Width: s.geomLW, Height: s.geomLH}}
+			evs := []Event{{Kind: EventResize, Width: s.geomLW, Height: s.geomLH}}
+			if moved {
+				evs = append(evs, s.moveEventLocked())
+			}
+			return evs
+		}
+		if moved {
+			return []Event{s.moveEventLocked()}
 		}
 	case C.ButtonPress, C.ButtonRelease:
 		btn := int(C.ui_btn(xe))
@@ -3492,6 +3504,21 @@ func (s *x11Surface) SetSizeLimits(l SizeLimits) {
 	s.applySizeHintsLocked()
 	x11Mu.Unlock()
 }
+
+// moveEventLocked is EventMove for where the window now is, in the
+// logical pixels Position and Move speak.
+func (s *x11Surface) moveEventLocked() Event {
+	sc := s.conn.displayScale()
+	return Event{
+		Kind:   EventMove,
+		Width:  LogicalPixels(s.posX, sc),
+		Height: LogicalPixels(s.posY, sc),
+	}
+}
+
+// SendsMoveEvents: X11 tells a client where the window manager put its
+// window, so this backend can report a move ([MoveEventSurface]).
+func (s *x11Surface) SendsMoveEvents() bool { return true }
 
 // SizeLimits is what WM_NORMAL_HINTS last said about the visible window
 // (WindowGeometry).

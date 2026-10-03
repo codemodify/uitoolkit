@@ -130,6 +130,7 @@ const (
 	wmNcCalcSize  = 0x0083
 	wmDestroy     = 0x0002
 	wmSize        = 0x0005
+	wmMove        = 0x0003
 	wmClose       = 0x0010
 	wmPaint       = 0x000F
 	wmEraseBkgnd  = 0x0014
@@ -336,6 +337,16 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.push(Event{Kind: EventExpose, Width: s.bufW, Height: s.bufH})
 		// Leave the paint to DefWindowProc so the update region is
 		// validated; Present puts the pixels up.
+	case wmMove:
+		// WM_MOVE's lParam is the client area's new top-left in screen
+		// coordinates, as two signed 16-bit halves. Without this a move
+		// with no resize reached the application as nothing at all, and
+		// anything keeping other windows beside this one had to poll.
+		x, y := int(int16(lparam&0xFFFF)), int(int16((lparam>>16)&0xFFFF))
+		sc := s.deviceScale()
+		s.push(Event{Kind: EventMove,
+			Width: LogicalPixels(x, sc), Height: LogicalPixels(y, sc)})
+		return 0
 	case wmSize:
 		w, h := int(lparam&0xFFFF), int((lparam>>16)&0xFFFF)
 		if w > 0 && h > 0 {
@@ -1086,3 +1097,7 @@ func (s *winSurface) SetSizeLimits(l SizeLimits) {
 	s.limits = l
 	stateLimits(&s.opts, l)
 }
+
+// SendsMoveEvents: Windows sends WM_MOVE, so this backend reports a move
+// ([MoveEventSurface]).
+func (s *winSurface) SendsMoveEvents() bool { return true }

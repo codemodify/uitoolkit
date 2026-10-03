@@ -53,6 +53,16 @@ static double flipY(double y) {
 	NSRect r = [w.contentView bounds];
 	uitkAkEvent(self.sid, UITK_AK_RESIZE, r.size.width, r.size.height);
 }
+// Where the window went. AppKit's origin is the bottom-left of the
+// screen and the toolkit's is the top-left, so the frame is flipped
+// against the screen that holds it before it is reported.
+- (void)windowDidMove:(NSNotification *)n {
+	NSWindow *w = n.object;
+	NSRect f = [w frame];
+	NSScreen *sc = [w screen] ?: [NSScreen mainScreen];
+	CGFloat top = NSMaxY([sc frame]) - NSMaxY(f);
+	uitkAkEvent(self.sid, UITK_AK_MOVE, f.origin.x, top);
+}
 - (void)windowDidChangeBackingProperties:(NSNotification *)n {
 	NSWindow *w = n.object;
 	uitkAkEvent(self.sid, UITK_AK_SCALE, w.backingScaleFactor, 0);

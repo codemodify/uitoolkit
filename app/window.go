@@ -50,6 +50,8 @@ type Window struct {
 	// secureWanted is the last SetSecureInput request, secureHeld what
 	// is actually in effect, and onSecureInput the window's callback for
 	// changes in the second (app/secure.go).
+	// onMove is called when the desktop moves the window (app/move.go).
+	onMove        func(x, y int)
 	secureWanted  bool
 	secureGot     bool
 	secureHeld    bool
@@ -1085,6 +1087,12 @@ func (w *Window) dispatch(ev platform.Event) {
 			return
 		}
 		w.Close()
+	case platform.EventMove:
+		// Where the desktop put the window. Nothing here lays anything
+		// out again — the window has not changed shape — but anything
+		// that keeps other windows beside this one needs to hear it, and
+		// before this it had to poll Position on a timer.
+		w.noteMoved(ev.Width, ev.Height)
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
 		// A resize is usually also how a move between monitors reaches

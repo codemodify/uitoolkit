@@ -317,6 +317,8 @@ func uitkAkEvent(sid C.uintptr_t, kind C.int, a, b C.double) {
 		s.push(Event{Kind: EventClose})
 	case C.UITK_AK_RESIZE:
 		s.push(Event{Kind: EventResize, Width: int(a), Height: int(b)})
+	case C.UITK_AK_MOVE:
+		s.push(Event{Kind: EventMove, Width: int(a), Height: int(b)})
 	case C.UITK_AK_EXPOSE:
 		s.push(Event{Kind: EventExpose, Width: s.bufW, Height: s.bufH})
 	case C.UITK_AK_SCALE:
@@ -435,3 +437,7 @@ func firstRune(t string) rune {
 
 var _ Surface = (*akSurface)(nil)
 var _ Backend = AppKitBackend{}
+
+// SendsMoveEvents: AppKit posts NSWindowDidMove, so this backend reports
+// a move ([MoveEventSurface]).
+func (s *akSurface) SendsMoveEvents() bool { return true }

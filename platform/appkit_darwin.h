@@ -18,6 +18,7 @@ enum {
 	UITK_AK_FOCUS_IN = 5,
 	UITK_AK_FOCUS_OUT = 6,
 	UITK_AK_STATE = 7,
+	UITK_AK_MOVE = 8,
 };
 
 // Input kinds, for uitkAkInput. Separate from the list above because

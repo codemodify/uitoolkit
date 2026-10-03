@@ -196,6 +196,21 @@ const (
 	// WindowOptions and Resize speak (Width, Height). The buffer behind
 	// Surface.Size is already that size times the display scale.
 	EventResize
+	// EventMove: the window is at a new position on the desktop, in the
+	// logical pixels [Surface.Position] and Move speak (Width and Height
+	// carry it, as EventResize carries the size).
+	//
+	// It is sent when the *position* changed, whether or not the size did,
+	// and it is how an application that keeps other windows beside this
+	// one hears about a drag. Without it a rack had to poll, which is a
+	// trade between a timer fast enough to look attached and one slow
+	// enough not to cost anything.
+	//
+	// Not every desktop can send it. A Wayland toplevel has no position:
+	// a client is never told where its windows are, so the Wayland
+	// backend sends this for no window, and [MoveEventSurface] is how to
+	// ask in advance rather than waiting for an event that will not come.
+	EventMove
 	EventClose
 	EventExpose
 	EventFocusIn
