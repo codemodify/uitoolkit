@@ -133,7 +133,12 @@ type WindowShapeEngine interface {
 // hard-edged version of the same outline, exactly as docs/shapes.md promises
 // for an app's own shape.
 func WindowShapeOf(lk LookAndFeel, f DecorationFrame, st DecorationState) *Silhouette {
-	if lk == nil || f.Window.Empty() || st.Maximized || st.Tiled != 0 {
+	// Merged for the same reason as maximized: a look whose outline
+	// leaves part of the top edge to the desktop (BeOS's tab) cannot keep
+	// it when the application's bar runs the window's full width — the
+	// bar would be drawn outside the window. DecorationOf drops the other
+	// half, CaptionFits, on the same condition.
+	if lk == nil || f.Window.Empty() || st.Maximized || st.Tiled != 0 || st.Merged {
 		return nil
 	}
 	c, e := decorationFor(lk)

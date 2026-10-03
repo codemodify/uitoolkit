@@ -981,6 +981,34 @@ func TabContentInsetOf(lk LookAndFeel, b paintengine2d.Rect) float32 {
 	return 0
 }
 
+// TabFaceEngine is an optional engine hook: the box a tab's face is
+// actually drawn in, inside the slot the strip gave it.
+//
+// NeXT's tabs — so Window Maker's and OpenStep's — draw the one behind
+// the pane lower than the one in front, with its top edge several pixels
+// down the strip. A strip that places a title and a mark from the slot
+// therefore centres them on the strip rather than on the tab, and their
+// tops cross the tab's own top edge. [TabContentInsetOf] answers for the
+// sides; this answers for all four.
+//
+// The slot itself for a look that draws its tabs to fill one, which is
+// most of them.
+type TabFaceEngine interface {
+	TabFace(l *Classic, b paintengine2d.Rect, st ControlState, selected bool) paintengine2d.Rect
+}
+
+// TabFaceOf is the box a tab's face occupies inside its slot, in any look.
+func TabFaceOf(lk LookAndFeel, b paintengine2d.Rect, st ControlState, selected bool) paintengine2d.Rect {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(TabFaceEngine); ok {
+			if f := e.TabFace(c, b, st, selected); !f.Empty() {
+				return f
+			}
+		}
+	}
+	return b
+}
+
 // TabLabelInkEngine is an optional engine hook: the colour this look sets a
 // tab's word in.
 //

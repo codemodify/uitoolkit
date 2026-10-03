@@ -163,7 +163,9 @@ func (h *HeaderBar) SetWindowControls(l platform.ButtonLayout, framed bool) {
 // app's own items.
 func (h *HeaderBar) DecorationState() style.DecorationState {
 	fh, _ := h.Host().(widget.FrameHost)
-	return frameState(fh, h.custom)
+	st := frameState(fh, h.custom)
+	st.Merged = h.capStyle == style.CaptionMerged
+	return st
 }
 
 // spec is the look's frame in the window's current state.

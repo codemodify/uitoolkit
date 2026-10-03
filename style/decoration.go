@@ -81,6 +81,10 @@ type DecorationState struct {
 	// Custom: the app's own title bar (tabs, a tool bar) fills the caption,
 	// not just the window title.
 	Custom bool
+	// Merged is set while the application's own title bar *is* the
+	// caption ([CaptionMerged]). A look whose caption fits its title
+	// cannot stay fitted then: the bar runs the window's width.
+	Merged bool
 	// NoBorder: the application asked for its chrome to run to the
 	// window's edges ([app.Window.SetBorderless]), so a frame draws its
 	// caption and its shadow but no line down the sides or along the
@@ -346,11 +350,19 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	if st.Caption > 0 {
 		s = captionAsked(lk, s, st.Caption)
 	}
-	if st.Maximized || st.Tiled != 0 {
+	if st.Maximized || st.Tiled != 0 || st.Merged {
 		// A fitted caption is half of a silhouette — the half the window
 		// lays out — so it is dropped exactly where WindowShapeOf drops the
 		// other half. A narrow band on a window that fills its box would
 		// leave a gap along the top edge with nothing behind it.
+		//
+		// And the same when the application's bar is the caption. BeOS's
+		// caption is a tab only as wide as its title and buttons, with
+		// the rest of the top edge left to the desktop; merged, the bar
+		// is laid out across the whole width, so everything right of the
+		// tab fell outside the window and showed its bottom few pixels.
+		// A merged bar is the caption, and a caption the width of a title
+		// it no longer draws is not one.
 		s.CaptionFits = false
 	}
 	if st.Maximized {

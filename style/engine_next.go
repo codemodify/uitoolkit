@@ -1448,6 +1448,18 @@ func nxTabSlant(l *Classic, b paintengine2d.Rect, top float32) float32 {
 	return slant
 }
 
+// TabFace: the tab behind the pane is drawn lower than the one in front,
+// so its face starts further down the slot. A strip that placed a title
+// from the slot centred it on the strip instead of on the tab, and the
+// tops of the words crossed the tab's own top edge.
+func (e nextEngine) TabFace(l *Classic, b paintengine2d.Rect, st ControlState, selected bool) paintengine2d.Rect {
+	top := nxTabTop(l, b, selected)
+	if top <= b.Min.Y || top >= b.Max.Y {
+		return b
+	}
+	return paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, top), Max: b.Max}
+}
+
 // TabContentInset: a mark or a close button on one of these tabs keeps
 // clear of the slope, so it stands on the tab's ink and not on the strip
 // behind it. The selected tab has the taller face and so the wider slope;

@@ -636,7 +636,7 @@ func (t *BrowserTabs) tabState(i int) style.ControlState {
 // labelBox is where tab i's label goes in its slot s: the slot, less the
 // close button's room at its right end when the tab has one.
 func (t *BrowserTabs) labelBox(i int, s paintengine2d.Rect, g stripGeom) paintengine2d.Rect {
-	lb := s
+	lb := t.faceOf(i, s)
 	// The ends the tab's own outline occupies, plus room for the word not
 	// to touch what is beside it. A centred label never reached these, so
 	// they did not matter until the title could be set against one end.
@@ -655,6 +655,17 @@ func (t *BrowserTabs) labelBox(i int, s paintengine2d.Rect, g stripGeom) painten
 	return lb
 }
 
+// faceOf is the box the look actually drew tab i's face in, inside the
+// slot the strip gave it. A pack that draws the tab behind the pane lower
+// than the one in front (NeXT's, Window Maker's, OpenStep's) centres its
+// word and its mark on the face rather than on the strip.
+func (t *BrowserTabs) faceOf(i int, s paintengine2d.Rect) paintengine2d.Rect {
+	if i < 0 || i >= len(t.tabs) {
+		return s
+	}
+	return style.TabFaceOf(t.Look(), s, t.tabState(i), i == t.sel)
+}
+
 // iconRect is tab i's mark, square and centred down the tab, against its
 // leading end. Empty where the tab has no mark or the tab is too narrow
 // to give one room and still show a word.
@@ -662,6 +673,7 @@ func (t *BrowserTabs) iconRect(i int, s paintengine2d.Rect) paintengine2d.Rect {
 	if i < 0 || i >= len(t.tabs) || t.tabs[i].Icon == style.IconNone {
 		return paintengine2d.Rect{}
 	}
+	s = t.faceOf(i, s)
 	side := min(t.dip(16), s.Dy()-t.dip(8))
 	in := style.TabContentInsetOf(t.Look(), s)
 	if side < t.dip(8) || s.Dx() < side+in+t.dip(28) {
