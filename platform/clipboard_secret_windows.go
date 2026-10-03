@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"sync/atomic"
 	"syscall"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -44,7 +45,7 @@ func registerClipboardFormat(name string) uintptr {
 }
 
 func clipboardNativeSetSecret(b []byte) {
-	defer func() { winClipSeq = clipboardSeq() }()
+	defer func() { winClipSeq.Store(clipboardSeq()) }()
 	// UTF-16 without going through a Go string: a string of the
 	// passphrase could not be wiped, and this one can.
 	u := utf16FromBytes(b)
@@ -93,7 +94,10 @@ func setClipboardFlag(format uintptr, payload []byte) {
 // winClipSeq is GetClipboardSequenceNumber as of the last secret copy.
 // Windows bumps it on every change by anyone, so an unchanged number
 // means the clipboard still holds what this process put there.
-var winClipSeq uint32
+//
+// Atomic because the copy is made on the UI goroutine and the clear is made
+// on the timer's, and both touch it.
+var winClipSeq atomic.Uint32
 
 func clipboardSeq() uint32 {
 	r, _, _ := procGetClipboardSeq.Call()
@@ -107,14 +111,32 @@ func clipboardNativeClear() {
 	// copied since. The toolkit's own promise is that a clear "does
 	// nothing if something else has since taken the clipboard"; it was
 	// not keeping it.
-	if seq := clipboardSeq(); winClipSeq != 0 && seq != winClipSeq {
+	if !clipboardStillHoldsOurSecret() {
 		return
 	}
 	withClipboard(func() bool {
 		procEmptyClipboard.Call()
 		return true
 	})
-	winClipSeq = 0
+	winClipSeq.Store(0)
+}
+
+// clipboardStillHoldsOurSecret reports whether the clipboard still holds the
+// secret this process last put there. Windows tells a program nothing when
+// another one copies, so the only way to know is to ask for the sequence
+// number again and compare.
+//
+// A zero noted number means no secret copy is outstanding, in which case
+// there is nothing for this to be wrong about; a zero *current* number is the
+// call failing, and is treated the same way, because refusing to clear would
+// leave a passphrase on the clipboard.
+func clipboardStillHoldsOurSecret() bool {
+	was := winClipSeq.Load()
+	if was == 0 {
+		return true
+	}
+	seq := clipboardSeq()
+	return seq == 0 || seq == was
 }
 
 // utf16FromBytes encodes UTF-8 bytes as a NUL-terminated UTF-16 buffer,

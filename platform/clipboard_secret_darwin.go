@@ -87,10 +87,13 @@ static void uitk_pb_clear(void) {
 */
 import "C"
 
-import "unsafe"
+import (
+	"sync/atomic"
+	"unsafe"
+)
 
 func clipboardNativeSetSecret(b []byte) {
-	defer func() { akPbChange = int64(C.uitk_pb_change_count()) }()
+	defer func() { akPbChange.Store(int64(C.uitk_pb_change_count())) }()
 	if len(b) == 0 {
 		C.uitk_pb_set_secret(nil, 0)
 		return
@@ -99,7 +102,10 @@ func clipboardNativeSetSecret(b []byte) {
 }
 
 // akPbChange is the pasteboard's changeCount as of the last secret copy.
-var akPbChange int64
+//
+// Atomic because the copy is made on the UI goroutine and the clear is made
+// on the timer's, and both touch it.
+var akPbChange atomic.Int64
 
 func clipboardNativeClear() {
 	// Only while the pasteboard is still ours. clearContents takes
@@ -107,11 +113,23 @@ func clipboardNativeClear() {
 	// password manager — that is as likely to be something the person
 	// copied since. The toolkit's own promise is that a clear "does
 	// nothing if something else has since taken the clipboard".
-	if c := int64(C.uitk_pb_change_count()); akPbChange != 0 && c != akPbChange {
+	if !clipboardStillHoldsOurSecret() {
 		return
 	}
 	C.uitk_pb_clear()
-	akPbChange = 0
+	akPbChange.Store(0)
+}
+
+// clipboardStillHoldsOurSecret reports whether the pasteboard still holds the
+// secret this process last put there. The Mac tells a program nothing when
+// another one copies, so the only way to know is to read changeCount again
+// and compare.
+//
+// A zero noted count means no secret copy is outstanding, and there is
+// nothing for this to be wrong about.
+func clipboardStillHoldsOurSecret() bool {
+	was := akPbChange.Load()
+	return was == 0 || int64(C.uitk_pb_change_count()) == was
 }
 
 // clipboardNativeGetSecret reads the general pasteboard as bytes, without

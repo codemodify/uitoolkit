@@ -86,3 +86,14 @@ func clipboardSecretBytesPath() bool {
 	}
 	return x11Live() || os.Getenv("DISPLAY") != ""
 }
+
+// clipboardStillHoldsOurSecret reports whether the clipboard still holds the
+// secret this process last put there.
+//
+// Always, here, because on both protocols the owner is *told*: X11 sends
+// SelectionClear and Wayland cancels the data source when another client
+// takes the selection, and the held copy ends as that word arrives
+// (x11Conn.endLostSecret, uitkWlDataCancelled). There is nothing left for a
+// reader to notice, and no counter to notice it with — neither protocol has
+// one. Windows and macOS, which say nothing, are the ones that count.
+func clipboardStillHoldsOurSecret() bool { return true }

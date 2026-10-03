@@ -17,3 +17,7 @@ func clipboardNativeGetSecret() ([]byte, bool) { return nil, false }
 // read is a failed read: falling back to the string reader would undo the
 // whole point of the bytes path on the try that happens to succeed.
 func clipboardSecretBytesPath() bool { return false }
+
+// clipboardStillHoldsOurSecret: with no native clipboard the secret is only
+// ever in [SecretClip]'s own buffer, which nothing else can take.
+func clipboardStillHoldsOurSecret() bool { return true }

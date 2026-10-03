@@ -259,9 +259,7 @@ func ClipboardClearSecret() {
 //
 // The caller owns the result and wipes it.
 func ClipboardGetSecret() []byte {
-	secretMu.Lock()
-	held := secretHeld
-	secretMu.Unlock()
+	held := heldSecretIfStillOnTheClipboard()
 	if held != nil {
 		held.mu.Lock()
 		if !held.cleared && len(held.data) > 0 {
@@ -298,10 +296,35 @@ func ClipboardGetSecret() []byte {
 // process put there and has not cleared. It is for a lock screen that
 // wants to say so, and for tests.
 func ClipboardHoldsSecret() bool {
-	secretMu.Lock()
-	held := secretHeld
-	secretMu.Unlock()
+	held := heldSecretIfStillOnTheClipboard()
 	return held != nil && !held.Cleared()
+}
+
+// heldSecretIfStillOnTheClipboard is the secret this process has on the
+// clipboard, or nil — and where the clipboard has moved on without this
+// process being told, it ends the held copy on the way out.
+//
+// Two shapes of platform. X11 and Wayland *tell* an owner it has lost a
+// selection (SelectionClear, wl_data_source.cancelled), so the held copy ends
+// as that word arrives and nothing stale is left for a reader to find.
+// Windows and macOS say nothing at all: they count changes instead
+// (GetClipboardSequenceNumber, NSPasteboard.changeCount), and the count has
+// to be *read* for another program's copy to be noticed.
+//
+// Until it was read, a paste into a SecretField took the secret this process
+// copied half a minute ago in preference to the one the user had just copied
+// from somewhere else — so a vault could be made with a passphrase nobody
+// meant to set. The old passphrase also stayed in the heap, with
+// ClipboardHoldsSecret saying it was on the clipboard, until the timeout.
+func heldSecretIfStillOnTheClipboard() *SecretClip {
+	held := heldSecret()
+	if held == nil || clipboardStillHoldsOurSecret() {
+		return held
+	}
+	// Not ours any more, so there is nothing to clear — only a buffer to
+	// wipe and a timer to stop.
+	forgetHeldSecretIf(held)
+	return nil
 }
 
 // forgetHeldSecret drops and wipes the held secret without touching the

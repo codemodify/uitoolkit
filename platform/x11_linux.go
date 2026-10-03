@@ -2530,7 +2530,11 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 		c.dragCancel()
 		return
 	}
+	// Whether the selection being taken is the one a secret was on. Read
+	// before wipeClipLocked below, which is what clears the flag.
+	lostSecret := false
 	if sel == c.atomClipboard {
+		lostSecret = c.clipSecret
 		c.ownClip = false
 	}
 	if sel == c.atomPrimary {
@@ -2540,6 +2544,46 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 		c.keep = false
 		c.wipeClipLocked()
 	}
+	if lostSecret {
+		c.endLostSecret()
+	}
+}
+
+// endLostSecret ends the held secret after another client has taken the
+// CLIPBOARD selection it was on.
+//
+// Until this, nothing ended it on X11: the bytes the owner served were
+// zeroed and the SecretClip was left held, its own copy of the passphrase in
+// it. For the rest of its time — thirty seconds in a password manager — a
+// paste into a SecretField took that copy in preference to the clipboard, so
+// a passphrase copied from another program pasted as the one copied before
+// it, and a vault could be made with a passphrase nobody meant to set.
+// ClipboardHoldsSecret said a secret was held, which by then was true only
+// of this process's heap.
+//
+// Not a clear: what is on the clipboard is somebody else's now, and emptying
+// it would be a clipboard that wipes itself at random. Only the copy here
+// goes.
+//
+// On a goroutine of its own because the application's OnCleared callback runs
+// in it and this is called with x11Mu held — and naming the copy, because by
+// the time it runs the program may have copied something else, which must not
+// be the one that ends. Unless the Wayland selection is still this process's
+// with the same secret on it, which on a Wayland desktop it is: the copy took
+// both, and ending it here would stop the timer that is the only thing left
+// to clear Wayland's. It is the mirror of the check Wayland's cancel makes
+// for X11 (x11StillServesTheSecret).
+func (c *x11Conn) endLostSecret() {
+	lost := heldSecret()
+	if lost == nil {
+		return
+	}
+	go func() {
+		if wlStillServesTheSecret() {
+			return
+		}
+		forgetHeldSecretIf(lost)
+	}()
 }
 
 func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
@@ -3361,6 +3405,47 @@ func (s *x11Surface) propertyChangedLocked(atom C.Atom) []Event {
 	return nil
 }
 
+// atomNamed interns an atom by name, in Go's types rather than cgo's, so
+// that code outside this file — the tests, which are the only place an X
+// property is ever read back — can name one.
+func (c *x11Conn) atomNamed(name string) uint64 {
+	if c == nil || c.dpy == nil {
+		return 0
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return uint64(internAtom(c.dpy, name))
+}
+
+// propAtoms reads one of this window's ATOM[] properties back from the X
+// server.
+//
+// The server is the only place the answer lives. Everything this file sends
+// is fire-and-forget — XChangeProperty has no reply — so a property that was
+// never written, or was written to a window that has since been destroyed and
+// replaced, looks exactly like one that took. That is how a re-created window
+// came to be silently stripped of its type and its state, and reading back is
+// the only way a test can tell the difference.
+func (s *x11Surface) propAtoms(name string) []uint64 {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return nil
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	prop := internAtom(c.dpy, name)
+	if prop == 0 {
+		return nil
+	}
+	var buf [64]C.Atom
+	n := int(C.ui_get_atoms(c.dpy, s.win, prop, &buf[0], C.int(len(buf))))
+	out := make([]uint64, 0, n)
+	for _, a := range buf[:n] {
+		out = append(out, uint64(a))
+	}
+	return out
+}
+
 // readStateLocked re-reads _NET_WM_STATE and reports a change.
 func (s *x11Surface) readStateLocked() []Event {
 	c := s.conn
@@ -3854,8 +3939,18 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	c.surfaces[s.win] = s
 	s.setMotifLocked()
 	// A new window on another visual is a new X window: it takes drops
-	// only once it says so again, and wears its palette and icon only
-	// once it is given them again.
+	// only once it says so again, wears its palette and icon only once it
+	// is given them again, is of no particular kind until it says what
+	// kind it is, and is in no particular state until it says which. A
+	// dialog created as one lost _NET_WM_WINDOW_TYPE the moment the client
+	// frame moved it to an ARGB visual — so a window manager stopped
+	// treating it as a dialog, and the application had no way to know it
+	// had happened.
+	//
+	// Both go on before the map, below, which is the only time a client
+	// may write either of them.
+	s.setWindowRoleLocked(s.role)
+	s.setInitialStateLocked(s.state)
 	s.setXdndAwareLocked()
 	s.selectXI2Locked()
 	s.reapplyDressLocked()

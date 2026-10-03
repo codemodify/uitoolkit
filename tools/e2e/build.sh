@@ -24,5 +24,10 @@ wayland-scanner client-header $wp/unstable/xdg-foreign/xdg-foreign-unstable-v2.x
 wayland-scanner private-code $wp/unstable/xdg-foreign/xdg-foreign-unstable-v2.xml xdg-foreign-unstable-v2-protocol.c
 cc -O1 -o importer importer.c xdg-shell-protocol.c xdg-foreign-unstable-v2-protocol.c $(pkg-config --cflags --libs wayland-client x11)
 echo "built $(pwd)/importer"
+# clipown is "another program copied something": the second X11 client the
+# toolkit's clipboard tests need, which cannot live inside the process under
+# test.
+cc -O1 -o clipown clipown.c $(pkg-config --cflags --libs x11)
+echo "built $(pwd)/clipown"
 (cd fakeportal && go build -o ../fakeportal-bin .)
 echo "built $(pwd)/fakeportal-bin"
