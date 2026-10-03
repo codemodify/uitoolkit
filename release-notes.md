@@ -7,6 +7,144 @@ about the problem it solved.
 
 ---
 
+## 0.23.3
+
+Three applications' reports, worked through: the mail client's, the
+vault's, and the music player's first full review of the toolkit.
+
+Most of this is other people's findings reproduced here and fixed. Two of
+them are things 0.23.2 got wrong, one of which that release's own notes
+stated as a fact about Wayland that is not true.
+
+New: `platform.EventMove` with `Window.OnMove` and `SendsMoveEvents`;
+`style.RegisterSkin` and `RegisterSkinFS`; `style.TabFaceOf`;
+`PopupMenu.AccessibleAction`.
+
+### What was still reaching the heap
+
+- **Wayland answered the password-manager hint with the passphrase.** A
+  secret copy offers `x-kde-passwordManagerHint` so that clipboard
+  managers do not record it, and the convention — KeePassXC writes it,
+  Klipper reads it — is that the hint's *value* is the word "secret". The
+  Wayland data source dropped the type it was asked for and answered
+  every request with the selection. Klipper asked for the hint, found a
+  passphrase where it looks for "secret", took the copy for an ordinary
+  one, and kept it in the history it writes to disk. X11 had answered it
+  correctly all along.
+- **A copied secret outlived the clipboard.** Nothing ended the held
+  secret when the clipboard moved on, so for the rest of its timeout — 30
+  seconds in a password manager — a paste into a `SecretField` served the
+  *old* secret rather than what was actually copied, and the clear at the
+  timeout emptied whatever the clipboard held by then. That last one was
+  the toolkit breaking its own documented promise, on three of four
+  backends; only X11 checked. Windows now checks the clipboard sequence
+  number, macOS the pasteboard's `changeCount`.
+- **A long paste left what it outgrew.** `append` drops the old array
+  unzeroed, so a private key read in pieces left a 4 KiB prefix, then an
+  8 KiB one, then 16, each holding the start of the secret and none of
+  them reachable to wipe. Both readers grow by hand now, and X11 zeroes
+  each INCR piece before `XFree`.
+
+### Caps Lock on Wayland, and a correction
+
+0.23.2's notes said Caps Lock cannot be reported before the first key on
+Wayland — "that is the protocol". **That was wrong.** The compositor
+sends `wl_keyboard.modifiers` directly after `wl_keyboard.enter`, before
+any key, and this backend has folded it into its xkb state since long
+before that release; it simply told nobody. A `wlSurface` answers
+`LockKeys` from it now.
+
+macOS could always be asked — `NSEvent.modifierFlags` is a property of
+the keyboard, not of an event — and did not implement it either. Every
+backend that can be asked is now asked, so a passphrase prompt opened
+with Caps Lock on says so before the first keystroke, which is the one
+case the warning exists for.
+
+### A window says when it moves
+
+Nothing told anyone a window had moved. X11 read the position out of
+every `ConfigureNotify` and threw it away, emitting a resize event only
+when the *size* changed; Windows and macOS were not asked at all. So an
+application keeping other windows beside one — a player with its
+equaliser and playlist snapped to it — could only poll `Desk.Follow` on a
+timer, and at a 70 ms pulse the panels visibly trail the window being
+dragged.
+
+`platform.EventMove` is the missing piece: X11 from the configure it
+already had, Windows from `WM_MOVE`, macOS from `windowDidMove`, and the
+offscreen surface from `SimulateDesktopMove`, which is what makes it
+testable without a desktop. `Window.OnMove` is the callback and `Desk`
+subscribes, so a drag carries the satellites as the desktop reports it.
+
+Wayland sends it for no window — a toplevel has no position in that
+protocol — and `SendsMoveEvents` says so in advance rather than leaving
+an application waiting for an event that cannot come.
+
+### Racks
+
+- **Pane 0 stayed the root.** The package says an application adds its
+  windows main-first and the rest hang from the main one, and a snap
+  bonded pane 0 like any other: moving the main window beside a satellite
+  made it that satellite's *child*, so the next drag of the main window
+  carried nothing. The snap is turned round now, and the path up through
+  the other component with it.
+- **The nearest anchor wins**, which is what `rebond` always said. It
+  took the first that qualified in insertion order, so an anchor six
+  pixels away beat one the pane was already flush with.
+
+### Accessibility
+
+- **A menu row can perform the action it advertises.** Enabled rows
+  advertised a default action and `PopupMenu` implemented no way to run
+  one: a screen reader asking got false and nothing happened, while a
+  click on the same row worked. A structural check of the accessibility
+  tree cannot catch that — the node is there and correctly described, and
+  only the execution path was missing.
+- **An accessible row is where the row is drawn.** The accessibility path
+  rebuilt the geometry rather than sharing it with painting, and got
+  three things wrong: it translated by a view-space origin that is always
+  (0,0), so a framed list reported every row at the component's corner;
+  it used the whole viewport's width, a scroll gutter wider than the row;
+  and it tested offscreen against the whole component, so a row scrolled
+  out of the rows area still counted as visible.
+
+### Smaller
+
+- **`OnInput` fires once per user action.** A `SetValue` from inside the
+  callback inherited the user-edit flag and fired it again — one key
+  press, two callbacks, and a callback that always adjusts the value
+  recursing until it stops moving. All eight controls with the
+  OnInput/OnChange pair had it; it is fixed in the one place they share.
+- **An embedded skin can be registered** (`style.RegisterSkin`,
+  `RegisterSkinFS`) instead of being written to a temporary directory and
+  put on the search path. An application's skins are their own tier,
+  found after the user's and before the toolkit's.
+- **A hidden grid track costs no gap** in the flexible-space solver
+  either; 0.23.2 fixed only the placement, so a grid with a hidden column
+  came up a gap short of its own right edge.
+- **A merged caption is not fitted to a title it does not draw.** Under
+  BeOS, whose caption is a tab as wide as its title, asking for
+  `CaptionMerged` left the fitted caption and the silhouette in place and
+  the application's bar was cut away to an 8-pixel sliver.
+- **A tab's word sits on the face the look drew**, not on the strip:
+  NeXT, Window Maker and OpenStep draw the tab behind the pane lower than
+  the one in front.
+
+### Not in here
+
+Portable logical-window grouping — one declaration that the toolkit
+realises as separate snapped windows or as docked panes depending on what
+the platform allows — was asked for and declined. Which windows an
+application has, and what it does where the platform cannot place them,
+is the application's to decide; `Desk.Places` reports which situation it
+is in and `dock` is the other representation.
+
+The three `EventMove` emit paths are compile-verified and tested through
+the offscreen surface. Whether a real window manager produces one on a
+real drag is not covered by a test here.
+
+---
+
 ## 0.23.2
 
 What two applications asked for after 0.23.1, and what running the suite
