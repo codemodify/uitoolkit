@@ -19,6 +19,8 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#include <ctype.h>
+#include <stdlib.h>
 #include "appkit_darwin.h"
 
 // Implemented in Go (appkit_darwin.go).
@@ -84,15 +86,65 @@ static double flipY(double y) {
 - (void)windowDidEndLiveResize:(NSNotification *)n   { uitkAkEvent(self.sid, UITK_AK_STATE, 0, 0); }
 @end
 
-// pbType is the pasteboard type a MIME string travels as. The two
-// macOS has names of its own for get them; everything else goes on the
-// pasteboard under the MIME string itself, which NSPasteboard allows
-// and which lets a toolkit-specific type cross between two uitoolkit
-// windows without anyone registering anything.
+// uitkMimePrefix marks a pasteboard type that is one of the toolkit's MIME
+// names in disguise.
+static NSString *const uitkMimePrefix = @"com.codemodify.uitoolkit.mime.";
+
+// utiOfMime encodes a MIME string as a *valid UTI*, because macOS will not
+// store anything under an invalid one.
+//
+// This is not decoration. A UTI may hold only letters, digits, '.' and '-',
+// and every MIME type has a '/' in it — so `setData:forType:@"application/
+// x-uitoolkit-tab"` returns NO, logs "not a valid UTI string", and the
+// payload is simply not on the pasteboard. The toolkit's own two private
+// types are exactly that shape, so **tearing a tab or a dock panel out to
+// another window could not work on macOS at all**, while the same drag
+// worked on X11 and Wayland, which take any MIME string. Measured on
+// macOS 15.7.9: a raw MIME is refused, a reverse-DNS name is accepted.
+//
+// The encoding is reversible rather than merely sanitised, so the type can
+// be turned back into the MIME name the toolkit speaks when the pasteboard
+// is enumerated: everything outside [A-Za-z0-9.] becomes '-' and two hex
+// digits, '-' included, which no sanitising scheme could undo.
+static NSString *utiOfMime(NSString *mime) {
+	NSMutableString *out = [NSMutableString stringWithString:uitkMimePrefix];
+	const char *u = [mime UTF8String];
+	for (; u && *u; u++) {
+		unsigned char c = (unsigned char)*u;
+		if (isalnum(c) || c == '.') [out appendFormat:@"%c", c];
+		else [out appendFormat:@"-%02x", c];
+	}
+	return out;
+}
+
+// mimeOfUTI is utiOfMime backwards, or nil for a type that is not ours.
+static NSString *mimeOfUTI(NSString *uti) {
+	if (![uti hasPrefix:uitkMimePrefix]) return nil;
+	NSString *body = [uti substringFromIndex:uitkMimePrefix.length];
+	const char *u = [body UTF8String];
+	NSMutableData *out = [NSMutableData data];
+	for (; u && *u; u++) {
+		if (*u != '-') { [out appendBytes:u length:1]; continue; }
+		if (!u[1] || !u[2]) return nil;
+		char hex[3] = {u[1], u[2], 0};
+		char *end = NULL;
+		long v = strtol(hex, &end, 16);
+		if (end != hex + 2) return nil;
+		unsigned char b = (unsigned char)v;
+		[out appendBytes:&b length:1];
+		u += 2;
+	}
+	return [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
+}
+
+// pbType is the pasteboard type a MIME string travels as. The two macOS has
+// names of its own for get them; everything else travels as the UTI above,
+// which is what lets a toolkit-specific type cross between two uitoolkit
+// windows.
 static NSString *pbType(NSString *mime) {
 	if ([mime hasPrefix:@"text/plain"]) return NSPasteboardTypeString;
 	if ([mime isEqualToString:@"text/uri-list"]) return NSPasteboardTypeFileURL;
-	return mime;
+	return utiOfMime(mime);
 }
 
 // The toolkit's DragAction bitset (copy 1, move 2, link 4) and
@@ -963,13 +1015,43 @@ void uitk_ak_register_drops(void *w) {
 		UitkView *v = uitkView(w);
 		if (!v) return;
 		// Text and file URLs by their own names, and NSPasteboardTypeURL
-		// so a link dragged out of a browser arrives too. Anything else
-		// a uitoolkit window offers travels under its MIME string, and
-		// registering for a type nobody sends costs nothing.
+		// so a link dragged out of a browser arrives too.
+		//
+		// A view is sent drag messages only for the types it has
+		// registered, and the raw MIME strings that used to be listed
+		// here were never on a pasteboard in the first place — macOS
+		// refuses to store anything under a name that is not a valid UTI
+		// (see utiOfMime). The toolkit's own private types are added as
+		// the encoded names they really travel under; an application's
+		// own are added by uitk_ak_register_drag_types when a drag that
+		// carries them starts.
 		[v registerForDraggedTypes:@[
 			NSPasteboardTypeString, NSPasteboardTypeFileURL, NSPasteboardTypeURL,
-			@"text/plain", @"text/plain;charset=utf-8", @"text/uri-list", @"text/html",
+			utiOfMime(@"text/html"),
+			utiOfMime(@"application/x-uitoolkit-tab"),
+			utiOfMime(@"application/x-uitoolkit-panel"),
 		]];
+	}
+}
+
+// uitk_ak_register_drag_types adds one more type this view will be offered,
+// on top of what it already takes.
+//
+// A drag that starts in this process calls it for every type it carries, on
+// every window of the process, because a view hears nothing about a type it
+// has not registered — and a tab torn out of one window is dropped on
+// another, whose view could not have known the type in advance. A drag from
+// *another* process carrying an application's own type still needs that type
+// registered before it arrives, which nothing here can do for it.
+void uitk_ak_register_drag_types(void *w, const char *mime) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v || !mime) return;
+		NSString *t = pbType([NSString stringWithUTF8String:mime]);
+		if ([v.registeredDraggedTypes containsObject:t]) return;
+		NSMutableArray *all = [NSMutableArray arrayWithArray:v.registeredDraggedTypes];
+		[all addObject:t];
+		[v registerForDraggedTypes:all];
 	}
 }
 
@@ -992,12 +1074,11 @@ static char *mimesOf(NSPasteboard *pb, int *n) {
 		[out addObject:@"text/plain"];
 	}
 	for (NSPasteboardType t in pb.types) {
-		// A type that is already a MIME string is one of ours and goes
-		// through untranslated; the rest are Apple's and are covered
+		// One of ours is the encoded MIME name, which comes back as the
+		// name the toolkit speaks; the rest are Apple's and are covered
 		// above or are of no use to the toolkit.
-		if ([t containsString:@"/"] && ![t hasPrefix:@"public."] && ![out containsObject:t]) {
-			[out addObject:t];
-		}
+		NSString *m = mimeOfUTI(t);
+		if (m && ![out containsObject:m]) [out addObject:m];
 	}
 	NSMutableData *buf = [NSMutableData data];
 	for (NSString *m in out) {
@@ -1040,7 +1121,9 @@ void *uitk_ak_drop_data(void *w, const char *mime, int *n) {
 			NSString *s = [pb stringForType:NSPasteboardTypeString];
 			data = [s dataUsingEncoding:NSUTF8StringEncoding];
 		} else {
-			data = [pb dataForType:m];
+			// Through pbType, not the raw MIME: that is the name it was
+			// written under, and asking for the MIME found nothing.
+			data = [pb dataForType:pbType(m)];
 		}
 		if (!data || data.length == 0) return NULL;
 		void *res = malloc(data.length);
@@ -1054,16 +1137,38 @@ void *uitk_ak_drag_new(void) {
 	@autoreleasepool { return (void *)CFBridgingRetain([[NSPasteboardItem alloc] init]); }
 }
 
-void uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n) {
-	if (!item || !mime || !bytes || n <= 0) return;
+// uitk_ak_drag_type_of_mime and uitk_ak_mime_of_drag_type are pbType and its
+// reverse, for Go. The caller frees what it gets; the second answers NULL for
+// a type that is not one of ours.
+//
+// They are the seam the write side and the read side meet at, and the only
+// way to hold the two to each other without a live drag session, which
+// nothing headless can start.
+char *uitk_ak_drag_type_of_mime(const char *mime) {
+	@autoreleasepool {
+		if (!mime) return NULL;
+		return strdup([pbType([NSString stringWithUTF8String:mime]) UTF8String]);
+	}
+}
+
+char *uitk_ak_mime_of_drag_type(const char *t) {
+	@autoreleasepool {
+		if (!t) return NULL;
+		NSString *m = mimeOfUTI([NSString stringWithUTF8String:t]);
+		return m ? strdup([m UTF8String]) : NULL;
+	}
+}
+
+// uitk_ak_drag_add puts one payload on the item, and **reports whether it
+// landed**. It used to return nothing, so a refused write — which is what
+// every custom MIME got — looked exactly like a successful one.
+int uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n) {
+	if (!item || !mime || !bytes || n <= 0) return 0;
 	@autoreleasepool {
 		NSPasteboardItem *it = (__bridge NSPasteboardItem *)item;
 		NSString *m = [NSString stringWithUTF8String:mime];
 		NSData *d = [NSData dataWithBytes:bytes length:(NSUInteger)n];
-		// Under the type macOS knows it by *and* under the MIME name, so
-		// the same item satisfies a Finder drop and a uitoolkit one.
-		[it setData:d forType:pbType(m)];
-		if (![pbType(m) isEqualToString:m]) [it setData:d forType:m];
+		return [it setData:d forType:pbType(m)] ? 1 : 0;
 	}
 }
 

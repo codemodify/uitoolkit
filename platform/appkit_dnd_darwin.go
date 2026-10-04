@@ -100,13 +100,34 @@ func (s *akSurface) StartDrag(p DragPayload) bool {
 			continue
 		}
 		cm := C.CString(mime)
-		C.uitk_ak_drag_add(item, cm, unsafe.Pointer(&b[0]), C.int(len(b)))
+		put := C.uitk_ak_drag_add(item, cm, unsafe.Pointer(&b[0]), C.int(len(b))) != 0
 		C.free(unsafe.Pointer(cm))
-		any = true
+		// Only a payload that actually reached the pasteboard counts: a
+		// drag whose every type was refused is a drag carrying nothing,
+		// and starting it would show the user a gesture that cannot drop.
+		any = any || put
 	}
 	if !any {
 		C.uitk_ak_drag_free(item)
 		return false
+	}
+	// Every window of this process is told it may be offered these types.
+	// A view hears nothing about a type it has not registered, and the
+	// window a tab is dropped on cannot have known the type in advance.
+	akMu.Lock()
+	wins := make([]*akSurface, 0, len(akBySID))
+	for _, o := range akBySID {
+		wins = append(wins, o)
+	}
+	akMu.Unlock()
+	for _, mime := range p.Types {
+		cm := C.CString(mime)
+		for _, o := range wins {
+			if o.win != nil && !o.Closed() {
+				C.uitk_ak_register_drag_types(o.win, cm)
+			}
+		}
+		C.free(unsafe.Pointer(cm))
 	}
 
 	actions := p.Actions
@@ -233,3 +254,48 @@ var (
 	_ DropNegotiator = (*akSurface)(nil)
 	_ DropReceiver   = (*akSurface)(nil)
 )
+
+// dragTypeOfMime is the pasteboard type a MIME travels as, and mimeOfDragType
+// the reverse — empty for a type that is not the toolkit's.
+//
+// A MIME is not a valid UTI (every one has a '/' in it) and macOS stores
+// nothing under an invalid one, so a custom type is carried under an encoded
+// name and turned back when the pasteboard is enumerated. These two are that
+// encoding's only seam, and the only way to hold the write side and the read
+// side to each other without a live drag session.
+func dragTypeOfMime(mime string) string {
+	cm := C.CString(mime)
+	defer C.free(unsafe.Pointer(cm))
+	t := C.uitk_ak_drag_type_of_mime(cm)
+	if t == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(t))
+	return C.GoString(t)
+}
+
+func mimeOfDragType(t string) string {
+	ct := C.CString(t)
+	defer C.free(unsafe.Pointer(ct))
+	m := C.uitk_ak_mime_of_drag_type(ct)
+	if m == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(m))
+	return C.GoString(m)
+}
+
+// newDragItem, addDragPayload and freeDragItem are the pasteboard item a drag
+// carries. addDragPayload reports whether the payload reached it.
+func newDragItem() unsafe.Pointer { return C.uitk_ak_drag_new() }
+
+func freeDragItem(item unsafe.Pointer) { C.uitk_ak_drag_free(item) }
+
+func addDragPayload(item unsafe.Pointer, mime string, b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	cm := C.CString(mime)
+	defer C.free(unsafe.Pointer(cm))
+	return C.uitk_ak_drag_add(item, cm, unsafe.Pointer(&b[0]), C.int(len(b))) != 0
+}

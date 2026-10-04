@@ -299,12 +299,37 @@ window that had not registered would never be asked — and `StartDrag`
 begins a session from the press being handled, the same rule
 `StartMove` keeps and for the same reason.
 
-Types cross as MIME strings. The two macOS has names of its own for,
-text and file URLs, are mapped; everything else goes on the pasteboard
-**under the MIME string itself**, which `NSPasteboard` allows. So a
-toolkit-specific type travels between two uitoolkit windows with
-nothing registered anywhere, while text and files still arrive from
-Finder and from every other application.
+Types cross as MIME strings, but **a MIME string cannot be a pasteboard
+type**, and that is worth stating plainly because this page used to say
+the opposite. A pasteboard type is a UTI, a UTI may hold only letters,
+digits, `.` and `-`, and every MIME type has a `/` in it — so
+`setData:forType:@"application/x-uitoolkit-tab"` returns `NO`, logs
+*"not a valid UTI string"*, and the payload is simply not there. The two
+private types the toolkit ships are exactly that shape, so tearing a tab
+or a dock panel out to another window could not work here at all, while
+the same drag worked on X11 and Wayland, which take any MIME string. It
+went unnoticed because the write reported nothing; it does now, and a
+drag whose every type was refused is refused rather than started.
+
+So: text and file URLs are mapped to the names macOS knows them by, and
+everything else travels under a **reversible encoding** of its MIME name
+into a valid UTI — `com.codemodify.uitoolkit.mime.` followed by the name
+with every character outside `[A-Za-z0-9.]` written as `-` and two hex
+digits. Reversible rather than merely sanitised, because enumerating a
+pasteboard has to turn the type back into the MIME name the toolkit
+speaks; no sanitising scheme could. The write side, the read side and
+the enumeration all go through the same pair, which is the only reason
+they agree.
+
+A view is sent drag messages **only for the types it has registered**, and
+a window cannot know an application's private type when it opens. So a
+drag starting in this process registers the types it carries on every
+window of the process first — which is the tear-off case, where a tab
+leaves one window and is dropped on another. A drag from *another*
+process carrying an application's own type still needs that type
+registered before it arrives, and nothing plumbs `DropTypes` down to
+`registerForDraggedTypes:` yet; text and files are unaffected, since
+those arrive under names macOS knows.
 
 One thing differs from the other two backends and it decides the shape
 of the code: **a dragging pasteboard is only readable while
@@ -397,8 +422,11 @@ bundled faces makes those numbers a property of the toolkit.
 
 ## What has actually been run
 
-On a MacBook running macOS 15.7.9, Apple silicon, at a backing scale of
-2:
+On a MacBook Pro running macOS 15.7.9 — **Intel, an i9-9980HK**, not
+Apple silicon — at a backing scale of 2. The distinction matters and this
+page had it wrong: **darwin/arm64 compiles and has never been run**, here
+or anywhere, because there is no Apple silicon machine to run it on. What
+follows was measured on amd64:
 
 - `cmd/uitk-smoke -exercise`: a window, the four-quadrant present, and
   every frame and geometry capability called and reported.

@@ -182,7 +182,10 @@ void uitk_ak_set_drop_answer(void *win, int action);
 // makes one, _add puts a type on it, _start begins the session from
 // the press being handled and _free releases an unstarted one.
 void *uitk_ak_drag_new(void);
-void uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n);
+int uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n);
+char *uitk_ak_drag_type_of_mime(const char *mime);
+char *uitk_ak_mime_of_drag_type(const char *t);
+void uitk_ak_register_drag_types(void *w, const char *mime);
 int uitk_ak_drag_start(void *win, void *item, const unsigned char *icon, int iw, int ih,
                        double hotX, double hotY, int actions);
 void uitk_ak_drag_free(void *item);
