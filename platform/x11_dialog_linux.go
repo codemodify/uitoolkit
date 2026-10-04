@@ -27,6 +27,14 @@ static void ui_dlg_set_transient(Display* d, Window w, Window parent) {
 	XSetTransientForHint(d, w, parent);
 	XFlush(d);
 }
+
+// ui_dlg_drop_transient removes WM_TRANSIENT_FOR, which is how a window
+// stops belonging to another one. XSetTransientForHint with None would set
+// the property to the None window, which is not the same as not having it.
+static void ui_dlg_drop_transient(Display* d, Window w) {
+	XDeleteProperty(d, w, XA_WM_TRANSIENT_FOR);
+	XFlush(d);
+}
 */
 import "C"
 
@@ -54,14 +62,100 @@ func (s *x11Surface) setWindowRoleLocked(r WindowRole) bool {
 		return false
 	}
 	t := c.atomWinTypeNormal
-	if r == RoleDialog {
+	switch r {
+	case RoleDialog:
 		t = c.atomWinTypeDialog
+	case RoleUtility:
+		t = c.atomWinTypeUtility
 	}
 	if t == 0 {
 		return false
 	}
 	C.ui_dlg_set_type(c.dpy, s.win, c.atomWinType, t)
+	was := s.role
 	s.role = r
+	if s.task.roleChanged(was, r) {
+		s.applySkipTaskbarLocked()
+	}
+	return true
+}
+
+// SetOwner says which window this one belongs to ([OwnedSurface]).
+//
+// WM_TRANSIENT_FOR, which is how X11 has said it since ICCCM: the window
+// manager keeps the two together, places the owned one over its owner rather
+// than cascading it, and minimizes and raises them as one.
+//
+// A window manager reads it when it *maps* the window, which is why
+// [WindowOptions.Owner] exists: an owner given afterwards is an owner the
+// manager may already have placed the window without.
+func (s *x11Surface) SetOwner(owner Surface) bool {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return s.setOwnerLocked(owner)
+}
+
+func (s *x11Surface) setOwnerLocked(owner Surface) bool {
+	c := s.conn
+	if owner == nil {
+		s.owner = nil
+		C.ui_dlg_drop_transient(c.dpy, s.win)
+		return true
+	}
+	o, ok := owner.(*x11Surface)
+	if !ok || o == s || o.win == 0 || o.conn != c {
+		// Another backend's window, this window itself, or a window on
+		// another display: none of them is an owner this one can have.
+		return false
+	}
+	s.owner = o
+	C.ui_dlg_set_transient(c.dpy, s.win, o.win)
+	return true
+}
+
+// SetSkipTaskbar keeps the window out of the desktop's window list and its
+// workspace switcher ([TaskbarSurface]).
+//
+// _NET_WM_STATE_SKIP_TASKBAR and _NET_WM_STATE_SKIP_PAGER. Before the window
+// is mapped they are written as the initial state, which is the only way to
+// open already out of the list rather than to appear in it for a frame;
+// afterwards the state is the window manager's, and a client asks with a
+// message. Writing the property directly on a mapped window is the mistake
+// that makes a state change look like it worked and do nothing.
+func (s *x11Surface) SetSkipTaskbar(skip bool) bool {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if c := s.conn; c.atomSkipTaskbar == 0 || c.atomSkipPager == 0 {
+		return false
+	}
+	// Asked for in its own right, so a later change of role does not undo it.
+	s.task.ask(skip)
+	return s.applySkipTaskbarLocked()
+}
+
+// applySkipTaskbarLocked publishes whatever the policy now says.
+func (s *x11Surface) applySkipTaskbarLocked() bool {
+	c := s.conn
+	if c.atomSkipTaskbar == 0 || c.atomSkipPager == 0 {
+		return false
+	}
+	skip := s.task.skipping()
+	if !s.mapped {
+		// The initial state carries every state the window claims, this one
+		// among them.
+		s.setInitialStateLocked(s.state)
+		return true
+	}
+	// Both in one message: the EWMH lets a client name two states at once,
+	// and a window out of the task bar but still in the pager is in neither
+	// of the two places the caller meant.
+	s.ewmhStateLocked(skip, c.atomSkipTaskbar, c.atomSkipPager)
 	return true
 }
 
@@ -148,6 +242,8 @@ func (s *x11Surface) setInitialStateLocked(st WindowState) {
 		}
 	}
 	add(c.atomAbove, st.KeepAbove)
+	add(c.atomSkipTaskbar, s.task.skipping())
+	add(c.atomSkipPager, s.task.skipping())
 	add(c.atomMaxHorz, st.Maximized)
 	add(c.atomMaxVert, st.Maximized)
 	add(c.atomFullscr, st.Fullscreen)

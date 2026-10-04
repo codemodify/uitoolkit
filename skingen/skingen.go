@@ -162,6 +162,24 @@ type SlotSpec struct {
 	Name string
 	At   [4]int
 	Art  [][2]string // ordered {state, sprite} pairs
+	// StretchX, StretchY, FromRight and FromBottom are the slot rect's
+	// anchors, in the skin format's own vocabulary ([style.SkinShapeRect]).
+	//
+	// Without them a generated layout could only be a *fixed* panel: every
+	// slot pinned to the top left at the size it was drawn. The runtime has
+	// read all four since layouts existed, so a resizable skin — a playlist
+	// whose rows grow and whose buttons stay on its foot — could be written
+	// by hand and not generated, and an application had to reach into the
+	// manifest the generator had just written to add them.
+	//
+	// Under StretchX the rect's third number is a *margin* from the right
+	// edge rather than a width, and under StretchY the fourth is a margin
+	// from the bottom; either may be 0. StretchX and FromRight are
+	// alternatives, as are StretchY and FromBottom — a rect that stretches is
+	// pinned to both edges already — and stating both is an error the skin
+	// reader names.
+	StretchX, StretchY    bool
+	FromRight, FromBottom bool
 }
 
 // PartBinding binds one part.
@@ -213,12 +231,15 @@ type WindowSpec struct {
 	Variants map[string]*WindowSpec
 }
 
-// ShapeRect is one rounded rect of the silhouette the skin declares for the
-// day the toolkit can cut a window to it.
+// ShapeRect is one rounded rect of the silhouette the skin declares.
 type ShapeRect struct {
 	At                 [4]int
 	Radius             [4]int
 	StretchX, StretchY bool
+	// FromRight and FromBottom pin a fixed-size rect to the far edges
+	// instead of the near ones, the other half of what the runtime reads
+	// (see [SlotSpec]): a corner the window keeps as it grows.
+	FromRight, FromBottom bool
 }
 
 // ---- rendering ------------------------------------------------------------
@@ -416,6 +437,7 @@ func Manifest(p *Plan) ([]byte, error) {
 			slots := map[string]any{}
 			for _, sl := range lay.Slots {
 				e := map[string]any{"at": sl.At[:]}
+				putAnchors(e, sl.StretchX, sl.StretchY, sl.FromRight, sl.FromBottom)
 				switch {
 				case len(sl.Art) == 1 && sl.Art[0][0] == "normal":
 					e["art"] = sl.Art[0][1]
@@ -475,6 +497,26 @@ func partsJSON(bs []PartBinding) map[string]any {
 	return parts
 }
 
+// putAnchors writes a rect's anchor flags, which a slot and a silhouette rect
+// spell the same way because the runtime reads them with the same code
+// ([style.SkinShapeRect]). Only the ones that are set: the format's default is
+// a fixed rect pinned to the top left, and writing four falses into every rect
+// would make a manifest nobody reads.
+func putAnchors(e map[string]any, stretchX, stretchY, fromRight, fromBottom bool) {
+	if stretchX {
+		e["stretchX"] = true
+	}
+	if stretchY {
+		e["stretchY"] = true
+	}
+	if fromRight {
+		e["fromRight"] = true
+	}
+	if fromBottom {
+		e["fromBottom"] = true
+	}
+}
+
 // windowJSON is a window block, or one of its variants.
 func windowJSON(ws *WindowSpec) map[string]any {
 	w := map[string]any{}
@@ -503,12 +545,7 @@ func windowJSON(ws *WindowSpec) map[string]any {
 		if r.Radius != [4]int{} {
 			e["radius"] = r.Radius[:]
 		}
-		if r.StretchX {
-			e["stretchX"] = true
-		}
-		if r.StretchY {
-			e["stretchY"] = true
-		}
+		putAnchors(e, r.StretchX, r.StretchY, r.FromRight, r.FromBottom)
 		w["shape"] = append(asSlice(w["shape"]), e)
 	}
 	if len(ws.Parts) > 0 {

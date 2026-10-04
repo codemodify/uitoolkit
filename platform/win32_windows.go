@@ -216,6 +216,16 @@ type winSurface struct {
 	paletteOK     bool
 	// shadedH is the height a rolled-up window is held at, or 0.
 	shadedH int
+	// role is what kind of window this is, owner the window it belongs to
+	// (GWLP_HWNDPARENT), and skipTask whether the *application* asked to be
+	// kept off the task bar rather than its role implying it — so a window
+	// that stops being a utility window is not put back on a task bar it was
+	// deliberately kept off.
+	role  WindowRole
+	owner uintptr
+	// task is the window's place in the task bar and how it came to be asked
+	// for (taskbarPolicy).
+	task taskbarPolicy
 	// prePlacement and preStyle are where the window was, and what it
 	// looked like, before it went fullscreen.
 	prePlacement winPlacement
@@ -611,10 +621,17 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	if s.deco == DecorationsClient {
 		s.applyDecorations()
 	}
+	// The owner before the role, because the role's styles are read with it:
+	// an owned tool window is the pair that keeps a satellite panel off the
+	// task bar and above the window it belongs to.
+	if opts.Owner != nil {
+		s.SetOwner(opts.Owner)
+	}
+	s.task.init(opts)
 	// The role restyles the window, so it happens before it is shown:
 	// a dialog that appears with a minimize box and loses it a frame
 	// later is a flicker the user sees.
-	if opts.Role != RoleNormal {
+	if opts.Role != RoleNormal || s.task.skipping() {
 		s.SetWindowRole(opts.Role)
 	}
 	if opts.Center {

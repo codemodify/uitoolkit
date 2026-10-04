@@ -122,6 +122,18 @@ const (
 	// its own edges, which is exactly the band the toolkit already
 	// draws.
 	FrameSystemResizeBand
+	// FrameOwner: the desktop keeps a window with the one it belongs to
+	// ([OwnedSurface]) — above it, raised and minimized with it, placed over
+	// it rather than cascaded.
+	FrameOwner
+	// FrameSkipTaskbar: the desktop can keep a window out of its window list
+	// and its workspace switcher ([TaskbarSurface]).
+	//
+	// Absent on Wayland, where no protocol lets an ordinary client ask: a
+	// satellite panel there is listed beside the window it belongs to, and
+	// an application that minds says so in its own interface rather than
+	// believing a request took.
+	FrameSkipTaskbar
 )
 
 // Has reports whether every capability in x is present.

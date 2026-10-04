@@ -116,6 +116,7 @@ func (t *TextField) SetText(s string) {
 	if t.Text == s {
 		return
 	}
+	was := t.Text
 	t.Text = s
 	// The caret goes to the end, which is where every toolkit puts it
 	// after a programmatic set — Qt, GTK and every browser — and where
@@ -127,12 +128,7 @@ func (t *TextField) SetText(s string) {
 	t.selA, t.selB = t.caret, t.caret
 	t.ensureCaretVisible()
 	t.Invalidate()
-	if t.OnChange != nil {
-		t.OnChange(s)
-	}
-	if t.user.is() && t.OnInput != nil {
-		t.user.fire(func() { t.OnInput(s) })
-	}
+	notifyChange(&t.user, was, func() string { return t.Text }, t.OnChange, t.OnInput)
 }
 
 // SetSelection sets the caret and the [a,b] rune range (order independent).

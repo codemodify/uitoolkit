@@ -73,6 +73,12 @@ type akSurface struct {
 
 	closed bool
 	torn   bool
+	// role is what kind of window this is and owner the window it belongs to
+	// (-addChildWindow:). There is no task-bar field: the Mac's Dock lists
+	// applications and not windows, so there is no per-window entry to be
+	// left out of, and FrameSkipTaskbar is absent here because of it.
+	role  WindowRole
+	owner *akSurface
 
 	// The frame and geometry seams' state (appkit_frame_darwin.go,
 	// appkit_geometry_darwin.go).
@@ -161,6 +167,9 @@ func newAkSurface(opts WindowOptions) (Surface, error) {
 	}
 	if opts.Center {
 		s.Center()
+	}
+	if opts.Owner != nil {
+		s.SetOwner(opts.Owner)
 	}
 	if opts.KeepAbove {
 		FrameOf(s).SetKeepAbove(true)

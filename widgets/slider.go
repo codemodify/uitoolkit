@@ -111,14 +111,10 @@ func (s *Slider) SetValue(v float32) {
 	if s.Value == v {
 		return
 	}
+	was := s.Value
 	s.Value = v
 	s.Invalidate()
-	if s.OnChange != nil {
-		s.OnChange(v)
-	}
-	if s.user.is() && s.OnInput != nil {
-		s.user.fire(func() { s.OnInput(v) })
-	}
+	notifyChange(&s.user, was, func() float32 { return s.Value }, s.OnChange, s.OnInput)
 }
 
 // Reading is the value as it is said out loud: what Format makes of it, or

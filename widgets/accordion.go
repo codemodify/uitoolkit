@@ -46,6 +46,7 @@ func (e *Expander) SetExpanded(v bool) {
 	if e.Expanded == v {
 		return
 	}
+	was := e.Expanded
 	e.Expanded = v
 	if e.body != nil {
 		if !v {
@@ -55,12 +56,7 @@ func (e *Expander) SetExpanded(v bool) {
 	}
 	e.Invalidate()
 	e.RequestLayout()
-	if e.OnToggle != nil {
-		e.OnToggle(v)
-	}
-	if e.user.is() && e.OnInput != nil {
-		e.user.fire(func() { e.OnInput(v) })
-	}
+	notifyChange(&e.user, was, func() bool { return e.Expanded }, e.OnToggle, e.OnInput)
 }
 
 // toggleByUser opens or closes the section as the user's own doing.

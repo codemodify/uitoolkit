@@ -160,7 +160,7 @@ static void ui_shape_input_all(Display* d, Window w) {
 // compositing manager, where per-pixel alpha is simply ignored and cutting
 // the pixels away is the only way to make a hole. XShape rectangles are
 // device pixels in window coordinates.
-static void ui_shape_rects(Display* d, Window w, int kind, int* rects, int n) {
+static void ui_shape_rects(Display* d, Window w, int kind, int* rects, int n, int banded) {
 	int ev = 0, err = 0;
 	if (!d || !w || !XShapeQueryExtension(d, &ev, &err)) return;
 	XRectangle* r = NULL;
@@ -184,12 +184,45 @@ static void ui_shape_rects(Display* d, Window w, int kind, int* rects, int n) {
 		// rectangles is the documented way to say that.
 		XShapeCombineRectangles(d, w, kk, 0, 0, NULL, 0, ShapeSet, Unsorted);
 	} else {
-		// The rasteriser emits scanline order, which is exactly YXBanded:
-		// saying so lets the server skip sorting hundreds of rectangles.
-		XShapeCombineRectangles(d, w, kk, 0, 0, r, count, ShapeSet, YXBanded);
+		// YXBanded lets the server install hundreds of rectangles without
+		// sorting them, and a rasteriser's own scanlines are in exactly that
+		// order. A silhouette with resize bands appended to it is not: those
+		// go back to the top of the window and overlap it. Declaring
+		// YXBanded for them is a protocol error, and X answers it with
+		// BadMatch and installs *no* shape — so a rounded resizable window
+		// came out square with the default full-window input region. The
+		// caller says which order it has (yxBanded).
+		XShapeCombineRectangles(d, w, kk, 0, 0, r, count, ShapeSet,
+			banded ? YXBanded : Unsorted);
 	}
 	free(r);
 }
+
+// ui_get_window_prop reads a WINDOW-typed property — WM_TRANSIENT_FOR is the
+// one that matters here — and returns None when there is none.
+//
+// Separate from ui_get_atoms because XGetWindowProperty matches the type it is
+// asked for: a request for XA_ATOM against a XA_WINDOW property does not fail,
+// it answers "nothing", which reads exactly like a property that was never
+// written.
+static Window ui_get_window_prop(Display* d, Window w, Atom prop) {
+	Atom type = None;
+	int fmt = 0;
+	unsigned long n = 0, rem = 0;
+	unsigned char* data = NULL;
+	if (!d || !w) return None;
+	if (XGetWindowProperty(d, w, prop, 0, 1, False, XA_WINDOW, &type, &fmt,
+			&n, &rem, &data) != Success || !data) {
+		return None;
+	}
+	Window out = None;
+	if (fmt == 32 && n >= 1) out = ((Window*)data)[0];
+	XFree(data);
+	return out;
+}
+
+// ui_sync waits for the server to have processed everything sent so far.
+static void ui_sync(Display* d) { if (d) XSync(d, False); }
 
 // ui_shape_none drops a shape, giving every pixel of the window back.
 static void ui_shape_none(Display* d, Window w, int kind) {
@@ -1052,10 +1085,22 @@ func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	// it has already placed, and an above state set afterwards costs a
 	// frame in which the window can be covered.
 	if !opts.Popup {
+		// The owner first: a window manager reads WM_TRANSIENT_FOR when it
+		// maps the window, and placing a satellite panel over the window it
+		// belongs to is the one thing it cannot do afterwards.
+		if opts.Owner != nil {
+			s.setOwnerLocked(opts.Owner)
+		}
+		s.task.init(opts)
 		s.setWindowRoleLocked(opts.Role)
 		if opts.KeepAbove {
-			s.setInitialAboveLocked()
+			s.state.KeepAbove = true
 		}
+		// One property for every state the window claims, written while it is
+		// still unmapped: that is the only way to open already above the
+		// others, or already out of the window list, rather than to be put
+		// there a frame later with the window visible in between.
+		s.setInitialStateLocked(s.state)
 	}
 	x11Mu.Unlock()
 	if opts.Center && !opts.Popup {
@@ -1100,16 +1145,23 @@ type x11Conn struct {
 	atomWinType       C.Atom
 	atomWinTypeNormal C.Atom
 	atomWinTypeDialog C.Atom
-	atomAllowed       C.Atom
-	atomActMin        C.Atom
-	atomActMaxH       C.Atom
-	atomActMaxV       C.Atom
-	atomActFull       C.Atom
-	atomSupported     C.Atom
-	atomMoveRes       C.Atom
-	atomMoveWin       C.Atom
-	atomShowMenu      C.Atom
-	atomMotif         C.Atom
+	// atomWinTypeUtility, atomSkipTaskbar and atomSkipPager are the other
+	// half of a satellite panel's policy: what kind of window it is, and
+	// that it is not one the desktop should list beside the window it
+	// belongs to.
+	atomWinTypeUtility C.Atom
+	atomSkipTaskbar    C.Atom
+	atomSkipPager      C.Atom
+	atomAllowed        C.Atom
+	atomActMin         C.Atom
+	atomActMaxH        C.Atom
+	atomActMaxV        C.Atom
+	atomActFull        C.Atom
+	atomSupported      C.Atom
+	atomMoveRes        C.Atom
+	atomMoveWin        C.Atom
+	atomShowMenu       C.Atom
+	atomMotif          C.Atom
 	// supported is the window manager's _NET_SUPPORTED, read once (nil
 	// until then); wmName is its _NET_WM_NAME.
 	supported map[C.Atom]bool
@@ -1310,6 +1362,15 @@ type x11Surface struct {
 	askPos       bool
 	askLX, askLY int
 	askDX, askDY int
+	// owner is the window this one belongs to (WM_TRANSIENT_FOR), skipTask
+	// whether it asks to be left out of the task bar and the pager, and
+	// skipTaskAsked whether the *application* asked for that rather than its
+	// role implying it — so a window that stops being a utility window is not
+	// put back in the list the application deliberately took it out of.
+	owner *x11Surface
+	// task is the window's place in the desktop's window list and how it came
+	// to be asked for (taskbarPolicy).
+	task taskbarPolicy
 	// The last button press: root position, button and time, which
 	// _NET_WM_MOVERESIZE needs; buttons is the set held now.
 	pressRootX, pressRootY int
@@ -1349,6 +1410,44 @@ var x11Errors atomic.Int64
 // and diagnostics).
 func x11ErrorCount() int { return int(x11Errors.Load()) }
 
+// ewmhStateLocked asks the window manager to add or remove up to two
+// _NET_WM_STATE atoms on this window.
+//
+// A client may only *ask*, and only once the window is mapped: from then on the
+// property is the manager's, and writing it directly is the mistake that makes
+// a state change look like it took and do nothing. Before the map the window
+// states its own (setInitialStateLocked).
+//
+// Here rather than beside its callers because the C helper is in this file's
+// preamble, and a cgo symbol belongs to the file that declares it.
+func (s *x11Surface) ewmhStateLocked(add bool, a, b C.Atom) {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 || a == 0 {
+		return
+	}
+	action := C.long(0) // _NET_WM_STATE_REMOVE
+	if add {
+		action = 1 // _NET_WM_STATE_ADD
+	}
+	C.ui_ewmh_state(c.dpy, s.win, action, a, b)
+}
+
+// syncRoundTrip waits for the server to have dealt with everything sent so
+// far, which is what makes a protocol error *arrive*: an error is something
+// the server sends back when it reaches the request, so without a round trip
+// it is still in flight and x11ErrorCount has not seen it yet. Beside that
+// counter, and there for the same reason.
+func (c *x11Conn) syncRoundTrip() {
+	if c == nil || c.dpy == nil {
+		return
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if c.dpy != nil {
+		C.ui_sync(c.dpy)
+	}
+}
+
 //export uitkXError
 func uitkXError(code, request, minor C.int) {
 	n := x11Errors.Add(1)
@@ -1387,6 +1486,9 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomHidden = internAtom(d, "_NET_WM_STATE_HIDDEN")
 	c.atomFocused = internAtom(d, "_NET_WM_STATE_FOCUSED")
 	c.atomAbove = internAtom(d, "_NET_WM_STATE_ABOVE")
+	c.atomWinTypeUtility = internAtom(d, "_NET_WM_WINDOW_TYPE_UTILITY")
+	c.atomSkipTaskbar = internAtom(d, "_NET_WM_STATE_SKIP_TASKBAR")
+	c.atomSkipPager = internAtom(d, "_NET_WM_STATE_SKIP_PAGER")
 	c.atomWinType = internAtom(d, "_NET_WM_WINDOW_TYPE")
 	c.atomWinTypeNormal = internAtom(d, "_NET_WM_WINDOW_TYPE_NORMAL")
 	c.atomWinTypeDialog = internAtom(d, "_NET_WM_WINDOW_TYPE_DIALOG")
@@ -1432,10 +1534,18 @@ func x11OpenLocked() (*x11Conn, error) {
 	return c, nil
 }
 
+// x11Retain is x11Get with a reference held, so the connection cannot be
+// closed while the caller is using it. The caller releases it.
+//
+// It is what the clipboard readers were missing. This process keeps its X
+// connection open only while something is using it or while it owns a
+// selection, and the moment another client takes the clipboard the selection
+// service lets it go — so a paste that had just started had the display
+// closed under it and came back empty.
 func x11Retain() (*x11Conn, error) {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
-	if x11c == nil {
+	if x11c == nil || x11c.dpy == nil {
 		if _, err := x11OpenLocked(); err != nil {
 			return nil, err
 		}
@@ -1459,6 +1569,13 @@ func x11Get() (*x11Conn, error) {
 func (c *x11Conn) release() {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
+	c.releaseLocked()
+}
+
+// releaseLocked is release for a caller that already holds x11Mu — the
+// selection calls, which hold it across the round trip they need a reference
+// for.
+func (c *x11Conn) releaseLocked() {
 	c.refs--
 	if c.refs < 0 {
 		c.refs = 0
@@ -2550,6 +2667,22 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 		c.dragCancel()
 		return
 	}
+	// A clear that arrives while this process still owns the selection is
+	// about an ownership it has already replaced.
+	//
+	// It happens on the ordinary path: the clipboard is given up and taken
+	// again — a copy, a clear, another copy — and the server's clear for the
+	// first ownership is still in the queue when the second is in hand.
+	// Acting on it turned ownClip off while the selection really was ours,
+	// so the next paste asked the server to convert a selection this process
+	// then refused to serve, and read nothing at all. A race, so it showed as
+	// about one paste in ten reading an empty clipboard.
+	//
+	// Asked of the server rather than worked out from the event's timestamp:
+	// the answer cannot be stale, and a clear is rare enough to afford it.
+	if c.dpy != nil && c.helper != 0 && C.ui_owner(c.dpy, sel) == c.helper {
+		return
+	}
 	// Whether the selection being taken is the one a secret was on. Read
 	// before wipeClipLocked below, which is what clears the flag.
 	lostSecret := false
@@ -2740,12 +2873,27 @@ func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) {
 	if c.dpy == nil || c.helper == 0 {
 		return
 	}
+	// A reference for the length of this. The fresh timestamp below is a
+	// round trip and lets x11Mu go while it waits, and the selection service
+	// closes the connection the moment this process owns nothing — which it
+	// does not, for the moment between giving the old selection up and
+	// taking the new one. Without this the display was freed under the call.
+	c.refs++
+	defer c.releaseLocked()
+	// The timestamp first, and before the value is written here: it costs a
+	// round trip, and the drain that comes with it answers the clears still
+	// in flight for the ownership being replaced — one of which would
+	// otherwise find this process owning neither selection and wipe the
+	// value that had just been written.
+	t := c.freshSelectionTimeLocked()
+	if c.dpy == nil || c.helper == 0 {
+		return
+	}
 	c.wipeClipLocked()
 	// A copy of the caller's bytes, so the caller may wipe its own at
 	// once; this one is zeroed by wipeClipLocked.
 	c.clipData = append([]byte(nil), b...)
 	c.clipSecret = secret
-	t := c.selectionTimeLocked()
 	c.ownTime = t
 	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard, t)
 	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
@@ -2773,7 +2921,13 @@ func (c *x11Conn) clearClipboard() {
 	if c.dpy == nil || c.helper == 0 {
 		return
 	}
-	t := c.selectionTimeLocked()
+	// As in setClipboardSelBytes: the round trip below lets the lock go.
+	c.refs++
+	defer c.releaseLocked()
+	t := c.freshSelectionTimeLocked()
+	if c.dpy == nil {
+		return
+	}
 	if c.ownClip {
 		C.ui_set_owner(c.dpy, 0, c.atomClipboard, t)
 		c.ownClip = false
@@ -2841,6 +2995,38 @@ func (c *x11Conn) wipeClipLocked() {
 	}
 	c.clipData = nil
 	c.clipSecret = false
+}
+
+// freshSelectionTimeLocked is a server timestamp from *now*, for taking a
+// selection or giving one up.
+//
+// selectionTimeLocked answers with the last timestamp that happened to
+// arrive, which in a program that is handling no input is any age at all; the
+// server grants a selection only to a request at least as new as the current
+// owner's, so a copy made with an old one can simply be refused.
+//
+// The round trip it costs is the other half of why it is here, and the half
+// that was measured: it drains, so the clears still in flight for the
+// ownership being replaced are answered *before* the new value is written
+// rather than after, where one of them would find this process owning
+// neither selection and wipe what had just been put there. Without it the
+// paste that followed read an empty clipboard about one time in three.
+//
+// A copy can afford a round trip. Nothing else here uses this.
+func (c *x11Conn) freshSelectionTimeLocked() C.Time {
+	if c.dpy == nil || c.helper == 0 {
+		return c.serverTime
+	}
+	was := c.serverTime
+	c.serverTime = 0
+	t := c.selectionTimeLocked()
+	if t == 0 {
+		// The touch did not come back in time. The last time known is
+		// still better than CurrentTime, which an owner may not use.
+		c.serverTime = was
+		return was
+	}
+	return t
 }
 
 // selectionTimeLocked returns a real server timestamp for selection
@@ -2923,6 +3109,19 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 		x11Mu.Unlock()
 		return false, false
 	}
+	// Held for the length of the read, because the wait below lets x11Mu go.
+	//
+	// This process keeps its X connection open only while something is using
+	// it or while it owns a selection, and the moment another client takes
+	// the clipboard the selection service lets it go. Without a reference
+	// here that could happen between the conversion request and its answer:
+	// the display was closed under the read, which then found c.dpy nil and
+	// returned nothing after a single 5 ms wait. A paste read empty, about
+	// one try in ten, just after another program had copied something — and
+	// looked exactly like an empty clipboard. (It is a use-after-free as
+	// well: ui_wait holds the Display across the unlock.)
+	c.refs++
+	defer c.release()
 	// A selection this program owns is answered from what it serves: no
 	// round trip, and no asking the server for something it would ask us
 	// for. Both readers take pasteData afterwards, so the served bytes
@@ -3018,10 +3217,11 @@ func (c *x11Conn) readSelectionString(sel C.Atom, timeout time.Duration) (string
 // so the backend is not left holding a second copy of somebody else's
 // passphrase.
 func x11ClipGetBytes(primary bool) ([]byte, bool) {
-	c, err := x11Get()
+	c, err := x11Retain()
 	if err != nil {
 		return nil, false
 	}
+	defer c.release()
 	sel := c.atomClipboard
 	if primary {
 		sel = c.atomPrimary
@@ -3041,10 +3241,11 @@ func x11ClipGetBytes(primary bool) ([]byte, bool) {
 }
 
 func x11ClipGet(primary bool) (string, bool) {
-	c, err := x11Get()
+	c, err := x11Retain()
 	if err != nil {
 		return "", false
 	}
+	defer c.release()
 	sel := c.atomClipboard
 	if primary {
 		sel = c.atomPrimary
@@ -3111,6 +3312,17 @@ func (s *x11Surface) Raise() bool {
 		return false
 	}
 	x11Mu.Lock()
+	// A window being shown *again* states the states it claims first, and
+	// before the map request, which is when a window manager reads them.
+	//
+	// The EWMH tells a manager to remove _NET_WM_STATE when a window is
+	// withdrawn, and they do. So a satellite panel hidden and shown again came
+	// back in the window list it had asked to be left out of — on the same X
+	// window, with nothing changed on this side, so nothing here noticed and
+	// an application could only watch for it and ask again.
+	if !s.mapped && !s.popup {
+		s.setInitialStateLocked(s.state)
+	}
 	C.ui_raise(s.conn.dpy, s.win)
 	if s.popup {
 		C.ui_focus(s.conn.dpy, s.win)
@@ -3497,6 +3709,23 @@ func (c *x11Conn) atomNamed(name string) uint64 {
 	return uint64(internAtom(c.dpy, name))
 }
 
+// propWindow reads one of this window's WINDOW-typed properties back from the
+// X server — WM_TRANSIENT_FOR, which is how X11 says whose window this is —
+// as the window's id, or 0.
+func (s *x11Surface) propWindow(name string) uint64 {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return 0
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	prop := internAtom(c.dpy, name)
+	if prop == 0 {
+		return 0
+	}
+	return uint64(C.ui_get_window_prop(c.dpy, s.win, prop))
+}
+
 // propAtoms reads one of this window's ATOM[] properties back from the X
 // server.
 //
@@ -3677,6 +3906,13 @@ func (s *x11Surface) capsLocked() FrameCaps {
 		caps |= FramePalette
 	}
 	caps |= FrameIcon
+	// WM_TRANSIENT_FOR is ICCCM, older than the EWMH and honoured by every
+	// window manager there is; the two skip states are the EWMH's and are
+	// asked for by name.
+	caps |= FrameOwner
+	if c.supportsLocked(c.atomSkipTaskbar) && c.supportsLocked(c.atomSkipPager) {
+		caps |= FrameSkipTaskbar
+	}
 	return dropResizeCaps(caps, s.sizing)
 }
 
@@ -4035,6 +4271,7 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	// Both go on before the map, below, which is the only time a client
 	// may write either of them.
 	s.setWindowRoleLocked(s.role)
+	s.setOwnerLocked(ownerOf(s.owner))
 	s.setInitialStateLocked(s.state)
 	s.setXdndAwareLocked()
 	s.selectXI2Locked()
@@ -4051,6 +4288,16 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	x11Mu.Unlock()
 	s.tryBindGPU()
 	x11Mu.Lock()
+}
+
+// ownerOf is a *x11Surface as a Surface, or a nil Surface for a nil one — not
+// a non-nil interface holding a nil pointer, which setOwnerLocked would try to
+// make an owner of.
+func ownerOf(s *x11Surface) Surface {
+	if s == nil {
+		return nil
+	}
+	return s
 }
 
 // applyFrameLocked publishes the frame's geometry: the shadow margin, the
@@ -4109,19 +4356,26 @@ func (s *x11Surface) applyFrameLocked() {
 // unlike Wayland there is no conversion here.
 func (s *x11Surface) applyShapeLocked() {
 	c := s.conn
-	flat := x11FlatRects(s.frame.Shape)
+	// Filtered here rather than on the other side of the call, so that the
+	// list whose order is declared is the list that is sent.
+	shape := nonEmptyRects(s.frame.Shape)
+	flat := x11FlatRects(shape)
+	banded := C.int(0)
+	if yxBanded(shape) {
+		banded = 1
+	}
 	var p *C.int
 	if len(flat) > 0 {
 		p = &flat[0]
 	}
-	C.ui_shape_rects(c.dpy, s.win, 0, p, C.int(len(flat)/4))
+	C.ui_shape_rects(c.dpy, s.win, 0, p, C.int(len(flat)/4), banded)
 	if s.pop != nil && c.composited {
 		// A popup's shadow lies outside its silhouette, in its margin; with
 		// a compositing manager its alpha already cuts the silhouette, and
 		// a bounding shape would cut the shadow away too.
 		C.ui_shape_none(c.dpy, s.win, 1)
 	} else {
-		C.ui_shape_rects(c.dpy, s.win, 1, p, C.int(len(flat)/4))
+		C.ui_shape_rects(c.dpy, s.win, 1, p, C.int(len(flat)/4), banded)
 	}
 	s.shaped = true
 	// The margin is still the shadow band the window manager should ignore
@@ -4241,12 +4495,8 @@ func (s *x11Surface) SetKeepAbove(on bool) bool {
 	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameKeepAbove) {
 		return false
 	}
-	action := C.long(0) // _NET_WM_STATE_REMOVE
-	if on {
-		action = 1 // _NET_WM_STATE_ADD
-	}
 	x11Mu.Lock()
-	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomAbove, 0)
+	s.ewmhStateLocked(on, s.conn.atomAbove, 0)
 	x11Mu.Unlock()
 	return true
 }

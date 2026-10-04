@@ -27,6 +27,9 @@ var (
 	_ SecureInputSurface = (*wlSurface)(nil)
 	_ RoleSurface        = (*wlSurface)(nil)
 	_ ActivateSurface    = (*wlSurface)(nil)
+	// A toplevel has a parent; it has no say in a task bar, so no
+	// TaskbarSurface — see RoleUtility.
+	_ OwnedSurface = (*wlSurface)(nil)
 	// No CenterSurface: a client cannot place a toplevel, and a
 	// compositor told the window is a dialog centres it itself.
 
@@ -44,6 +47,8 @@ var (
 	_ RoleSurface        = (*x11Surface)(nil)
 	_ ActivateSurface    = (*x11Surface)(nil)
 	_ CenterSurface      = (*x11Surface)(nil)
+	_ OwnedSurface       = (*x11Surface)(nil)
+	_ TaskbarSurface     = (*x11Surface)(nil)
 	// X11 can be asked for the lock keys at any moment; Wayland learns
 	// them from the compositor and has nothing to query.
 	_ LockKeysSurface = (*x11Surface)(nil)

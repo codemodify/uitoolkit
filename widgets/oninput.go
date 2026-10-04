@@ -53,3 +53,35 @@ func (u *userEdit) fire(run func()) {
 	run()
 	u.on = was
 }
+
+// notifyChange runs a control's two callbacks for a change it has just made,
+// in the order every control here uses: OnChange first, then OnInput when the
+// change was the user's. was is the value before the change and now reads the
+// value the control holds.
+//
+// Both callbacks run with the mark **down**. Whatever a handler does to the
+// control from inside one of them is the application's doing, not the user's.
+// OnChange used to run with the mark up, so an application normalising a
+// value from inside it — reading 51 and writing 60 — had its own write counted
+// as input: one key press produced two OnInput calls, and the second carried
+// 51, a value the control no longer held.
+//
+// OnInput carries what the control holds *after* OnChange has had its say,
+// because that is what the control now shows and what the user will read back.
+// And nothing at all where a handler put the value back as it was: there is no
+// input to report when the control ends the edit where it began.
+func notifyChange[T comparable](u *userEdit, was T, now func() T, onChange, onInput func(T)) {
+	mine := u.is()
+	if onChange != nil {
+		v := now()
+		u.fire(func() { onChange(v) })
+	}
+	if !mine || onInput == nil {
+		return
+	}
+	cur := now()
+	if cur == was {
+		return
+	}
+	u.fire(func() { onInput(cur) })
+}

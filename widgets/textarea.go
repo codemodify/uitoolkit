@@ -92,6 +92,7 @@ func (t *TextArea) SetText(s string) {
 	if t.Text == s {
 		return
 	}
+	was := t.Text
 	t.Text = s
 	n := runeCount(s)
 	if t.caret > n {
@@ -103,12 +104,7 @@ func (t *TextArea) SetText(s string) {
 	t.relayout()
 	t.ensureCaretVisible()
 	t.Invalidate()
-	if t.OnChange != nil {
-		t.OnChange(s)
-	}
-	if t.user.is() && t.OnInput != nil {
-		t.user.fire(func() { t.OnInput(s) })
-	}
+	notifyChange(&t.user, was, func() string { return t.Text }, t.OnChange, t.OnInput)
 }
 
 // SetSelection sets the caret and the [a,b] rune range (order independent).

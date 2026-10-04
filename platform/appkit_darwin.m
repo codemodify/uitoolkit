@@ -1188,6 +1188,17 @@ void uitk_ak_ime_simulate(void *w, int what, const char *text, int caret) {
 // NSFloatingWindowLevel keeps it above the application's ordinary
 // windows without putting it above every other application's, which is
 // what a prompt wants and what NSStatusWindowLevel would get wrong.
+// A utility window (role 2) is the same idea once more: what makes an
+// NSPanel a utility panel is a narrower title bar, the floating level, and
+// that it does not become the application's main window — and a plain
+// NSWindow can be given the last two. The narrower bar belongs to NSPanel
+// alone and is given up, which is the one visible difference and a far
+// smaller one than rebuilding the window would cost.
+//
+// Nothing is done about a task bar: the Mac has none. The Dock lists
+// *applications*, not windows, so there is no per-window entry for a
+// satellite panel to be left out of, which is why uitk_ak_skip_taskbar does
+// not exist and FrameSkipTaskbar is absent here.
 void uitk_ak_set_role(void *w, int dialog) {
 	@autoreleasepool {
 		NSWindow *win = (__bridge NSWindow *)w;
@@ -1196,10 +1207,36 @@ void uitk_ak_set_role(void *w, int dialog) {
 			win.styleMask &= ~NSWindowStyleMaskMiniaturizable;
 			win.level = NSFloatingWindowLevel;
 			win.collectionBehavior |= NSWindowCollectionBehaviorMoveToActiveSpace;
+			if (dialog == 2) {
+				// A palette shows over a full-screen primary window rather
+				// than sending it out of full screen, which is what every
+				// Mac inspector and tool window does.
+				win.collectionBehavior |= NSWindowCollectionBehaviorFullScreenAuxiliary;
+			}
 		} else {
 			win.styleMask |= NSWindowStyleMaskMiniaturizable;
 			win.level = NSNormalWindowLevel;
+			win.collectionBehavior &= ~NSWindowCollectionBehaviorFullScreenAuxiliary;
 		}
+	}
+}
+
+// uitk_ak_set_owner says which window this one belongs to.
+//
+// addChildWindow:ordered: is AppKit's own version of an owned window: the
+// child is kept above its parent, moves with it, and is ordered out with it.
+// It is not a view-hierarchy parent and does not clip the child, which is the
+// confusion the name invites.
+//
+// A nil owner removes the window from whichever parent it had.
+void uitk_ak_set_owner(void *w, void *owner) {
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		if (!win) return;
+		NSWindow *parent = win.parentWindow;
+		if (parent) [parent removeChildWindow:win];
+		NSWindow *own = (__bridge NSWindow *)owner;
+		if (own && own != win) [own addChildWindow:win ordered:NSWindowAbove];
 	}
 }
 

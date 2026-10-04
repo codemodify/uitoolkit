@@ -76,6 +76,9 @@ func (s *winSurface) FrameCaps() FrameCaps {
 	c := FrameMove | FrameResize | FrameMenu |
 		FrameMinimize | FrameMaximize | FrameFullscreen |
 		FrameKeepAbove | FrameLower | FrameIcon | FrameClientFrame |
+		// GWLP_HWNDPARENT and WS_EX_TOOLWINDOW are core Win32, as old as
+		// the window manager itself: nothing to probe for.
+		FrameOwner | FrameSkipTaskbar |
 		// FrameShade: a window can be rolled up to its title bar here.
 		// SetWindowPos is not clamped by the minimum tracking size a
 		// window states — that governs a resize the user drags, not one
@@ -565,6 +568,9 @@ func (s *winSurface) SizeLimits() SizeLimits { return s.limits }
 var (
 	_ WindowFrame    = (*winSurface)(nil)
 	_ WindowGeometry = (*winSurface)(nil)
+	_ RoleSurface    = (*winSurface)(nil)
+	_ OwnedSurface   = (*winSurface)(nil)
+	_ TaskbarSurface = (*winSurface)(nil)
 )
 
 // winPlacement is WINDOWPLACEMENT and winMonitorInfo is MONITORINFO:

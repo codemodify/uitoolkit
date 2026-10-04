@@ -95,7 +95,7 @@ func (w *Window) Activate() bool {
 }
 
 // SetWindowRole tells the desktop what kind of window this is —
-// ordinary, or a dialog ([platform.WindowRole]).
+// ordinary, a dialog, or a satellite panel ([platform.WindowRole]).
 //
 // [platform.WindowOptions.Role] is the better place to say it, because a
 // window manager reads the type when it takes the window over: a role
@@ -110,6 +110,65 @@ func (w *Window) SetWindowRole(r platform.WindowRole) bool {
 		return false
 	}
 	return s.SetWindowRole(r)
+}
+
+// SetOwner says which window this one belongs to: a satellite panel's primary
+// window, a dialog's parent ([platform.OwnedSurface]). A nil owner takes the
+// relationship away. It reports whether the desktop will keep the two
+// together.
+//
+// A role says what *kind* of window this is and an owner says whose, and a
+// satellite panel needs both: the role is what keeps it off the task bar, the
+// owner is what keeps it above the window it belongs to, raised and minimized
+// with it, and placed over it rather than cascaded.
+//
+// [platform.WindowOptions.Owner] is the better place to say it where it can
+// be: X11's WM_TRANSIENT_FOR and a window manager's placement are both read
+// when the window is mapped, so an owner given afterwards is an owner the
+// manager may already have placed the window without.
+//
+// False means the desktop has no such notion —
+// [platform.FrameSkipTaskbar] and [platform.FrameOwner] are what to ask
+// beforehand — and the window is simply a window of its own.
+func (w *Window) SetOwner(owner *Window) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	s, ok := w.surf.(platform.OwnedSurface)
+	if !ok {
+		return false
+	}
+	if owner == nil {
+		return s.SetOwner(nil)
+	}
+	if owner == w || owner.Closed() {
+		return false
+	}
+	return s.SetOwner(owner.surf)
+}
+
+// SetSkipTaskbar keeps the window out of the desktop's window list and its
+// workspace switcher, and reports whether the desktop can
+// ([platform.TaskbarSurface]).
+//
+// [platform.WindowRole] RoleUtility asks for this by its nature; this is for
+// the window that wants it on its own — a splash screen, a dock, a
+// notification of the application's own — and for the one that wants it back.
+//
+// **It cannot be done on Wayland**, where no protocol lets an ordinary client
+// ask: false there, and an application that minds should say so in its own
+// interface rather than leave the user wondering. Ask
+// [platform.FrameSkipTaskbar] of [Window.FrameCaps] to find out without
+// changing anything.
+func (w *Window) SetSkipTaskbar(skip bool) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	s, ok := w.surf.(platform.TaskbarSurface)
+	if !ok {
+		return false
+	}
+	return s.SetSkipTaskbar(skip)
 }
 
 // Center puts the window in the middle of the work area of the monitor

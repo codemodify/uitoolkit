@@ -36,14 +36,10 @@ func (s *Switch) SetOn(v bool) {
 	if s.On == v {
 		return
 	}
+	was := s.On
 	s.On = v
 	s.Invalidate()
-	if s.OnChange != nil {
-		s.OnChange(v)
-	}
-	if s.user.is() && s.OnInput != nil {
-		s.user.fire(func() { s.OnInput(v) })
-	}
+	notifyChange(&s.user, was, func() bool { return s.On }, s.OnChange, s.OnInput)
 }
 
 func (s *Switch) Measure(c layout.Constraints) paintengine2d.Point {

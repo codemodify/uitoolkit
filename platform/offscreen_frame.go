@@ -86,10 +86,20 @@ type offscreenFrame struct {
 	// caps, a hand's width up, is the frame capability set.
 	capsLock, numLock bool
 	role              WindowRole
-	centered          bool
-	centerings        int
-	wantAbove         bool
-	activated         int
+	// owner is the window this one belongs to and skipTask whether it asked
+	// to be left out of the task bar, both recorded so a test can assert
+	// what a satellite panel asked for. noOwner and noSkipTask take the two
+	// capabilities away, for the test that wants the *absence* of them —
+	// which is Wayland's answer about the task bar.
+	owner Surface
+	// task is the window's place in the simulated window list and how it came
+	// to be asked for, the same policy the real backends follow.
+	task                taskbarPolicy
+	noOwner, noSkipTask bool
+	centered            bool
+	centerings          int
+	wantAbove           bool
+	activated           int
 	// input method (surface device pixels), imeOn whether it is enabled.
 	imeRect [4]int
 	imeOn   bool
@@ -165,6 +175,12 @@ func (o *Offscreen) FrameCaps() FrameCaps {
 	}
 	if o.frame.sysBand {
 		c |= FrameSystemResizeBand
+	}
+	if !o.frame.noOwner {
+		c |= FrameOwner
+	}
+	if !o.frame.noSkipTask {
+		c |= FrameSkipTaskbar
 	}
 	return dropResizeCaps(c, o.sizing)
 }
@@ -574,8 +590,64 @@ func (o *Offscreen) SetWindowRole(r WindowRole) bool {
 	if o == nil {
 		return false
 	}
+	was := o.frame.role
 	o.frame.role = r
+	o.frame.task.roleChanged(was, r)
 	return true
+}
+
+// SetOwner records which window this one belongs to ([OwnedSurface]), and
+// refuses the two owners no backend accepts: this window itself, and one of
+// another kind.
+func (o *Offscreen) SetOwner(owner Surface) bool {
+	if o == nil || !o.FrameCaps().Has(FrameOwner) {
+		return false
+	}
+	if owner == nil {
+		o.frame.owner = nil
+		return true
+	}
+	if ow, ok := owner.(*Offscreen); !ok || ow == o {
+		return false
+	}
+	o.frame.owner = owner
+	return true
+}
+
+// SetSkipTaskbar records the request ([TaskbarSurface]).
+func (o *Offscreen) SetSkipTaskbar(skip bool) bool {
+	if o == nil || !o.FrameCaps().Has(FrameSkipTaskbar) {
+		return false
+	}
+	o.frame.task.ask(skip)
+	return true
+}
+
+// Owner and SkipsTaskbar are what the app asked for.
+func (o *Offscreen) Owner() Surface {
+	if o == nil {
+		return nil
+	}
+	return o.frame.owner
+}
+
+func (o *Offscreen) SkipsTaskbar() bool { return o != nil && o.frame.task.skipping() }
+
+// SimulateOwner and SimulateSkipTaskbar switch whether the simulated desktop
+// can keep a window with the one it belongs to and out of the task bar. Both
+// are on by default — the simulated desktop is a desktop with no protocol to
+// be short of — and a test that wants the absence of one turns it off. The
+// task bar is the one that matters: Wayland has no way for a client to ask.
+func (o *Offscreen) SimulateOwner(can bool) {
+	if o != nil {
+		o.frame.noOwner = !can
+	}
+}
+
+func (o *Offscreen) SimulateSkipTaskbar(can bool) {
+	if o != nil {
+		o.frame.noSkipTask = !can
+	}
 }
 
 // Center and Activate record the request: offscreen has no desktop to be
@@ -634,6 +706,8 @@ var (
 	_ RoleSurface     = (*Offscreen)(nil)
 	_ CenterSurface   = (*Offscreen)(nil)
 	_ ActivateSurface = (*Offscreen)(nil)
+	_ OwnedSurface    = (*Offscreen)(nil)
+	_ TaskbarSurface  = (*Offscreen)(nil)
 )
 
 // SetLockKeys simulates the keyboard's lock state, so a test can open a

@@ -21,4 +21,7 @@ var (
 	_ RoleSurface           = (*akSurface)(nil)
 	_ ActivateSurface       = (*akSurface)(nil)
 	_ CenterSurface         = (*akSurface)(nil)
+	// AppKit owns windows with -addChildWindow:. There is no per-window
+	// Dock entry, so no TaskbarSurface — see RoleUtility.
+	_ OwnedSurface = (*akSurface)(nil)
 )

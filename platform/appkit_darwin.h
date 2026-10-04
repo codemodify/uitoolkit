@@ -246,5 +246,6 @@ void uitk_ak_post_mouse(void *win, int kind, double x, double y,
 
 #endif
 void uitk_ak_set_role(void *w, int dialog);
+void uitk_ak_set_owner(void *w, void *owner);
 void uitk_ak_center(void *w);
 int uitk_ak_activate(void *w);

@@ -1230,6 +1230,9 @@ func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	// a compositor told this is a dialog centres it itself.
 	if opts.Role != RoleNormal && !opts.Popup {
 		s.SetWindowRole(opts.Role)
+		if opts.Owner != nil {
+			s.SetOwner(opts.Owner)
+		}
 	}
 	C.ui_wl_roundtrip(c.dpy)
 	if !s.configured {
@@ -1475,14 +1478,16 @@ type wlSurface struct {
 	// dialog is the xdg_dialog_v1 while this toplevel is a dialog.
 	dialog *C.struct_xdg_dialog_v1
 	role   WindowRole
-	soft   softDevice // software devices of the buffers (no GPU)
-	id     int
-	conn   *wlConn
-	surf   *C.struct_wl_surface
-	xdg    *C.struct_xdg_surface
-	top    *C.struct_xdg_toplevel
-	title  string
-	appID  string
+	// owner is the toplevel this one belongs to (xdg_toplevel.set_parent).
+	owner *wlSurface
+	soft  softDevice // software devices of the buffers (no GPU)
+	id    int
+	conn  *wlConn
+	surf  *C.struct_wl_surface
+	xdg   *C.struct_xdg_surface
+	top   *C.struct_xdg_toplevel
+	title string
+	appID string
 	// sizeOpts are the options the window's limits are computed from (its
 	// minimum already defaulted), sizing its resize policy and limits what
 	// xdg_toplevel was last told (platform.WindowGeometry).
@@ -5026,6 +5031,10 @@ func (s *wlSurface) FrameCaps() FrameCaps {
 	if s.iconSupported() {
 		c |= FrameIcon
 	}
+	// A toplevel's parent is core xdg-shell. Its place in a task bar is not
+	// anything a client may ask about: no FrameSkipTaskbar here, and an
+	// application that minds can say so rather than believe a request took.
+	c |= FrameOwner
 	return dropResizeCaps(c, s.sizing)
 }
 

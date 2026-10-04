@@ -89,6 +89,7 @@ func (n *NumberField) SetValue(v float64) {
 	if n.Value == v && n.field != nil && n.field.Text == n.format(v) {
 		return
 	}
+	was := n.Value
 	n.Value = v
 	n.syncing = true
 	if n.field != nil {
@@ -96,12 +97,7 @@ func (n *NumberField) SetValue(v float64) {
 	}
 	n.syncing = false
 	n.Invalidate()
-	if n.OnChange != nil {
-		n.OnChange(v)
-	}
-	if n.user.is() && n.OnInput != nil {
-		n.user.fire(func() { n.OnInput(v) })
-	}
+	notifyChange(&n.user, was, func() float64 { return n.Value }, n.OnChange, n.OnInput)
 }
 
 func (n *NumberField) Measure(c layout.Constraints) paintengine2d.Point {

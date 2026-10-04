@@ -35,6 +35,10 @@ func (s *akSurface) FrameCaps() FrameCaps {
 	}
 	c := FrameMove | FrameMinimize | FrameMaximize | FrameFullscreen |
 		FrameKeepAbove | FrameLower | FrameIcon | FrameClientFrame |
+		// -addChildWindow: is core AppKit. No FrameSkipTaskbar: the Dock
+		// lists applications, not windows, so there is no per-window entry
+		// for a satellite panel to be left out of.
+		FrameOwner |
 		FrameSystemShadow | FrameSystemResizeBand
 	// Withheld, and each for its own reason:
 	//

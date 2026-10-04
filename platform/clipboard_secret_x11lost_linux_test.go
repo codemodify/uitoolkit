@@ -36,6 +36,7 @@ func clipOwner(t *testing.T, text string) {
 		t.Skip("tools/e2e/clipown is not built (tools/e2e/build.sh)")
 	}
 	cmd := exec.Command(bin, text, "20")
+	cmd.Stderr = os.Stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

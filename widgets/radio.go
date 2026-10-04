@@ -40,14 +40,10 @@ func (r *RadioButton) SetSelected(v bool) {
 	if r.Selected == v {
 		return
 	}
+	was := r.Selected
 	r.Selected = v
 	r.Invalidate()
-	if r.OnChange != nil {
-		r.OnChange(v)
-	}
-	if r.user.is() && r.OnInput != nil {
-		r.user.fire(func() { r.OnInput(v) })
-	}
+	notifyChange(&r.user, was, func() bool { return r.Selected }, r.OnChange, r.OnInput)
 }
 
 func (r *RadioButton) Measure(c layout.Constraints) paintengine2d.Point {

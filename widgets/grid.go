@@ -473,14 +473,26 @@ func (g *Grid) MinWidth() float32 {
 	return w
 }
 
-// spanLen is the length of count tracks from first, gaps included.
+// spanLen is the length of count tracks from first, with the gaps between
+// them.
+//
+// Only the gaps between tracks that *have* room, which is the rule the
+// placement above uses: a track nothing visible is in takes no width and no
+// gap either, so a hidden column leaves neither behind. This added one gap per
+// boundary regardless, so a child spanning a hidden track reached a gap past
+// the grid's own right edge — 408 in a 400-pixel grid with one of three
+// columns hidden, while the child beside it ended correctly at 400.
 func spanLen(sizes []float32, first, count int, gap float32) float32 {
 	var l float32
+	had := 0
 	for i := first; i < first+count && i < len(sizes); i++ {
 		l += sizes[i]
+		if sizes[i] > 0 {
+			had++
+		}
 	}
-	if count > 1 {
-		l += gap * float32(count-1)
+	if had > 1 {
+		l += gap * float32(had-1)
 	}
 	return l
 }

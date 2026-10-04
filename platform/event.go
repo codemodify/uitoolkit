@@ -402,9 +402,24 @@ type WindowOptions struct {
 	// Ask [ScreenPlacementAvailable] before relying on it.
 	Place Placement
 	// Role is what kind of window this is, for the desktop: ordinary (the
-	// zero value) or a dialog. See [WindowRole]; it can be changed
-	// afterwards through [RoleSurface].
+	// zero value), a dialog, or a satellite panel. See [WindowRole]; it can
+	// be changed afterwards through [RoleSurface].
 	Role WindowRole
+	// Owner is the window this one belongs to ([OwnedSurface]): a satellite
+	// panel's primary window, a dialog's parent. The desktop keeps the two
+	// together, which is the half a role cannot say — a role says what kind
+	// of window this is, not whose.
+	//
+	// Set it here rather than afterwards wherever it can be: X11's
+	// WM_TRANSIENT_FOR and a window manager's placement are both read when
+	// the window is *mapped*, so an owner given a frame later is an owner a
+	// manager may already have placed the window without.
+	Owner Surface
+	// SkipTaskbar keeps the window out of the desktop's window list and its
+	// workspace switcher ([TaskbarSurface]). [RoleUtility] asks for this by
+	// its nature; this is for a window that wants it without the rest of the
+	// role, and for one that wants it back.
+	SkipTaskbar bool
 	// Center opens the window in the middle of the monitor it lands on,
 	// rather than wherever the desktop would have cascaded it. It is for
 	// a prompt: a passphrase dialog that opens in a corner is one the

@@ -36,14 +36,10 @@ func (c *Checkbox) SetChecked(v bool) {
 	if c.Checked == v {
 		return
 	}
+	was := c.Checked
 	c.Checked = v
 	c.Invalidate()
-	if c.OnChange != nil {
-		c.OnChange(v)
-	}
-	if c.user.is() && c.OnInput != nil {
-		c.user.fire(func() { c.OnInput(v) })
-	}
+	notifyChange(&c.user, was, func() bool { return c.Checked }, c.OnChange, c.OnInput)
 }
 
 func (c *Checkbox) Measure(cons layout.Constraints) paintengine2d.Point {
