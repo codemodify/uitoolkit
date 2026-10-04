@@ -35,6 +35,29 @@ func (w *Window) LockKeys() (caps, num bool) {
 	return w.lockCaps, w.lockNum
 }
 
+// refreshLockKeys asks the backend what the locks are now and notes the
+// answer, for the backend that can be asked.
+//
+// Only that one. X11 and Win32 query the keyboard, so their answer is the
+// state at this instant and may be believed. Wayland has nothing to query —
+// a client knows only what the compositor last told it — and macOS learns
+// the modifiers from the next event of any kind; both leave
+// [platform.LockKeysSurface] out and say what they know by pushing
+// [platform.EventLockKeys] instead, which is the half a client *can* be sure
+// of. Asking a backend that can only repeat its last answer would turn
+// "nobody has said yet" into "every lock is off".
+func (w *Window) refreshLockKeys() {
+	if w == nil || w.Closed() {
+		return
+	}
+	s, ok := w.surf.(platform.LockKeysSurface)
+	if !ok {
+		return
+	}
+	caps, num := s.LockKeys()
+	w.noteLockState(caps, num)
+}
+
 // OnLockKeys is called when Caps Lock or Num Lock changes, whether or
 // not the key reached a widget — pressing Caps Lock is not a key any
 // field wants, and it is exactly the key a prompt has to hear.

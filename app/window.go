@@ -1177,6 +1177,17 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.setActive(true)
 			w.app.refreshTitleBarPrefs()
 		}
+		// The lock keys again, from a backend that can be asked.
+		//
+		// They are the user's keyboard and not this window's: Caps Lock
+		// turned on while another program had the focus is on when the
+		// focus comes back here, and nothing said so — a prompt went on
+		// showing what it knew when it last saw a key, which could be an
+		// hour and another program ago. The focus-in event's own modifiers
+		// are not the answer and are not read: a focus-in carries none on
+		// most backends, and reading an empty set as "every lock is off"
+		// is how this was got wrong before.
+		w.refreshLockKeys()
 		// Toolkit status menus arm FocusOut-dismiss after a short delay
 		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()
