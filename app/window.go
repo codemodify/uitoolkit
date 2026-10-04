@@ -340,7 +340,25 @@ func (w *Window) SetSize(width, height int) {
 	if w == nil || w.Closed() || width < 1 || height < 1 {
 		return
 	}
+	if gw, gh := w.Size(); w.laid && gw == width && gh == height {
+		// Already that size, and the layout is current: nothing to ask the
+		// window system for and nothing to do again. An application
+		// restoring a saved geometry on its clock asks for the size it has
+		// on every tick.
+		return
+	}
 	_ = w.surf.Resize(width, height)
+	// And lay out again, because an *exact* acknowledgement is silent.
+	//
+	// X11's Resize sizes the backing image at once and then asks the server;
+	// the ConfigureNotify that comes back is turned into an EventResize only
+	// where the native size differs from that image, so a window manager that
+	// granted the request precisely produced no event at all. The cached
+	// geometry stayed, and with it Size, PixelSize, WindowRect and every hit
+	// test: a window asked for 700x450 went on reporting 520x340, and an
+	// application had to call RequestLayout itself to get the truth. A resize
+	// that was refused costs one layout that finds nothing changed.
+	w.RequestLayout()
 }
 
 // WindowRect is the visible window inside the surface, in surface device

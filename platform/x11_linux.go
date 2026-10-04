@@ -1294,6 +1294,22 @@ type x11Surface struct {
 	// of an interactive move.
 	posX, posY        int
 	posKnown, posRoot bool
+	// askPos, askLX, askLY are the logical position the *client* last asked
+	// for through Move, and askDX, askDY the root device position that was
+	// sent for it.
+	//
+	// Kept because the two halves of the conversion use the frame's margin
+	// and the margin arrives later than the request. Move subtracts it and
+	// Position adds it, so a position asked for before the first layout —
+	// where the margin is still zero, the title bar being set after the
+	// window is made — moved the visible window by the whole margin once
+	// layout published one: 24 logical pixels across and 12 down under
+	// Breeze at 1.75. The request is re-sent with the margin it was meant
+	// to be read with, and forgotten the moment anything else moves the
+	// window, so it can never fight the user or the window manager.
+	askPos       bool
+	askLX, askLY int
+	askDX, askDY int
 	// The last button press: root position, button and time, which
 	// _NET_WM_MOVERESIZE needs; buttons is the set held now.
 	pressRootX, pressRootY int
@@ -3113,15 +3129,54 @@ func (s *x11Surface) Move(x, y int) bool {
 	// The caller places the window the user sees, in logical pixels; the
 	// X window is in root device pixels, and is that plus the margin the
 	// frame's shadow lives in.
+	s.moveLocked(x, y)
+	x11Mu.Unlock()
+	return true
+}
+
+// moveLocked puts the visible window at a logical position and remembers
+// that it was asked for.
+func (s *x11Surface) moveLocked(x, y int) {
 	sc := s.conn.displayScale()
 	dx := DevicePosition(x, sc) - s.frame.Margin.Left
 	dy := DevicePosition(y, sc) - s.frame.Margin.Top
 	if !s.mapped {
 		s.placeLocked(dx, dy)
 	}
+	s.askPos, s.askLX, s.askLY, s.askDX, s.askDY = true, x, y, dx, dy
 	C.ui_move(s.conn.dpy, s.win, C.int(dx), C.int(dy))
-	x11Mu.Unlock()
-	return true
+}
+
+// remarginLocked re-sends the client's last position after the frame's
+// margin has changed, so the window the user sees stays where it was asked
+// to be.
+//
+// Only while that position is still the one in effect: the device position
+// the request was sent as has to be where the window is. Anything else means
+// the window manager placed it, the user dragged it, or a later request
+// replaced it, and none of those is ours to undo — a margin going to zero on
+// a tiled edge must not snap a tiled window back to where the application
+// once asked for it.
+func (s *x11Surface) remarginLocked(was FrameInsets) {
+	if !s.askPos || was == s.frame.Margin {
+		return
+	}
+	if s.posKnown {
+		x, y := s.posX, s.posY
+		if !s.posRoot {
+			var rx, ry C.int
+			if C.ui_to_root(s.conn.dpy, s.win, 0, 0, &rx, &ry) == 0 {
+				s.askPos = false
+				return
+			}
+			x, y = int(rx), int(ry)
+		}
+		if x != s.askDX || y != s.askDY {
+			s.askPos = false
+			return
+		}
+	}
+	s.moveLocked(s.askLX, s.askLY)
 }
 
 // PlaceAtScreen is Move on X11: a window has a position and the client
@@ -3810,9 +3865,14 @@ func (s *x11Surface) SetFrame(f Frame) {
 	// A window that stops needing alpha keeps its 32-bit visual: every
 	// pixel is opaque then (and _NET_WM_OPAQUE_REGION says so), and
 	// re-creating the window to go back would flash for nothing.
+	was := s.frame.Margin
 	s.frame = f
 	x11Mu.Lock()
 	s.applyFrameLocked()
+	// The margin is half of how a logical position becomes an X one, so a
+	// position asked for before this margin existed has to be asked for
+	// again with it.
+	s.remarginLocked(was)
 	x11Mu.Unlock()
 	w, h := s.geomW+f.Margin.Width(), s.geomH+f.Margin.Height()
 	if s.img != nil && (s.img.Width != w || s.img.Height != h) {
