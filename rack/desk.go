@@ -1,6 +1,8 @@
 package rack
 
 import (
+	"time"
+
 	"github.com/codemodify/uitoolkit/app"
 )
 
@@ -35,33 +37,42 @@ type Desk struct {
 	// snap by the window manager — and that is what tells the two apart
 	// without watching for a drag we cannot see.
 	want []Box
-	// pending counts the looks since we asked the desktop to move a window
-	// and it has not arrived yet. It is the one piece of hysteresis in
-	// here and it is load-bearing: a move is a *request*, X11 answers it a
-	// frame or two later, and without this Follow reads the old position
-	// back on the very next look, decides the user must have dragged the
-	// window there, and takes it out of the stack it was just put into.
-	pending []int
+	// until is when the rack stops waiting for a window to arrive where it
+	// was asked to go. It is the one piece of hysteresis in here and it is
+	// load-bearing: a move is a *request*, X11 answers it a frame or two
+	// later, and without this Follow reads the old position back on the
+	// very next look, decides the user must have dragged the window there,
+	// and takes it out of the stack it was just put into.
+	until []time.Time
 	// inFollow guards against a move event arriving while Follow is
 	// moving windows: every satellite it places reports its own move, and
 	// without this each one would start another pass.
 	inFollow bool
+	// again says a move arrived while a pass was running, so the pass read
+	// positions that were already out of date and another one is owed.
+	again bool
+	// now is the clock, so a test can hold it still. nil is time.Now.
+	now func() time.Time
 	// Moved runs after Follow has moved anything, so a player can repaint
 	// the line that says where its panes are.
 	Moved func()
 }
 
-// Patience is measured in looks because Follow used to be the only way a
-// Desk ran, and an application chose how often to call it: 25 looks is
-// 1.75 seconds at a 70 ms pulse and a quarter of that at 17 ms. Where the
-// desktop reports moves the question mostly goes away — a window that
-// arrives says so — and the count remains for the polling case.
+// movePatience is how long a window gets to arrive where it was asked to go
+// before the rack gives up and takes the desktop's answer instead. A window
+// manager that refuses a move — a tiled window, a maximized one — would
+// otherwise be argued with for ever.
 //
-// movePatience is how many looks a window gets to arrive where it was asked
-// to go before the rack gives up and takes the desktop's answer instead. A
-// window manager that refuses a move — a tiled window, a maximized one —
-// would otherwise be argued with forever.
-const movePatience = 25
+// In *time*, and that is the point of the number. It used to be a count of
+// looks, from when Follow was the only way a Desk ran and an application
+// chose how often to call it: 25 looks is 1.75 seconds at a 70 ms pulse and
+// a quarter of that at 17 ms, so the patience changed with the caller's
+// clock. Once the desktop began reporting moves it changed with *the user*,
+// because every event is a look — a fast drag spent the whole allowance in a
+// fraction of a second, and a window that paused was waited for far too
+// long. A quarter of a second is about two refused frames on any desktop,
+// and it means the same thing however the Desk is driven.
+const movePatience = 250 * time.Millisecond
 
 // NewDesk is an empty desk whose panes snap within reach pixels.
 func NewDesk(reach int) *Desk { return &Desk{Rack: New(reach)} }
@@ -72,7 +83,7 @@ func (d *Desk) Add(name string, w *app.Window) int {
 	i := d.Rack.Add(name, d.boxOf(w))
 	d.wins = append(d.wins, w)
 	d.want = append(d.want, d.Rack.Pane(i).Box)
-	d.pending = append(d.pending, 0)
+	d.until = append(d.until, time.Time{})
 	// Follow the desktop's own word where it gives one, so the satellites
 	// move with the drag rather than catching up on the application's
 	// next tick. An application that polls Follow keeps working: this is
@@ -90,12 +101,49 @@ func (d *Desk) Add(name string, w *app.Window) int {
 // the window system to move the satellites again. The flag is cleared by
 // the pass itself, so the next batch runs one more.
 func (d *Desk) followFromEvent() {
-	if d == nil || d.inFollow {
+	if d == nil {
+		return
+	}
+	if d.inFollow {
+		// A move arrived while a pass was running. The pass is reading
+		// positions that are already out of date, so one more is owed —
+		// noted rather than run, which is what makes a burst of configures
+		// one pass and not one each.
+		//
+		// It used to be dropped outright: the flag said "a pass is
+		// running" and the event went nowhere, so the *last* move of a
+		// drag — the one that says where the window came to rest — could
+		// be the one lost, and the satellites stayed a step behind until
+		// something else moved them.
+		d.again = true
 		return
 	}
 	d.inFollow = true
 	defer func() { d.inFollow = false }()
-	d.Follow()
+	for {
+		d.again = false
+		d.Follow()
+		if !d.again {
+			return
+		}
+	}
+}
+
+// clock is the time this Desk tells.
+func (d *Desk) clock() time.Time {
+	if d == nil || d.now == nil {
+		return time.Now()
+	}
+	return d.now()
+}
+
+// SetClock makes this Desk read the time from fn, so a test can hold it
+// still or move it on rather than wait out movePatience. nil is the real
+// clock.
+func (d *Desk) SetClock(fn func() time.Time) {
+	if d != nil {
+		d.now = fn
+	}
 }
 
 // Window is the window of pane i, or nil.
@@ -151,12 +199,11 @@ func (d *Desk) Follow() bool {
 		}
 		// Only a position we did not ask for is the user's.
 		if box.X == d.want[i].X && box.Y == d.want[i].Y {
-			d.pending[i] = 0
+			d.until[i] = time.Time{}
 			continue
 		}
-		if d.pending[i] > 0 {
-			// Asked for, not arrived. Wait.
-			d.pending[i]--
+		if d.clock().Before(d.until[i]) {
+			// Asked for, not arrived, and still inside its time. Wait.
 			continue
 		}
 		d.Rack.MoveTo(i, box.X, box.Y)
@@ -199,7 +246,7 @@ func (d *Desk) Adopt() bool {
 		ww, hh := w.Size()
 		p.Box = Box{X: x, Y: y, W: ww, H: hh}
 		d.want[i] = p.Box
-		d.pending[i] = 0
+		d.until[i] = time.Time{}
 	}
 	return known
 }
@@ -224,26 +271,26 @@ func (d *Desk) Apply() {
 		// Nothing to do when it is already there.
 		if box := d.boxOf(w); !box.Empty() && box.X == p.Box.X && box.Y == p.Box.Y {
 			d.want[i] = p.Box
-			d.pending[i] = 0
+			d.until[i] = time.Time{}
 			continue
 		}
 		if w.Move(p.Box.X, p.Box.Y) {
 			d.want[i] = p.Box
-			d.pending[i] = d.patience(w, p.Box)
+			d.until[i] = d.patience(w, p.Box)
 		}
 	}
 }
 
-// patience is how many looks a window gets to arrive where it was just
-// asked to go: none at all when it is already there. A backend that places
+// patience is when the rack stops waiting for a window it has just asked to
+// move: not at all when it is already there. A backend that places
 // a window as the call is made — the offscreen one, and an X11 server that
 // is not busy — needs no hysteresis, and giving it some would make a real
-// drag half a second later look like a move nobody asked for.
-func (d *Desk) patience(w *app.Window, want Box) int {
+// drag a quarter of a second later look like a move nobody asked for.
+func (d *Desk) patience(w *app.Window, want Box) time.Time {
 	if x, y, ok := w.Position(); ok && x == want.X && y == want.Y {
-		return 0
+		return time.Time{}
 	}
-	return movePatience
+	return d.clock().Add(movePatience)
 }
 
 // Attach sticks pane i to pane to on a side and moves it there — the
@@ -271,7 +318,7 @@ func (d *Desk) Show(i int, on bool) {
 	if p := d.Rack.Pane(i); p != nil {
 		if w.Move(p.Box.X, p.Box.Y) {
 			d.want[i] = p.Box
-			d.pending[i] = d.patience(w, p.Box)
+			d.until[i] = d.patience(w, p.Box)
 		}
 	}
 	w.Show()
