@@ -597,7 +597,15 @@ func (t *TreeView) MouseExit() {
 
 func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() {
-		return false
+		// A disabled control takes the press and does nothing with it.
+		//
+		// Taking it is the point: the window offers a press to the
+		// component under the pointer whether or not it is enabled, and
+		// then to its ancestors until one takes it — so a press refused
+		// here reaches an enabled container and is acted on as *its*
+		// own. A disabled list still changed its selection, called
+		// OnSelect, and opened a context menu for a secondary press.
+		return true
 	}
 	t.RequestFocus()
 	p := toView(e.Pos, t.frame())
