@@ -23,6 +23,13 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./shade-above.sh N [BACKEND [PACK]]   # the wheel rolls the window up; keep-above holds it in front
     ./resize-tear.sh N BIN [PASSES]  # drag an edge and score every frame for a torn window
 
+- `clipown TEXT SECONDS` takes the X11 CLIPBOARD selection and serves TEXT on
+  it until it is killed or the seconds run out, printing `owned` when the
+  server has acknowledged it. It is the second client the toolkit's clipboard
+  tests need — "another program copied something" is the one thing a test
+  cannot do from inside the process under test — and it is what
+  `tools/test-display.sh` uses. `xclip` and `xsel` do this too and are not
+  installed everywhere; this is 90 lines and is built with the rest of the rig.
 - `crop.py` decodes any PNG (every filter type, palette, 16-bit, Adam7), so it
   reads the toolkit's own `WritePNG` stills as well as KWin's; python3 only.
 - `shade-above.sh` drives `rigapp` (`tools/e2e/rigapp`, a window with the

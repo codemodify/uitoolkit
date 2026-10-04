@@ -65,6 +65,44 @@ bundled faces makes those numbers a property of the toolkit rather than
 of the developer. Set `UITK_SYSTEM_FONTS=1` to run against this
 machine's fonts.
 
+**Linux's own two backends need a display**, and `testenv.sh` takes it
+away — rightly, and at a cost that went unnoticed for a long time. Every
+test that needs an X server or a compositor skips, so `platform`'s X11 and
+Wayland code, where nearly every regression of this toolkit has been, was
+checked by nothing that runs by default. A green suite had never compiled a
+window. That is a silent substitution of exactly the kind this page is
+about, and the answer is to give those tests a desktop that is not the
+user's:
+
+```bash
+tools/test-display.sh ./platform/ ./app/ ./widgets/
+tools/test-display.sh -run TestAShapeWith ./platform/
+UITK_DISPLAY_KINDS=x11 tools/test-display.sh ./platform/
+```
+
+It starts (or reuses) a nested KWin through `tools/e2e/start.sh`, which
+gives both a Wayland socket and an Xwayland display, and runs the suite
+**twice** — once with `DISPLAY` set and `WAYLAND_DISPLAY` unset, once the
+other way round — because an application has one backend and not the other.
+Everything else matches `tools/test.sh`: `theme_engine_all`, the bundled
+fonts, and XDG dirs of the instance's own.
+
+One package at a time (`-p 1`, which a `-p` of your own after it
+overrides). Packages normally build and run in parallel, and on a display
+that makes them *clients of one desktop*: `platform`'s and `app`'s
+clipboard tests take the CLIPBOARD selection from each other and each sees
+the other's copy arrive — correctly, which is the point — in the middle of
+its own.
+
+Some of those tests need a second client, which no part of the process
+under test can be: `tools/e2e/clipown` takes the X11 clipboard and serves a
+string on it, and is built with the rest of the rig by `tools/e2e/build.sh`.
+
+What it found within an hour of existing: a paste that could have the
+display closed under it (a use-after-free, and an empty clipboard about one
+try in ten), and a copy-clear-copy sequence that left the clipboard
+unreadable. Neither was reachable from a suite with no display.
+
 **The other two platforms** are tested on real ones, from here:
 
 ```bash
@@ -299,6 +337,12 @@ broken code:
   `ChromeNorms`) over screenshots.
 - Put widget contracts in `widgets/*_test.go`. Map the bug in the
   comment at the top of `widgets/contract_test.go`.
+- If it is a backend bug — a property on an X window, a selection, a
+  shape — write an ordinary `go test` that skips without a display and
+  run it with `tools/test-display.sh`. Read the answer back *from the
+  server* rather than from what this process believes it sent: everything
+  the X11 file sends is fire-and-forget, so a property that was never
+  written looks exactly like one that took.
 - If the bug only shows up in a real app, add a driver step in
   `internal/apptest` with an invariant check after the action.
 - Context-menu / MenuBar clip: `TestPopupMenuFitsLongLabelsAndManyItems`,
