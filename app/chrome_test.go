@@ -222,7 +222,9 @@ func TestTooltipDelayAndEscape(t *testing.T) {
 
 func TestEscapeClosesPopupThenOverlay(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
-	w, err := a.NewWindow(platform.WindowOptions{Width: 480, Height: 320, Headless: true})
+	// Big enough for the chooser's card: below that it opens in a window of
+	// its own instead of an overlay, and there would be no overlay to close.
+	w, err := a.NewWindow(platform.WindowOptions{Width: 900, Height: 700, Headless: true})
 	if err != nil {
 		t.Fatal(err)
 	}

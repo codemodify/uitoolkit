@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -76,8 +78,30 @@ type ListView struct {
 	Selected  int
 	ItemText  func(i int) string
 	OnSelect  func(i int)
-	OnContext func(i int, windowPos paintengine2d.Point)
-	OffsetY   float32
+	// OnActivate is the row the user *committed* to: Return, Space, a
+	// double click, or a screen reader's default action. It falls back to
+	// OnSelect when it is nil, which is what the list did before it
+	// existed.
+	//
+	// Selection and activation are different things and an application
+	// that has only one of them has to guess. A player wired its play
+	// action to OnSelect and a single click started a track — arrowing down
+	// the playlist played every row on the way past — because there was
+	// nowhere else to put it. [TableView] has had this contract all along;
+	// this is the same one.
+	OnActivate func(i int)
+	OnContext  func(i int, windowPos paintengine2d.Point)
+	// ContextKeepsSelection leaves the selection alone when the secondary
+	// button is pressed, instead of making the row under it current first.
+	//
+	// Off by default, because selecting first is what every file manager and
+	// mail client does: a menu about a row the user cannot see they have
+	// chosen is worse than no menu. It is for the application whose context
+	// menu is about the *selection* — "delete these four" — where moving it
+	// to whatever the pointer happened to be over is the wrong answer.
+	// OnContext is told the row either way.
+	ContextKeepsSelection bool
+	OffsetY               float32
 	// Frameless drops the look's view frame (a list that already sits in a
 	// framed pane).
 	Frameless bool
@@ -141,6 +165,10 @@ type ListView struct {
 	OnSelectionChange func(rows []int)
 	sel               rowSelection
 	hovered           int
+	// lastRow and lastAt are the last row pressed and when, for telling a
+	// double click from two clicks.
+	lastRow int
+	lastAt  time.Time
 	// dropRow is the row a drag is over, -1 for none; dropAt is the gap
 	// it would be inserted into instead, -1 for none.
 	dropRow int
@@ -155,7 +183,7 @@ type ListView struct {
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
-	l := &ListView{Count: count, RowHeight: 28, Selected: -1, ItemText: text, OnSelect: on, hovered: -1, dropRow: -1, dropAt: -1}
+	l := &ListView{Count: count, RowHeight: 28, Selected: -1, ItemText: text, OnSelect: on, hovered: -1, dropRow: -1, dropAt: -1, lastRow: -1}
 	l.Init(l)
 	l.SetWantsFocus(true)
 	return l
@@ -569,7 +597,7 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	if p.Y < 0 || p.Y >= l.inner().Dy() {
 		i = -1
 	}
-	if i >= 0 {
+	if i >= 0 && !(e.Button == platform.ButtonRight && l.ContextKeepsSelection) {
 		changed := false
 		if l.Mode != SelectSingle {
 			if e.Button == platform.ButtonRight {
@@ -585,6 +613,16 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 		}
 		if changed {
 			l.selectionChanged()
+		}
+		// A Ctrl or Shift click edits the selection; it never activates.
+		if e.Button == platform.ButtonLeft && !e.Mods.Ctrl() && !e.Mods.Shift() {
+			if i == l.lastRow && time.Since(l.lastAt) < doubleClickInterval {
+				l.lastRow = -1
+				l.activate(i)
+			} else {
+				l.lastRow = i
+				l.lastAt = time.Now()
+			}
 		}
 	}
 	if e.Button == platform.ButtonRight && l.OnContext != nil {
@@ -651,14 +689,10 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 			}
 			return true
 		}
-		if l.Selected >= 0 && l.OnSelect != nil {
-			l.OnSelect(l.Selected)
-		}
+		l.activate(l.Selected)
 		return true
 	case platform.KeyReturn:
-		if l.Selected >= 0 && l.OnSelect != nil {
-			l.OnSelect(l.Selected)
-		}
+		l.activate(l.Selected)
 		return true
 	case platform.KeyA:
 		if e.Mods.Ctrl() && l.Mode != SelectSingle {
@@ -671,6 +705,51 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	}
 	l.navigate(next, e.Mods)
 	return true
+}
+
+// activate reports a row the user committed to — Return, Space, a double
+// click, a screen reader's default action — and falls back to OnSelect for an
+// application that has not told the two apart.
+//
+// The fallback is what the list did before OnActivate existed, so an
+// application written against the old contract behaves as it did; one that
+// sets both gets selection from OnSelect and commitment from OnActivate, and
+// arrowing down a playlist stops playing every row on the way past.
+func (l *ListView) activate(row int) {
+	if row < 0 || row >= l.Count {
+		return
+	}
+	if l.OnActivate != nil {
+		l.OnActivate(row)
+		return
+	}
+	if l.OnSelect != nil {
+		l.OnSelect(row)
+	}
+}
+
+// Activate commits row: the programmatic form of Return or a double click.
+func (l *ListView) Activate(row int) { l.activate(row) }
+
+// RowAt is the row at a point in this list's own coordinates, or -1 where
+// there is none — past the last row, in the scroll bar, or outside the view.
+//
+// Public because an application that recognises a gesture of its own needed
+// it and had no way to ask: the row geometry is the list's, and a skinned one
+// takes it from the skin's layout rather than from the look.
+func (l *ListView) RowAt(p paintengine2d.Point) int {
+	v := toView(p, l.pad())
+	if v.Y < 0 || v.Y >= l.inner().Dy() {
+		return -1
+	}
+	if sp := l.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(v) {
+		return -1
+	}
+	i := l.indexAt(v.Y)
+	if i < 0 || i >= l.Count {
+		return -1
+	}
+	return i
 }
 
 // navigate makes row next current the way keyboard navigation does: plain

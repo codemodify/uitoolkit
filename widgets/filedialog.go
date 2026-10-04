@@ -77,8 +77,16 @@ type FileDialog struct {
 	err     string
 	done    bool
 	hint    *Label
+	body    *FlexBox
 	overlay *Overlay
+	// closeWindow closes the window a chooser too big for its host was put
+	// in ([DialogWindowHost]); nil for the ordinary overlay.
+	closeWindow func()
 }
+
+// minCardW and minCardH are the smallest a chooser's card may be, in 1x
+// design pixels: a path field, a listing worth reading, and the buttons.
+const minCardW, minCardH = 520, 380
 
 // NewFileDialog builds the overlay + card. Call Show, or use ShowFileDialog.
 func NewFileDialog(opts FileDialogOptions) *FileDialog {
@@ -140,11 +148,12 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	).WithGap(8).WithPad(4)
 	browse.AddFlex(fd.table, 1)
 
+	fd.body = browse
 	card := NewPanel(opts.Title, browse)
 	card.Raised = true
 	fd.overlay = NewOverlay(card)
-	fd.overlay.MinCardW = 520
-	fd.overlay.MinCardH = 380
+	fd.overlay.MinCardW = minCardW
+	fd.overlay.MinCardH = minCardH
 	fd.overlay.OnClose = func() { fd.finish(false) }
 	fd.reload(opts.Path)
 	return fd
@@ -340,6 +349,14 @@ func (fd *FileDialog) finish(ok bool) {
 	if fd.overlay != nil {
 		widget.DismissOverlay(fd.overlay)
 	}
+	if fd.closeWindow != nil {
+		// A chooser in a window of its own: the window goes with it, and
+		// once, however the dialog ended — a button, the window's own close
+		// control, or the application calling it off.
+		cl := fd.closeWindow
+		fd.closeWindow = nil
+		cl()
+	}
 	if ok {
 		if fd.opts.OnPick != nil {
 			fd.opts.OnPick(fd.picked)
@@ -350,6 +367,14 @@ func (fd *FileDialog) finish(ok bool) {
 		fd.opts.OnCancel()
 	}
 }
+
+// Cancel ends the chooser as its Cancel button does: OnCancel runs, the
+// overlay or the window it is in goes, and a second call does nothing.
+//
+// It is what an application calls to take the dialog back — a vault that has
+// locked, a window that is closing — and what the window's own close control
+// runs when the chooser is in a window of its own.
+func (fd *FileDialog) Cancel() { fd.finish(false) }
 
 // chosen is the path the dialog would return: **what the path field
 // says**, then the selected row, then the directory.
@@ -399,8 +424,85 @@ func ShowFileDialog(from widget.Component, opts FileDialogOptions) *FileDialog {
 		return nil
 	}
 	fd := NewFileDialog(opts)
+	if fd.showInAWindowOfItsOwn(from) {
+		return fd
+	}
 	fd.Show(from)
 	return fd
+}
+
+// DialogWindowHost is a host that can open a window of its own to put a
+// dialog in. [app.Window] implements it.
+//
+// It is for the dialog that does not fit in the window asking for it. An
+// overlay is held to its host — 92% of its width and 88% of its height, so a
+// modal cannot cover the window it belongs to — and a skinned player's window
+// is 275 by 116 pixels. A file chooser needs 520 by 380 before its listing has
+// a row in it, so the one shown there had a table of no height at all and its
+// buttons below the window's own foot: not a smaller chooser, an unusable one.
+// The same fallback is what a window gets when the desktop's own chooser is
+// not there to ask.
+//
+// A host that has no windows to open — an offscreen test host, a single-window
+// shell — leaves this out, and the dialog is an overlay as it always was.
+type DialogWindowHost interface {
+	// OpenDialogWindow puts c in a window of its own, at least w by h
+	// logical pixels, titled title and belonging to this one, and returns
+	// the function that closes it. cancel is what the window's own close
+	// control runs — the dialog's Cancel, so a window closed from its frame
+	// answers the caller rather than leaving it waiting. False where the
+	// host could not open a window.
+	OpenDialogWindow(title string, w, h int, c widget.Component, cancel func()) (close func(), ok bool)
+}
+
+// dialogWindowSize is what a chooser asks for when it gets a window: enough
+// for the card's own minimum with room for a listing worth reading, which is
+// the whole reason it is not an overlay.
+const dialogWindowW, dialogWindowH = 680, 500
+
+// showInAWindowOfItsOwn opens the chooser in a window when the one asking is
+// too small to hold it, and reports whether it did.
+func (fd *FileDialog) showInAWindowOfItsOwn(from widget.Component) bool {
+	if from == nil || fd.overlay == nil || fd.overlay.Card == nil {
+		return false
+	}
+	h, ok := from.Host().(DialogWindowHost)
+	if !ok || overlayFits(from, fd.overlay) {
+		return false
+	}
+	// The body, not the card: the card is a panel with a caption of its
+	// own, which is what an overlay floating inside a window needs and
+	// exactly what a window with a title bar of its own does not. Out of
+	// the card first, because a component has one parent.
+	card, body := fd.overlay.Card, fd.body
+	card.Remove(body)
+	fd.overlay = nil
+	close, ok := h.OpenDialogWindow(fd.opts.Title, dialogWindowW, dialogWindowH, body, func() { fd.finish(false) })
+	if !ok {
+		// Put it back and let the caller show the overlay after all.
+		card.Add(body)
+		fd.overlay = NewOverlay(card)
+		fd.overlay.MinCardW, fd.overlay.MinCardH = minCardW, minCardH
+		fd.overlay.OnClose = func() { fd.finish(false) }
+		return false
+	}
+	fd.closeWindow = close
+	return true
+}
+
+// overlayFits reports whether the window hosting from has room for o's card
+// at the size it asks for. The caps are Overlay.Arrange's own.
+func overlayFits(from widget.Component, o *Overlay) bool {
+	wr, ok := from.Host().(widget.WindowRecter)
+	if !ok {
+		return true
+	}
+	box := wr.WindowRect()
+	if box.Empty() {
+		return true
+	}
+	lk := from.Look()
+	return style.Dip(lk, o.MinCardW) <= box.Dx()*0.92 && style.Dip(lk, o.MinCardH) <= box.Dy()*0.88
 }
 
 // openNative is the portal call (a seam for tests).

@@ -485,7 +485,13 @@ func (l *ListView) AccessibleAction(i int, a a11y.Action) bool {
 	}
 	switch a {
 	case a11y.ActionDefault:
+		// Select *and* commit. The default action is what a screen reader
+		// runs when the user says "do this one", and navigate alone does
+		// nothing at all when the row is already the current one — so a
+		// reader's activation of the selected row was answered true and
+		// nothing happened.
 		l.navigate(i, 0)
+		l.activate(i)
 		return true
 	case a11y.ActionScrollIntoView:
 		l.ensureVisible(i)

@@ -2459,6 +2459,72 @@ func (w *Window) Visible() bool {
 // Idle is used by tests that want a timestamp.
 func (w *Window) Idle() time.Time { return time.Now() }
 
+// OpenDialogWindow puts c in a window of its own, belonging to this one, and
+// returns the function that closes it ([widgets.DialogWindowHost]).
+//
+// It is for the dialog that does not fit in the window asking for it. An
+// overlay is held inside its host, so a window smaller than the dialog it
+// opens — a skinned player 275 pixels wide asking for a file chooser — had a
+// listing of no height and buttons below its own foot. The toolkit opens a
+// window instead, and owns the whole of it: the role, the owner, the size,
+// the close control, and giving the focus back when it goes.
+//
+// The window is a dialog of its own rather than a modal: the application may
+// go on using the one it belongs to, which is what every file chooser on
+// every desktop allows, and what the alternative — a modal on a window too
+// small to show it — could not.
+//
+// False where there is no application to open a window in, and the caller
+// shows the overlay after all.
+func (w *Window) OpenDialogWindow(title string, width, height int, c widget.Component, cancel func()) (func(), bool) {
+	if w == nil || w.Closed() || w.app == nil || c == nil {
+		return nil, false
+	}
+	dw, err := w.app.NewWindow(platform.WindowOptions{
+		Title:  title,
+		Width:  max(width, 1),
+		Height: max(height, 1),
+		// A dialog, owned by the window that asked: the desktop centres it
+		// over that window, keeps it above, and minimizes the two together.
+		Role:   platform.RoleDialog,
+		Owner:  w.surf,
+		Center: true,
+	})
+	if err != nil {
+		return nil, false
+	}
+	dw.SetContent(c)
+	var once sync.Once
+	closed := func() {
+		once.Do(func() {
+			// The content is the caller's and outlives this window, so it
+			// is taken out before the window is closed rather than being
+			// left pointing at a host that has gone.
+			dw.SetContent(nil)
+			dw.Close()
+			// The focus goes back where it came from, which a window
+			// closing does not do on its own.
+			if !w.Closed() {
+				w.Raise()
+			}
+		})
+	}
+	// The window's own close control ends the dialog the way its Cancel
+	// button does, rather than leaving the caller waiting for an answer
+	// that is never coming.
+	if cancel != nil {
+		// The window's own close control ends the dialog the way its Cancel
+		// button does, rather than leaving the caller waiting for an answer
+		// that is never coming. The dialog closes this window as it ends,
+		// which is why this keeps it open and lets that happen.
+		dw.SetOnCloseRequest(func() bool {
+			cancel()
+			return false
+		})
+	}
+	return closed, true
+}
+
 // PortalParent names the window as the parent of a desktop portal dialog
 // ("x11:<id>"; empty where the platform cannot say).
 func (w *Window) PortalParent() string {
