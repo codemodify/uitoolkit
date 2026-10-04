@@ -151,6 +151,27 @@ func (f *Font) Wrap(text string, maxW float32) []string {
 	return out
 }
 
+// CanBreakAfter reports whether a word too long for its line may be broken
+// after r.
+//
+// It is the second choice, for a "word" that is really a path, a URL or a
+// key: a file name broken after its last slash still reads as a file name,
+// where one broken in the middle of it reads as two words that are not
+// there. Text that has a space to break at breaks there instead, and a word
+// with none of these in it is still broken wherever the line ends, because
+// something has to give.
+//
+// Exported because two wrappers share the rule — this one, for labels, and
+// the one inside [TextArea] — and a policy written twice is a policy that
+// drifts.
+func CanBreakAfter(r rune) bool {
+	switch r {
+	case '/', '\\', '-', '.':
+		return true
+	}
+	return false
+}
+
 // wrapLine is the greedy pass over one paragraph (no newlines left in it).
 //
 // It adds rune advances, which is cheap and *over*-counts: a sum of
@@ -172,6 +193,10 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 	}
 	var out []string
 	start, brk := 0, -1 // brk is the space the line would break back to
+	// sep is where the line would break *within* a word too long for it:
+	// just after the last path or URL separator it has passed. Used only
+	// when there is no space to break at.
+	sep := -1
 	var w float32
 	for i := 0; i < len(runes); i++ {
 		// The break point is the *first* space of a run, so a line that
@@ -179,6 +204,15 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 		// off its end.
 		if runes[i] == ' ' && i > start && runes[i-1] != ' ' {
 			brk = i
+		}
+		// Recorded for the rune *before* this one, which is known to be on
+		// the line: a separator that is itself the rune that overflows is no
+		// break point, and taking it as one would throw away the last good
+		// one — a path then broke in the middle of a name with a slash two
+		// characters back, and a hyphenated word left a line holding nothing
+		// but "-".
+		if i > start && CanBreakAfter(runes[i-1]) {
+			sep = i
 		}
 		w += adv(runes[i])
 		// The first rune of a line always stays on it: a single glyph
@@ -193,14 +227,19 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 			}
 		}
 		cut, next := i, i // a word longer than the line breaks mid-word
-		if brk > start {
+		switch {
+		case brk > start:
 			cut, next = brk, brk+1
 			for next < len(runes) && runes[next] == ' ' {
 				next++
 			}
+		case sep > start:
+			// No space on the line: break after the separator rather than
+			// in the middle of a name.
+			cut, next = sep, sep
 		}
 		out = append(out, string(runes[start:cut]))
-		start, brk, w = next, -1, 0
+		start, brk, sep, w = next, -1, -1, 0
 		i = next - 1
 	}
 	if start < len(runes) || len(out) == 0 {

@@ -25,6 +25,15 @@
 # the user's, so a test that asks for a tray or a portal reaches the nested
 # desktop instead of the real one.
 #
+# One package at a time (-p 1, which a -p of your own after it overrides).
+# Packages normally build and run in parallel, and on a display that makes
+# them *clients of one desktop*: platform's and app's clipboard tests then
+# take the CLIPBOARD selection from each other, and each sees the other's
+# copy arrive — correctly, which is the point — in the middle of its own.
+# Nothing is wrong with the code those runs fail in, and nothing is wrong
+# with the tests; they simply cannot share a selection, any more than two
+# programs can.
+#
 # The instance is left running (tools/e2e/stop.sh N) so a failing run can be
 # looked at, and reused on the next call.
 set -euo pipefail
@@ -61,6 +70,6 @@ for kind in $KINDS; do
     XDG_CONFIG_HOME="$tmp/config" XDG_CACHE_HOME="$tmp/cache" \
     XDG_DATA_HOME="$tmp/data" GOCACHE="${GOCACHE:-$(go env GOCACHE)}" \
     UITK_SYSTEM_FONTS="$UITK_SYSTEM_FONTS" \
-    go test -tags theme_engine_all "$@" || rc=$?
+    go test -tags theme_engine_all -p 1 "$@" || rc=$?
 done
 exit $rc

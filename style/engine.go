@@ -510,12 +510,35 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 	if arrows == ArrowsTripleEnd {
 		buttons = 3
 	}
-	if arrows != ArrowsNone && along < a*buttons+8 {
-		a = (along - 8) / buttons
-		if a < 6 {
-			a = 0
-		}
+	if arrows == ArrowsNone {
+		buttons = 0
 	}
+	// The shortest thumb this look will draw. It is the measure of how much
+	// track is worth having: below it a thumb cannot move, and a bar whose
+	// thumb cannot move has nothing to say.
+	minThumb := s.MinThumb
+	if s.FixedThumb > 0 {
+		minThumb = s.FixedThumb
+	}
+	// Fewer buttons rather than smaller ones, as Qt's styles do.
+	//
+	// A bar short of room used to shrink its buttons: three 13-pixel arrows
+	// in the 47-pixel bar of a two-row text view under Plastik, leaving a
+	// track of 8 — shorter than that look's smallest thumb, so the thumb was
+	// clamped to the track, filled it, sat in the same place at every offset
+	// and could not be dragged. What the person saw was three small arrows,
+	// one apart from the other two, and no thumb at all. A bar that is only
+	// a track still says where the view is and still pages when it is
+	// clicked, which is the bar's first job; the arrows are the part to give
+	// up.
+	if arrows == ArrowsTripleEnd && along < a*3+minThumb {
+		// One at each end, the middle one gone.
+		arrows, buttons = ArrowsEnds, 2
+	}
+	if arrows != ArrowsNone && along < a*buttons+minThumb {
+		arrows, buttons, a = ArrowsNone, 0, 0
+	}
+	_ = buttons
 	lo, hi := float32(0), along // track span along the axis, relative to bar start
 	seg := func(from, n float32) paintengine2d.Rect {
 		if vertical {
@@ -563,6 +586,13 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 		offset = maxOff
 	}
 	span := hi - lo
+	// A track shorter than the look's smallest thumb cannot hold one that
+	// moves. Clamped to the track it filled it and stood still — neither
+	// "there is more" nor "you are here", and nothing to drag. No thumb is
+	// the truer answer, and the track is still there to page with.
+	if span < minThumb {
+		return p
+	}
 	th := span * viewport / content
 	if th < s.MinThumb {
 		th = s.MinThumb

@@ -4682,7 +4682,11 @@ func wlClipSetSel(b []byte, secret bool) bool {
 		if c.primMan != nil && c.primDev != nil {
 			C.ui_wl_prim_set(c.primDev, nil, C.uint32_t(c.serial))
 		}
-		c.prim.set("")
+		// Not set(""), which marks the cache *owned*: a read of the primary
+		// selection then answered with this process's empty string instead
+		// of falling through to whichever client actually holds it. The
+		// selection is not ours any more, and the cache has to say so.
+		c.prim.invalidate()
 	} else if c.primMan != nil && c.primDev != nil {
 		if c.primSrc != nil {
 			C.ui_wl_prim_source_destroy(c.primSrc)
@@ -4702,6 +4706,67 @@ func wlClipSetSel(b []byte, secret bool) bool {
 	wlMu.Unlock()
 	c.release()
 	return true
+}
+
+// wlClipClear gives up the selections this process owns, rather than copying
+// nothing onto them.
+//
+// The clear used to be wlClipSet(""): an ordinary copy of an empty string,
+// which takes CLIPBOARD *and the primary selection* with an empty offer this
+// program then goes on serving. So a secret's timeout — thirty seconds after
+// a passphrase was copied — threw away whatever the person had selected in
+// another program since, with a middle click pasting nothing afterwards. It
+// also left this process owning a selection it had nothing to say about,
+// which is why the paste that followed hung rather than falling through to
+// whoever did.
+//
+// A selection this process does not own is not touched at all. set_selection
+// with a null source unsets whichever client's selection it is, so the guards
+// are what keep a clear from reaching across to another program's.
+//
+// It reports whether anything was given up.
+func wlClipClear() bool {
+	c, err := wlRetain()
+	if err != nil || c == nil {
+		if c != nil {
+			c.release()
+		}
+		return false
+	}
+	wlMu.Lock()
+	gave := false
+	// The cached bytes go either way: they are this process's copy of what
+	// it was offering, and a passphrase among them is the whole point.
+	c.clip.invalidate()
+	c.clipSecret = false
+	if c.dataSrc != nil {
+		C.ui_wl_data_source_destroy(c.dataSrc)
+		c.dataSrc = nil
+		if c.dataDev != nil {
+			C.ui_wl_set_selection(c.dataDev, nil, C.uint32_t(c.serial))
+		}
+		gave = true
+	}
+	// The cache either way, the protocol only for a source of ours: a
+	// cache that is not ours costs nothing to drop, and claiming ownership
+	// this process has not got is how a read came to answer with an empty
+	// string of its own.
+	c.prim.invalidate()
+	if c.primSrc != nil {
+		C.ui_wl_prim_source_destroy(c.primSrc)
+		c.primSrc = nil
+		if c.primDev != nil {
+			C.ui_wl_prim_set(c.primDev, nil, C.uint32_t(c.serial))
+		}
+		gave = true
+	}
+	c.clipKeepLocked()
+	if c.dpy != nil {
+		C.ui_wl_flush(c.dpy)
+	}
+	wlMu.Unlock()
+	c.release()
+	return gave
 }
 
 func wlClipGet(primary bool) (string, bool) {

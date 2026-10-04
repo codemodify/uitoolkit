@@ -1166,8 +1166,12 @@ type x11Conn struct {
 	pasteDone bool
 	pasteWant C.Atom
 	incrRecv  incrRecvState
-	incrSends []incrSendState
-	maxReq    int
+	// pasteWaiting is set while readSelection is waiting for a value. It
+	// is what tells a transfer that completes late from one somebody asked
+	// for: see finishINCRLocked.
+	pasteWaiting bool
+	incrSends    []incrSendState
+	maxReq       int
 
 	// cursors caches one X cursor per shape.
 	cursors map[Cursor]C.Cursor
@@ -2668,13 +2672,7 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 			piece[i] = 0
 		}
 		if done {
-			c.wipePasteLocked()
-			c.pasteData = append([]byte(nil), c.incrRecv.buf...)
-			for i := range c.incrRecv.buf {
-				c.incrRecv.buf[i] = 0
-			}
-			c.pasteDone = true
-			c.dropINCRLocked()
+			c.finishINCRLocked()
 		}
 		return
 	}
@@ -2771,6 +2769,26 @@ func (c *x11Conn) clearClipboard() {
 	c.wipeClipLocked()
 	c.keep = false
 	C.ui_flush(c.dpy)
+}
+
+// finishINCRLocked takes a completed INCR transfer: the value becomes the
+// paste, and the transfer's own buffer is zeroed and let go either way.
+//
+// Only if a reader is still waiting for it. A transfer whose last pieces
+// arrive after readSelection gave up is nobody's: the value was put in
+// pasteData, where nothing would ever take it, and sat there until some later
+// paste happened to overwrite it. For an ordinary selection that is untidy;
+// for the private key that made the transfer long enough to need INCR in the
+// first place it is the thing this whole path exists to prevent. The pieces
+// are read to the end rather than abandoned mid-transfer, because an owner
+// left waiting on a property it has already written is an owner that hangs.
+func (c *x11Conn) finishINCRLocked() {
+	c.wipePasteLocked()
+	if c.pasteWaiting {
+		c.pasteData = append([]byte(nil), c.incrRecv.buf...)
+		c.pasteDone = true
+	}
+	c.dropINCRLocked()
 }
 
 // dropINCRLocked ends an INCR transfer and zeroes what it had read.
@@ -2905,6 +2923,10 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 	c.pasteDone = false
 	c.wipePasteLocked()
 	c.pasteWant = sel
+	// Somebody is waiting from here until this returns, which is what lets
+	// finishINCRLocked tell a value that was asked for from one that arrives
+	// after everybody has stopped listening.
+	c.pasteWaiting = true
 	// Whatever a previous transfer had read goes with it. One that ran
 	// past its paste's deadline used to sit in incrRecv holding the part
 	// it had — the start of a private key — until the next paste happened
@@ -2923,6 +2945,7 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 		C.ui_wait(dpy, 5)
 		x11Mu.Lock()
 		if c.dpy == nil {
+			c.pasteWaiting = false
 			x11Mu.Unlock()
 			return false, false
 		}
@@ -2942,12 +2965,14 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 			C.ui_wait(dpy, 5)
 			x11Mu.Lock()
 			if c.dpy == nil {
+				c.pasteWaiting = false
 				x11Mu.Unlock()
 				return false, false
 			}
 		}
 	}
 	ok := c.pasteDone
+	c.pasteWaiting = false
 	x11Mu.Unlock()
 	return ok, ok
 }

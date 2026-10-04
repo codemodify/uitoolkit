@@ -40,8 +40,14 @@ func clipboardNativeSetSecret(b []byte) {
 }
 
 func clipboardNativeClear() {
+	// Both halves give the selections they own up rather than copying
+	// nothing onto them. An empty copy is still a copy: it takes the
+	// selection, including the primary one a middle click pastes, so a
+	// secret's timeout threw away whatever the person had selected
+	// somewhere else since — and left this process owning a selection it
+	// had nothing to serve.
 	if waylandLive() || (os.Getenv("WAYLAND_DISPLAY") != "" && waylandProbe()) {
-		wlClipSet("")
+		wlClipClear()
 	}
 	if x11Live() || os.Getenv("DISPLAY") != "" {
 		if c, err := x11Get(); err == nil {

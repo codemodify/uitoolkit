@@ -197,19 +197,57 @@ func DialogContent(body widget.Component, actions ...widget.Component) *FlexBox 
 	// more than there is room for, which is the point, and otherwise it
 	// asks for what it has.
 	scroll.ShrinkToContent = true
+	return dialogColumn(scroll, dialogFootOf(actions))
+}
 
-	// One action that lays itself out — a ButtonBox, which arranges a
-	// dialog's buttons the way the look's platform does — is given the
-	// width rather than squeezed to its natural size at the right end of
-	// a row. A ButtonBox put in a justified row loses the whole point of
-	// it: its left-hand group, Help and a destructive button under Mac
-	// and GNOME looks, is no longer apart from the rest.
-	// A ButtonBox anywhere among the actions takes the width, not only
-	// one handed over by itself. A dialog's foot often holds something
-	// beside the buttons — "Caps Lock is on", a progress note — and that
-	// is exactly the foot that most needs the box to lay itself out: the
-	// box keeps its left-hand group apart (Help, and a destructive button
-	// under Mac and GNOME looks) only if it has the room to.
+// DialogContentFoot is [DialogContent] with a foot the application lays out
+// itself: one component, given the dialog's whole width, with nothing put
+// around it.
+//
+// It is for the foot that is not a row of buttons. DialogContent arranges
+// *actions*, and a lone action it does not recognise is given its natural
+// width at the right end of the foot, because that is what a lone button is
+// and a dialog whose only button is stretched across it is a phone's dialog,
+// not a desktop's. A foot that is a layout of its own — a message beside the
+// buttons with a rule above them, a progress bar with a Cancel at its end —
+// wants the opposite, and cannot say so by being passed as one action.
+//
+//	widgets.DialogContentFoot(body, widgets.NewColumn(rule, widgets.NewRow(note, box)))
+//
+// A [ButtonBox] needs none of this: DialogContent gives it the width wherever
+// it is among the actions, since laying a dialog's buttons out the way the
+// look's platform does is the whole of what it is for.
+func DialogContentFoot(body, foot widget.Component) *FlexBox {
+	scroll := NewScrollView(body)
+	scroll.ShrinkToContent = true
+	return dialogColumn(scroll, foot)
+}
+
+// dialogColumn is the body-over-foot arrangement both entry points return.
+func dialogColumn(scroll *ScrollView, foot widget.Component) *FlexBox {
+	col := NewColumn(scroll, foot).WithGap(12).WithPad(4)
+	col.AddFlex(scroll, 1)
+	return col
+}
+
+// dialogFootOf arranges a dialog's actions.
+//
+// A [ButtonBox] anywhere among them is given the width, with whatever else
+// there is to the left of it, rather than squeezed to its natural size at the
+// right end of a justified row. Arranging a dialog's buttons the way the
+// look's platform does is the whole of what the box is for, and in a
+// justified row it loses it: its left-hand group — Help, and a destructive
+// button under Mac and GNOME looks — is no longer apart from the rest. It
+// needs the room wherever it was passed, and a dialog's foot often holds
+// something beside the buttons ("Caps Lock is on", a progress note), so the
+// common case was the one left squeezed when only a box handed over alone
+// took the width.
+//
+// Anything else is a row of actions at its natural width, justified to the
+// end: a lone one is a button, and a dialog whose only button is stretched
+// across it is a phone's dialog. A foot that is a layout of its own goes
+// through [DialogContentFoot] instead.
+func dialogFootOf(actions []widget.Component) widget.Component {
 	var foot widget.Component
 	if bb, rest := splitButtonBox(actions); bb != nil {
 		if len(rest) == 0 {
@@ -223,9 +261,7 @@ func DialogContent(body widget.Component, actions ...widget.Component) *FlexBox 
 	} else {
 		foot = NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd)
 	}
-	col := NewColumn(scroll, foot).WithGap(12).WithPad(4)
-	col.AddFlex(scroll, 1)
-	return col
+	return foot
 }
 
 func DialogCard(title, body string, actions ...widget.Component) *Panel {

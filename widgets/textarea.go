@@ -33,15 +33,17 @@ type TextArea struct {
 	// that text (drag.go); dragAt is where it landed, so a press that
 	// stays a click still moves the caret there. selfDrop records a drop
 	// of our own drag back into this same widget.
-	dragSel      bool
-	selfDrop     bool
-	dragAt       int
-	scrollX      float32
-	scrollY      float32
-	lines        []style.TextLine
-	lay          areaLayout // model text
-	vlay         areaLayout // visual text (IME preedit composed in)
-	caretUp      bool       // caret sits at the end of the wrapped line, not the start of the next
+	dragSel  bool
+	selfDrop bool
+	dragAt   int
+	scrollX  float32
+	scrollY  float32
+	lines    []style.TextLine
+	lay      areaLayout // model text
+	vlay     areaLayout // visual text (IME preedit composed in)
+	layFull  areaLayout // model text at the full inner width, to decide the bar
+
+	caretUp      bool // caret sits at the end of the wrapped line, not the start of the next
 	preferX      float32
 	havePref     bool
 	preedit      string
@@ -239,18 +241,72 @@ func (t *TextArea) wrapWidth() float32 {
 	if !t.Wrap {
 		return 1e6
 	}
-	w := t.inner().Dx()
+	w := t.viewW()
 	if w < 8 {
 		w = 8
 	}
 	return w
 }
 
-// layoutFor returns the wrapped lines for text, reusing cache when possible.
-func (t *TextArea) layoutFor(cache *areaLayout, text string) []style.TextLine {
+// viewW and viewH are the box the text is seen through: the padded inner box
+// less the room a bar that is there takes.
+//
+// Lines used to wrap to the whole inner width while the bar was painted over
+// its right edge, so the end of every full line ran underneath — "io.gith"
+// and the rest of a file name hidden, with no way to scroll it out from
+// under, because the bar was not part of the arithmetic anywhere.
+func (t *TextArea) viewW() float32 { return max(t.inner().Dx()-t.vGutter(), 0) }
+func (t *TextArea) viewH() float32 { return max(t.inner().Dy()-t.hGutter(), 0) }
+
+// vGutter is what a vertical bar takes from the text's width, and hGutter
+// what a horizontal one takes from its height. Zero where the bar is not
+// there: a field that does not overflow gives up nothing.
+//
+// The vertical one is circular on the face of it — the bar is there because
+// the text is too tall, and how tall the text is depends on where it wraps —
+// and one measurement at the full width settles it: narrowing can only push
+// lines down, never up, so text that overflows at the full width overflows at
+// the narrower one too, and text that fits is given the whole width. The
+// measurement is cached like any other wrap.
+func (t *TextArea) vGutter() float32 {
+	in := t.inner()
+	if in.Dy() <= 0 {
+		return 0
+	}
+	lines := t.lines
+	if t.Wrap {
+		lines = t.layoutFor(&t.layFull, t.Text, in.Dx())
+	} else {
+		// Unwrapped lines do not depend on the width at all, so the real
+		// layout answers; relayout here because the first look at a field
+		// happens before anything has laid it out.
+		t.relayout()
+		lines = t.lines
+	}
+	n := len(lines)
+	if n < 1 {
+		n = 1
+	}
+	return scrollGutter(t.Look(), float32(n)*t.lineH() > in.Dy()-t.hGutter()+0.5)
+}
+
+func (t *TextArea) hGutter() float32 {
+	if t.Wrap {
+		// Wrapped text never scrolls sideways, so there is no bar to make
+		// room for — and saying so here is what keeps the two gutters from
+		// asking each other questions.
+		return 0
+	}
+	t.relayout()
+	return scrollGutter(t.Look(), t.lay.maxAdv > t.inner().Dx()+0.5)
+}
+
+// layoutFor returns the wrapped lines for text at width w, reusing cache when
+// possible. The width is passed rather than asked for, so that the
+// measurement vGutter makes at the full width cannot ask vGutter back.
+func (t *TextArea) layoutFor(cache *areaLayout, text string, w float32) []style.TextLine {
 	f := t.font()
 	key := faceKeyOf(f)
-	w := t.wrapWidth()
 	if cache.hit(key, text, w, t.Wrap) {
 		return cache.lines
 	}
@@ -260,7 +316,7 @@ func (t *TextArea) layoutFor(cache *areaLayout, text string) []style.TextLine {
 }
 
 func (t *TextArea) relayout() {
-	t.lines = t.layoutFor(&t.lay, t.Text)
+	t.lines = t.layoutFor(&t.lay, t.Text, t.wrapWidth())
 }
 
 func (t *TextArea) contentH() float32 {
@@ -272,12 +328,12 @@ func (t *TextArea) contentH() float32 {
 }
 
 func (t *TextArea) maxScrollY() float32 {
-	return layout.MaxScroll(t.contentH(), t.inner().Dy())
+	return layout.MaxScroll(t.contentH(), t.viewH())
 }
 
 func (t *TextArea) contentW() float32 {
 	if t.Wrap {
-		return t.inner().Dx()
+		return t.viewW()
 	}
 	t.relayout()
 	return t.lay.maxAdv
@@ -287,7 +343,7 @@ func (t *TextArea) maxScrollX() float32 {
 	if t.Wrap {
 		return 0
 	}
-	return layout.MaxScroll(t.contentW(), t.inner().Dx())
+	return layout.MaxScroll(t.contentW(), t.viewW())
 }
 
 // MaxOffset is the largest legal vertical scroll offset.
@@ -304,8 +360,8 @@ func (t *TextArea) ScrollTo(y float32) {
 }
 
 func (t *TextArea) clampScroll() {
-	t.scrollY = layout.ClampScroll(t.scrollY, t.contentH(), t.inner().Dy())
-	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())
+	t.scrollY = layout.ClampScroll(t.scrollY, t.contentH(), t.viewH())
+	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.viewW())
 }
 
 // scrollBy applies a delta and reports whether anything moved.
@@ -329,8 +385,9 @@ func (t *TextArea) scrollBy(dy, dx float32) bool {
 // the track at the bottom of the document.
 func (t *TextArea) vparts() style.ScrollParts {
 	in := t.inner()
-	box := paintengine2d.XYWH(0, in.Min.Y, t.LocalBounds().Dx(), in.Dy())
-	return style.ScrollGeometry(t.Look(), box, true, t.contentH(), in.Dy(), t.scrollY, false)
+	h := t.viewH()
+	box := paintengine2d.XYWH(0, in.Min.Y, t.LocalBounds().Dx(), h)
+	return style.ScrollGeometry(t.Look(), box, true, t.contentH(), h, t.scrollY, false)
 }
 
 func (t *TextArea) hparts() style.ScrollParts {
@@ -338,8 +395,9 @@ func (t *TextArea) hparts() style.ScrollParts {
 		return style.ScrollParts{}
 	}
 	in := t.inner()
-	box := paintengine2d.XYWH(in.Min.X, 0, in.Dx(), t.LocalBounds().Dy())
-	return style.ScrollGeometry(t.Look(), box, false, t.contentW(), in.Dx(), t.scrollX, false)
+	w := t.viewW()
+	box := paintengine2d.XYWH(in.Min.X, 0, w, t.LocalBounds().Dy())
+	return style.ScrollGeometry(t.Look(), box, false, t.contentW(), w, t.scrollX, false)
 }
 
 func (t *TextArea) lineStep() float32 {
@@ -355,7 +413,7 @@ func (t *TextArea) vaxis() scrollAxis {
 		parts:    t.vparts,
 		get:      func() (float32, float32) { return t.scrollY, t.maxScrollY() },
 		set:      func(y float32) { t.scrollY = y; t.clampScroll(); t.Invalidate() },
-		steps:    func() (float32, float32) { return t.lineStep(), t.inner().Dy() * 0.9 },
+		steps:    func() (float32, float32) { return t.lineStep(), t.viewH() * 0.9 },
 	}
 }
 
@@ -364,7 +422,7 @@ func (t *TextArea) haxis() scrollAxis {
 		parts: t.hparts,
 		get:   func() (float32, float32) { return t.scrollX, t.maxScrollX() },
 		set:   func(x float32) { t.scrollX = x; t.clampScroll(); t.Invalidate() },
-		steps: func() (float32, float32) { return t.lineStep() * 2, t.inner().Dx() * 0.9 },
+		steps: func() (float32, float32) { return t.lineStep() * 2, t.viewW() * 0.9 },
 	}
 }
 
@@ -397,7 +455,7 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 	if text != t.Text {
 		// IME composition: the visual string differs from the model, so it
 		// gets its own (also cached) wrap.
-		lines = t.layoutFor(&t.vlay, text)
+		lines = t.layoutFor(&t.vlay, text, t.wrapWidth())
 	}
 	blink := t.blink() && t.editable()
 	if t.ReadOnly {
@@ -809,14 +867,14 @@ func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 		t.applyNav(e.Mods.Shift(), false)
 		return true
 	case platform.KeyPageUp:
-		page := int(t.inner().Dy()/t.lineH()) - 1
+		page := int(t.viewH()/t.lineH()) - 1
 		if page < 1 {
 			page = 1
 		}
 		t.moveVert(-page, e.Mods.Shift())
 		return true
 	case platform.KeyPageDown:
-		page := int(t.inner().Dy()/t.lineH()) - 1
+		page := int(t.viewH()/t.lineH()) - 1
 		if page < 1 {
 			page = 1
 		}
@@ -951,10 +1009,10 @@ func (t *TextArea) readOnlyKey(e widget.KeyEvent) bool {
 		t.scrollBy(-t.lineH(), 0)
 		return true
 	case platform.KeyPageDown:
-		t.scrollBy(t.inner().Dy()*0.9, 0)
+		t.scrollBy(t.viewH()*0.9, 0)
 		return true
 	case platform.KeyPageUp:
-		t.scrollBy(-t.inner().Dy()*0.9, 0)
+		t.scrollBy(-t.viewH()*0.9, 0)
 		return true
 	case platform.KeyHome:
 		if e.Mods.Ctrl() {
@@ -1127,6 +1185,16 @@ func layoutAreaMax(f *style.Font, text string, maxW float32, wrap bool) ([]style
 func lastWrap(runes []rune, start, i int) int {
 	for j := i; j > start; j-- {
 		if runes[j-1] == ' ' || runes[j-1] == '\t' {
+			return j
+		}
+	}
+	// No space on the line, so the "word" is longer than the line: a path, a
+	// URL, a key. Break after its last separator rather than in the middle of
+	// a name — a file name cut after its slash still reads as a file name,
+	// where one cut through the middle reads as two words that are not there.
+	// The rule is [style.CanBreakAfter], shared with the wrapper labels use.
+	for j := i; j > start; j-- {
+		if style.CanBreakAfter(runes[j-1]) {
 			return j
 		}
 	}
