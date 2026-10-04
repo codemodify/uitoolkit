@@ -7,6 +7,267 @@ about the problem it solved.
 
 ---
 
+## 0.23.4
+
+The rest of the three applications' reports, and **their lists are now
+empty**: every item the mail client, the vault and the music player raised
+is fixed, declined, or answered as a standing design decision.
+Twenty-three of the items here are theirs — seventeen from the player,
+six from the vault — and six of those are things 0.23.3 itself got wrong,
+one of them a claim its own notes made and the code did not keep.
+
+The other two came from a new test runner rather than from anybody's
+report, and that is the part of this release worth reading about.
+
+New: `platform.RoleUtility` with `WindowOptions.Owner` and `SkipTaskbar`
+(`OwnedSurface`, `TaskbarSurface`, `FrameOwner`, `FrameSkipTaskbar`);
+`Window.OpenDialogWindow`; `widgets.DialogContentFoot`;
+`ListView.OnActivate`, `Activate`, `RowAt` and `ContextKeepsSelection`;
+`DropEvent.Remote`; `style.CanBreakAfter`; responsive slot anchors in
+`skingen`; `rack.Desk.SetClock`.
+
+### The suite had never compiled a window
+
+`tools/testenv.sh` hides every display, which is right for the bulk of the
+suite and is why no test can reach the desktop it runs on. The cost went
+unnoticed for a long time: **every test that needs an X server or a
+compositor skips**, so `platform`'s X11 and Wayland code — where nearly
+every regression of this toolkit has been — was checked by nothing that
+ran by default.
+
+`tools/test-display.sh` runs the same tests inside a nested KWin, twice,
+once with each backend. Within an hour of existing it found two bugs that
+no report had, both of which read to a user as an empty clipboard about
+one try in ten:
+
+- **A paste could have the connection closed under it.** This process
+  keeps its X connection open only while something is using it or while it
+  owns a selection, so the moment another client takes the clipboard the
+  selection service lets it go — and a read that had just started came
+  back empty after a single wait. It is a use-after-free as well: the wait
+  holds the `Display` across the unlock. The readers hold a reference now,
+  as the Wayland ones already did.
+- **A copy, a clear and another copy left the clipboard unreadable.**
+  Giving a selection up and taking it again makes the server send a
+  `SelectionClear` for the ownership that ended, and it arrives after the
+  new one is in hand; acting on it turned `ownClip` off while the
+  selection really was ours, so the next paste asked the server to convert
+  a selection this process then refused to serve. Two things were wrong
+  and both are fixed, because each alone leaves the race open: a clear
+  that arrives while the server still says we own the selection is
+  ignored, and a copy takes a fresh timestamp rather than the last one
+  that happened to arrive.
+
+`tools/e2e/clipown` came with it — the second X11 client those tests need,
+because "another program copied something" is the one thing a test cannot
+do from inside the process under test.
+
+### Windows that belong to other windows
+
+A role said what kind of window this was and nothing said *whose*, and
+nothing at all said "leave this out of the task bar". A skinned player
+with an equaliser and a playlist had to reach past the toolkit to its X11
+window and set `WM_TRANSIENT_FOR` and the skip states itself, and put them
+back whenever the native window changed underneath it.
+
+`RoleUtility`, `WindowOptions.Owner` and `SkipTaskbar` now say it, and
+every backend does what its desktop offers:
+`_NET_WM_WINDOW_TYPE_UTILITY` with the two skip states on X11,
+`WS_EX_TOOLWINDOW` on an owned window on Win32, an `NSPanel`'s behaviour
+and `-addChildWindow:` on macOS. **Wayland has the parent and nothing
+else** — xdg-shell has no utility toplevel and no way for an ordinary
+client to ask about a task bar — so `FrameSkipTaskbar` is absent there and
+an application can say so rather than believe a request took.
+
+The policy survives what it has to: a re-created X window, and a hide and
+re-show, where a window manager removes `_NET_WM_STATE` on withdrawal as
+the EWMH tells it to — so a panel came back in the list it had asked to be
+left out of, with its X window id unchanged and nothing on this side to
+notice by.
+
+### A dialog too big for the window that asked for it
+
+An overlay is held inside its host — 92% of its width, 88% of its height,
+so a modal cannot cover what it belongs to — and a skinned player's window
+is 275 by 116. A file chooser's card asks for 520 by 380 before its
+listing has a row in it, so the one shown there had a table of no height
+and its buttons below the window's own foot: not a smaller chooser, an
+unusable one. The same fallback is what any window gets when the desktop's
+own chooser is not there to ask.
+
+`Window.OpenDialogWindow` opens one, and the toolkit owns the whole of it:
+a dialog window belonging to the one that asked, centred over it, carrying
+the chooser's *body* rather than its card — a card has a caption of its
+own, which an overlay inside a window needs and a window with a title bar
+does not. The window's own close control cancels the dialog rather than
+leaving the caller waiting for an answer, the dialog closes the window as
+it ends however it ended, and the focus goes back where it came from. A
+window with room keeps the overlay.
+
+### Selecting a row and committing to one
+
+`ListView` routed everything through `OnSelect` — a click, an arrow key,
+Return, a screen reader's default action — so an application with one
+callback had to guess which it was looking at. A player wired its play
+action to it and arrowing down the playlist played every row on the way
+past.
+
+`OnActivate` is the row the user committed to, falling back to `OnSelect`
+when it is nil so nothing written against the old contract changes.
+`TableView` has had this all along; it is the same contract. With it:
+`RowAt`, because an application recognising a gesture of its own had no
+way to ask which row a point is in, and `ContextKeepsSelection` for the
+menu that is about the selection rather than the row under the pointer.
+The accessibility default action now selects *and* commits — navigating to
+where you already are is no change, so a reader activating the selected
+row was answered true and nothing happened.
+
+And a **disabled** list takes a press and does nothing with it. It used to
+select the row, call `OnSelect` and open a context menu; `TableView` and
+`CardList` had the same hole, and `TreeView` the other half of it —
+*taking* the press matters as much as ignoring it, because one refused by
+a disabled control reaches the enabled container above and is acted on as
+that container's own.
+
+### What an X window forgets
+
+An X window's visual is fixed when it is created, so a frame that gains a
+shadow destroys the window and makes another — and every property the
+window manager had been told belongs to the window, not to the client.
+`_NET_WM_WINDOW_TYPE` went with the old one, so a dialog that grew a
+shadow stopped being a dialog and the application was never told. Reading
+the rest of that path found `_NET_WM_STATE` too, which is worse and more
+visible: a maximized window came back the size of its restored self, a
+full-screen one came back with decorations.
+
+Two more things it got wrong about its own geometry:
+
+- **A position asked for before the first layout.** `Move` subtracts the
+  frame's margin and `Position` adds it, and the margin arrives with the
+  first layout — so a `Move` made before it was read back with a margin it
+  had never been written with, and the window stood a shadow's width from
+  where it was put. The request is re-sent now with the margin it was
+  meant to be read with, and forgotten the moment anything else moves the
+  window, so it can never fight the user or the window manager.
+- **A resize the window manager granted exactly.** X11 sizes the backing
+  image at once and then asks the server; the configure that comes back
+  becomes an `EventResize` only where the native size differs from that
+  image, so an exact grant was silent and the cached geometry stayed with
+  it. A window asked for 700×450 went on reporting 520×340, and every hit
+  test with it.
+
+And a shaped window that can be **resized** submitted an invalid request:
+its resize bands are appended after its silhouette, so the list goes back
+to the top of the window and overlaps itself, and it was declared
+`YXBanded` regardless. X answers a false claim with `BadMatch` and
+installs **no shape at all** — a rounded window came out square, with the
+default full-window input region, and nothing in the application could
+tell.
+
+### Text, and the things around it
+
+- **A short scroll bar gave up its track instead of its buttons.** Three
+  12.7-pixel arrows in the 47-pixel bar of a two-row text view left a
+  track of 8, shorter than that look's smallest thumb — so the thumb was
+  clamped to the track, filled it, stood in the same place at every offset
+  and could not be dragged. It drops the buttons now, as Qt's styles do:
+  three, then one at each end, then none. A bar that is only a track still
+  says where the view is and still pages when it is clicked. A track too
+  short for the look's own smallest thumb shows no thumb at all, which is
+  a truer answer than one that cannot move.
+- **Lines wrapped under the bar.** They wrapped to the field's whole inner
+  width while the bar was painted over its right edge, so the end of every
+  full line ran underneath with no way to scroll it clear. `TextArea` has
+  a view box now, as `ScrollView` does, and the wrap, both max-scrolls,
+  the clamp, the bars' own viewport lengths and the page keys all go
+  through it.
+- **A path broke in the middle of a file name.** A word longer than the
+  line is broken after the last `/`, `\`, `-` or `.` it has passed —
+  `style.CanBreakAfter`, shared by `Font.Wrap` and `TextArea` so the rule
+  cannot drift between them. A space still wins, and a word with none of
+  those is still broken anywhere, because something has to give.
+
+### Drops, secrets and the clipboard
+
+- **A remote file URI decoded to a local path.**
+  `file://remote-host/etc/hosts` became `/etc/hosts`: an application that
+  opened what it was handed opened a *different* file, which is a wrong
+  answer rather than a failure and had nothing to notice it by. The three
+  spellings of "this machine" that RFC 8089 allows still decode; anything
+  else goes to `DropEvent.Remote`, whole, where a target can say it could
+  not take it.
+- **Another program's copy left a secret held.** On X11 the bytes the
+  owner served were zeroed and the `SecretClip` was left held with its own
+  copy of the passphrase in it; on Windows and macOS nothing was asked at
+  all. So for the rest of its time a paste into a `SecretField` took the
+  old secret — copy a passphrase from another program into a new vault's
+  "Passphrase" and "Repeat", and the vault was made with the item copied
+  before. The two platform shapes are answered differently because they
+  are different: X11 is *told* it has lost a selection, Windows and macOS
+  say nothing and are asked.
+- **A long paste left pieces of itself.** Every piece of an INCR transfer
+  was copied out of Xlib's buffer and that buffer freed unzeroed — the
+  thing 0.23.3's notes said it had fixed and had not. A transfer whose
+  last pieces arrive after the paste gave up waiting is now let go rather
+  than kept where nothing would ever read it.
+- **A Wayland clear threw away the user's selection.** It was an ordinary
+  copy of an empty string, which is still a copy: it took CLIPBOARD *and
+  the primary selection* with an empty offer this program then went on
+  serving, so a secret's timeout discarded whatever the person had
+  selected somewhere else since. It gives up the selections this process
+  owns and touches nothing else.
+- **The lock keys are asked again at a focus-in**, on the backends that
+  can be asked. They belong to the user's keyboard and not to this window,
+  so Caps Lock turned on while another program had the focus is on when
+  the focus comes back — and a prompt went on showing what it knew when it
+  last saw a key.
+
+### Smaller
+
+- `DialogContentFoot(body, foot)` for a foot the application lays out
+  itself. A *lone* action is still natural-width at the right: stretching
+  it would make every one-button dialog look like a phone's, and the test
+  that says so fails on exactly that change.
+- Normalising a value from inside `OnChange` is no longer counted as user
+  input, and `OnInput` carries what the control holds after `OnChange` has
+  had its say — nothing at all where a handler put the value back.
+- A spanning grid cell no longer overruns by a hidden track's gap.
+- `skingen` can emit the responsive slot anchors the runtime has always
+  read (`stretchX`, `stretchY`, `fromRight`, `fromBottom`), so a generated
+  layout can be a resizable panel instead of a fixed one.
+- A `rack.Desk` coalesces a burst of moves — the last move of a drag, the
+  one that says where the window came to rest, used to be the one lost —
+  and its patience is a length of time rather than a count of looks, which
+  meant something different on every machine and on every drag.
+- A rack joining a multi-pane component no longer hangs; `EventMove`'s
+  coordinates agree with `Window.Position`; `ListSkins` includes an
+  application's registered skins; re-registering a skin id no longer
+  paints the old artwork while every name says it changed.
+
+### Known
+
+**Confirmed.** `TestAppKitGeometryRoundTrips` fails on macOS, and it is not
+only a test: a window moved by the application is put back to the frame it
+was created with about 100 ms later, so an application cannot place its own
+windows there and `rack` snapping does not work. It predates this release.
+Measured, not inferred — the move takes effect, survives a sleep and a
+poll, and is then undone whatever the delta.
+
+**Suspected, and written down rather than left out.** Reading
+`uitk_ak_drag_add` says a drag payload under a custom MIME type is never
+written to the pasteboard, because a MIME string is not a valid UTI; that
+would mean tearing a tab or a dock panel out to another window does not
+work on macOS either. The evidence is the code on both sides of the
+pasteboard and one line in the macOS test log — **it has not been
+reproduced**, and confirming it is the first job next cycle. If
+`NSPasteboardItem` turns out to accept the raw MIME after all, this item
+goes away.
+
+Both would be the backend asking the window server for something it does
+not get, which is why they are listed together.
+
+---
+
 ## 0.23.3
 
 Three applications' reports, worked through: the mail client's, the

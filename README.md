@@ -920,8 +920,36 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
-Every release's notes are in [release-notes.md](release-notes.md); the
-last two are summarised here.
+Every release's notes are in [release-notes.md](release-notes.md). A few
+are summarised here; the list below is not continuous.
+
+**0.23.4** — **Three applications' lists, emptied.** Everything the mail
+client, the password vault and the music player raised against this
+toolkit is now fixed, declined, or answered as a standing design
+decision. Windows that belong to other windows (`RoleUtility`,
+`WindowOptions.Owner` and `SkipTaskbar`, with the capabilities to ask
+first — Wayland has the parent and no say in a task bar, and says so); a
+file chooser that opens in a window of its own when the one asking is too
+small to hold it; `ListView.OnActivate`, so selecting a row and
+committing to one are different things; and a disabled list that takes a
+press and does nothing with it.
+
+The part worth reading about is a test runner. `tools/testenv.sh` hides
+every display — right for the bulk of the suite, and the reason the X11
+and Wayland backends were checked by nothing that ran by default. A green
+suite had never compiled a window. `tools/test-display.sh` runs the same
+tests inside a nested KWin, once with each backend, and found two bugs no
+report had: a paste that could have the connection closed under it
+mid-read, and a copy-clear-copy sequence that left the clipboard
+unreadable. Both looked to a user like an empty clipboard, about one try
+in ten.
+
+Known and not fixed: on macOS a window moved by the application is put
+back about 100 ms later, so `rack` snapping does not work there. Suspected
+and not yet reproduced, from reading both sides of the pasteboard: a drag
+payload under a custom MIME type may never reach it, a MIME string not
+being a valid UTI, which would stop a tab or a dock panel being torn out
+to another window there.
 
 **0.22.1** — **The text contract**, in one page:
 [docs/contracts.md](docs/contracts.md). A mark is an icon and a word is
