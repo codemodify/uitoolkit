@@ -301,6 +301,14 @@ inbox    plus     x        lock     sync
 ```
 
 `Label.Icon` is the row to reach for when the mark is not on a control.
+
+A label's face is one of four: plain, `Mono`, `Bold` or `Title`. `Bold` is the
+look's bold face **at the body's own size** — a run-in heading, as GTK's
+`heading` class, Qt's `QFont::setBold` and HTML's `<strong>` give one — which
+is the thing `Title` cannot be, `Title` being the page title's size, a step
+above the section titles such a heading sits under. A pack with no bold face
+of its own answers with the body face, so the label reads as an ordinary one
+rather than as a missing font, and `Title` wins where both are set.
 A status bar's ahead-and-behind counts, a lock beside a path, a severity
 in front of a line: these were the cases where the rule was hardest to
 keep, because until the field existed the only widget that could draw a
