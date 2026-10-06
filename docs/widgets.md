@@ -300,6 +300,24 @@ arrow-left        arrow-right       arrow-up arrow-down
 inbox    plus     x        lock     sync
 ```
 
+### Text that is read, not written
+
+A path, a key or an address shown **to be selected and copied** is not an
+editable field and not a disabled one:
+
+- `TextField.ReadOnly` keeps the field's focus, caret, selection, Ctrl+A and
+  Ctrl+C, and refuses every edit. It is not `Disabled`, which greys the field
+  out, takes no focus and cannot be copied from. Refusing through `Accept` is
+  not the same thing and never was watertight — `Accept` guards the replace
+  path, so Backspace and Delete with nothing selected, and an IME's
+  delete-surrounding, went round it.
+- `TextArea.FitRows` measures to the height the text actually wraps to rather
+  than to `MinRows` whatever it holds, with `MaxRows` as the ceiling past
+  which it scrolls. `MinRows` stays the floor. `NewTextView` is the read-only,
+  selectable, wrapping form; before `FitRows` it was `MinRows` tall whatever
+  it held, so a path a little wider than its box put a second line behind a
+  scroll bar.
+
 `Label.Icon` is the row to reach for when the mark is not on a control.
 
 A label's face is one of four: plain, `Mono`, `Bold` or `Title`. `Bold` is the

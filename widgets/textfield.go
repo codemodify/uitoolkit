@@ -37,8 +37,23 @@ type TextField struct {
 	OnEscape    func()
 	OnFocusLost func()
 	Accept      func(string) bool
-	Mono        bool
-	Password    bool // paint bullets; Text stays the real value
+	// ReadOnly shows the text and lets it be selected and copied, and
+	// refuses every edit — Qt's QLineEdit::readOnly, GTK's
+	// GtkEditable:editable, HTML's readonly.
+	//
+	// It is not Disabled: a disabled field is greyed out, takes no focus
+	// and cannot be read out or copied from, and a path or a key the
+	// person is meant to *copy* is none of those things. Caret movement,
+	// selection, Ctrl+A and Ctrl+C all still work.
+	//
+	// Refusing through Accept is not the same thing and was never
+	// watertight: Accept guards replaceSel, so it stopped typing, pastes
+	// and the deletion of a selection, while Backspace and Delete with
+	// nothing selected changed Text directly and so did an IME's
+	// delete-surrounding.
+	ReadOnly bool
+	Mono     bool
+	Password bool // paint bullets; Text stays the real value
 	// Frameless paints the text alone: the field sits inside a frame its
 	// parent drew (a spin box's field shares its frame with the buttons).
 	Frameless bool
@@ -225,7 +240,7 @@ func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 // for one, there is something to clear, and clearing it is a thing this
 // field may do at all. See [TextField.Clearable] for the four refusals.
 func (t *TextField) clearShows() bool {
-	if !t.Clearable || t.Password || t.Frameless || !t.Enabled() || t.Text == "" {
+	if !t.Clearable || t.Password || t.Frameless || !t.editable() || t.Text == "" {
 		return false
 	}
 	b := t.LocalBounds()
@@ -419,7 +434,9 @@ func (t *TextField) visual() (text string, caret, selA, selB int) {
 func (t *TextField) IsSecret() bool { return t.Password }
 
 func (t *TextField) IMEPreedit(s string, caret int) {
-	if !t.Enabled() {
+	if !t.editable() {
+		// Composing into a field that cannot take the result would show
+		// text the person can never commit.
 		return
 	}
 	n := runeCount(s)
@@ -458,6 +475,9 @@ func (t *TextField) IMEReset() {
 }
 
 func (t *TextField) IMEDeleteSurrounding(before, after int) {
+	if !t.editable() {
+		return
+	}
 	t.preedit = ""
 	t.preeditCaret = 0
 	s, caret := platform.DeleteSurroundingUTF8(t.Text, t.caret, before, after)
@@ -638,8 +658,12 @@ func (t *TextField) MouseRelease(e widget.MouseEvent) bool {
 	return true
 }
 
+// editable reports whether the text may be changed by the user. It is not
+// about the application, which may always SetText.
+func (t *TextField) editable() bool { return t.Enabled() && !t.ReadOnly }
+
 func (t *TextField) TextInput(r rune) bool {
-	if !t.Enabled() || r < 32 {
+	if !t.editable() || r < 32 {
 		return false
 	}
 	t.IMEReset()
@@ -676,7 +700,7 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 			t.replaceSel("")
 			return true
 		}
-		if t.caret > 0 {
+		if t.caret > 0 && t.editable() {
 			t.Text = dropRune(t.Text, t.caret-1)
 			t.caret--
 			t.selA, t.selB = t.caret, t.caret
@@ -693,7 +717,7 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 			t.replaceSel("")
 			return true
 		}
-		if t.caret < runeCount(t.Text) {
+		if t.caret < runeCount(t.Text) && t.editable() {
 			t.Text = dropRune(t.Text, t.caret)
 			t.changed()
 		}
@@ -827,6 +851,9 @@ func (t *TextField) previewReplace(s string) string {
 // source the drop succeeded needs to know the difference: the source
 // removes its original on the strength of that answer.
 func (t *TextField) replaceSel(s string) bool {
+	if !t.editable() {
+		return false
+	}
 	a, b := t.selA, t.selB
 	if a == b {
 		a, b = t.caret, t.caret

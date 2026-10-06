@@ -18,7 +18,24 @@ type TextArea struct {
 	Wrap        bool
 	ReadOnly    bool
 	MinRows     int
-	OnChange    func(string)
+	// FitRows measures to the height the text actually wraps to, instead of
+	// to MinRows whatever it holds — Qt's sizeHint from the document, GTK's
+	// natural height.
+	//
+	// It is what a read-only view of something short needs: a file path shown
+	// to be selected and copied is one line, or two when it is wider than the
+	// box, and a view that is MinRows tall either way shows a path with a
+	// second line hidden behind a scroll bar. Without it an application had to
+	// lay the view out at the width it was measured at, count Lines(), set
+	// MinRows and put the view back — a layout pass by hand, in a wrapper, to
+	// find out something the view already knows.
+	//
+	// MinRows is still the floor, so a view that should never be shorter than
+	// three lines is not; MaxRows is the ceiling, past which it scrolls.
+	FitRows bool
+	// MaxRows caps what FitRows grows to. Zero is no cap.
+	MaxRows  int
+	OnChange func(string)
 	// OnInput fires only for text the user put there, never for SetText
 	// from the app, and after OnChange (widgets/oninput.go).
 	OnInput     func(string)
@@ -172,12 +189,42 @@ func (t *TextArea) minRows() int {
 }
 
 func (t *TextArea) Measure(c layout.Constraints) paintengine2d.Point {
-	h := float32(t.minRows())*t.lineH() + t.fieldPad()*2
 	w := float32(220)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
+	rows := t.minRows()
+	if t.FitRows {
+		if n := t.rowsFor(w); n > rows {
+			rows = n
+		}
+		if t.MaxRows > 0 && rows > t.MaxRows {
+			rows = t.MaxRows
+		}
+	}
+	h := float32(rows)*t.lineH() + t.fieldPad()*2
 	return c.Constrain(paintengine2d.Pt(w, h))
+}
+
+// rowsFor is how many lines the text wraps to in a box this wide.
+//
+// It writes nothing down — not the line cache, not the layout, not the
+// scroll: a measure is a question, and a view that answered one by changing
+// what it shows is the bug ScrollView.Measure had. The bar's gutter is not
+// taken off, because a view asked to fit its text is one that is not meant to
+// need a bar, and where MaxRows caps it the view scrolls anyway.
+func (t *TextArea) rowsFor(boxW float32) int {
+	wrap := float32(1e6)
+	if t.Wrap {
+		if wrap = boxW - t.fieldPad()*2; wrap < 8 {
+			wrap = 8
+		}
+	}
+	lines, _ := layoutAreaMax(t.font(), t.Text, wrap, t.Wrap)
+	if len(lines) < 1 {
+		return 1
+	}
+	return len(lines)
 }
 
 func (t *TextArea) Arrange(r paintengine2d.Rect) {
