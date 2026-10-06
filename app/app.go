@@ -636,7 +636,15 @@ func (a *Application) Run() error {
 	a.mu.Lock()
 	a.looping = true
 	a.mu.Unlock()
+	// Lend the platform layer this loop, for work that must not run on a
+	// goroutine of its own — the secret clipboard's timeout, which gives
+	// selections up while the Wayland loop is dispatching callbacks that
+	// touch the same state. Only while the loop is actually running: posted
+	// work nothing will ever drain would be a passphrase left on the
+	// clipboard (platform.SetLoopPoster).
+	platform.SetLoopPoster(a.Post)
 	defer func() {
+		platform.SetLoopPoster(nil)
 		a.mu.Lock()
 		a.looping = false
 		a.mu.Unlock()

@@ -138,7 +138,13 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 
 	if clearAfter > 0 {
 		c.mu.Lock()
-		c.timer = time.AfterFunc(clearAfter, c.Clear)
+		// On the UI goroutine, not the timer's. The clear gives selections
+		// up, and on Wayland the callbacks that touch the same state run from
+		// the event loop's dispatch without the backend's lock held — so a
+		// clear from a goroutine of its own could destroy a data source the
+		// loop was destroying too, or unset a selection a cancel already in
+		// hand had made somebody else's. See platform.onLoop.
+		c.timer = time.AfterFunc(clearAfter, func() { onLoop(c.Clear) })
 		c.mu.Unlock()
 	}
 	return c
