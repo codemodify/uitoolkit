@@ -300,6 +300,16 @@ arrow-left        arrow-right       arrow-up arrow-down
 inbox    plus     x        lock     sync
 ```
 
+### Choosing more than one file
+
+`FileDialogOptions.Multiple` with `OnPickMany(paths []string)`: a player adding
+a dozen tracks opens one dialog, not twelve. It applies to `FileOpen` only —
+there is one file to save to and one folder to choose — and it reaches both
+choosers, the desktop's through the portal and the toolkit's own, where the
+listing takes a file manager's selection (Ctrl to add, Shift to extend,
+Ctrl+A). `OnPick` still fires with the first path, so code written before it
+keeps working.
+
 ### Text that is read, not written
 
 A path, a key or an address shown **to be selected and copied** is not an

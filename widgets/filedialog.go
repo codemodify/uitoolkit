@@ -54,6 +54,19 @@ type FileDialogOptions struct {
 	Entries    []FileInfo
 	OnNavigate func(path string) []FileInfo
 	OnPick     func(path string)
+	// Multiple lets the person choose several files at once (a player
+	// adding a dozen tracks to a playlist). It applies to [FileOpen] only:
+	// there is one file to save to, and one folder to choose.
+	//
+	// The native chooser has taken this all along — [platform.FileChooserOptions]
+	// has Multiple and answers with a []string — and only the widget's API
+	// dropped it, forwarding paths[0] and offering nowhere to put the rest.
+	Multiple bool
+	// OnPickMany is told every chosen path, in the order the chooser gave
+	// them. With Multiple set it is the callback to use; OnPick is still
+	// called, with the first path, so that code written against it keeps
+	// working and a dialog opened with Multiple by mistake is not silent.
+	OnPickMany func(paths []string)
 	OnCancel   func()
 	// Native shows the desktop's own file dialog (KDE's, GNOME's) through
 	// the XDG portal, as Qt and GTK apps do, instead of the toolkit's
@@ -68,17 +81,18 @@ const NativeDialogsEnv = "UITK_NATIVE_DIALOGS"
 // FileDialog is a modal list + path field. It does not open a platform dialog.
 type FileDialog struct {
 	widget.Base
-	opts    FileDialogOptions
-	path    *TextField
-	table   *TableView
-	dir     string
-	entries []FileInfo
-	picked  string
-	err     string
-	done    bool
-	hint    *Label
-	body    *FlexBox
-	overlay *Overlay
+	opts      FileDialogOptions
+	path      *TextField
+	table     *TableView
+	dir       string
+	entries   []FileInfo
+	picked    string
+	pickedAll []string
+	err       string
+	done      bool
+	hint      *Label
+	body      *FlexBox
+	overlay   *Overlay
 	// closeWindow closes the window a chooser too big for its host was put
 	// in ([DialogWindowHost]); nil for the ordinary overlay.
 	closeWindow func()
@@ -123,6 +137,12 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	// activation (Return or double click), so arrowing through the list no
 	// longer navigates on every keystroke.
 	fd.table.OnActivate = fd.onActivate
+	if opts.Multiple && opts.Mode == FileOpen {
+		// Ctrl to add, Shift to extend, Ctrl+A for all: the selection a
+		// file manager has. Selected stays the current row, so the path
+		// field and the Return key behave as they did.
+		fd.table.Mode = SelectExtended
+	}
 	fd.table.OnSort = fd.sortEntries
 	fd.table.RowHeight = 26
 
@@ -345,6 +365,7 @@ func (fd *FileDialog) finish(ok bool) {
 	fd.done = true
 	if ok {
 		fd.picked = fd.chosen()
+		fd.pickedAll = fd.chosenAll()
 	}
 	if fd.overlay != nil {
 		widget.DismissOverlay(fd.overlay)
@@ -360,6 +381,9 @@ func (fd *FileDialog) finish(ok bool) {
 	if ok {
 		if fd.opts.OnPick != nil {
 			fd.opts.OnPick(fd.picked)
+		}
+		if fd.opts.OnPickMany != nil {
+			fd.opts.OnPickMany(fd.pickedAll)
 		}
 		return
 	}
@@ -387,6 +411,37 @@ func (fd *FileDialog) Cancel() { fd.finish(false) }
 // type new.txt over it, press Save. Reading the row there returns
 // old.txt — the file the user was careful *not* to name — and the caller
 // overwrites it.
+// chosenAll is every path the person chose, which for a dialog that is not
+// Multiple is the one that chosen() answers.
+//
+// The path field wins when it names something the listing does not, because a
+// typed path is the person saying so; a selection of several rows is what
+// Multiple is for, and the field shows the first of them.
+func (fd *FileDialog) chosenAll() []string {
+	if !fd.multiple() {
+		return []string{fd.chosen()}
+	}
+	rows := fd.table.SelectedRows()
+	out := make([]string, 0, len(rows))
+	for _, i := range rows {
+		if i < 0 || i >= len(fd.entries) || fd.entries[i].Dir {
+			continue
+		}
+		out = append(out, filepath.Join(fd.dir, fd.entries[i].Name))
+	}
+	if len(out) == 0 {
+		return []string{fd.chosen()}
+	}
+	return out
+}
+
+// multiple reports whether this chooser takes more than one file. Only an
+// open-files dialog does: there is one file to save to and one folder to
+// choose.
+func (fd *FileDialog) multiple() bool {
+	return fd.opts.Multiple && fd.opts.Mode == FileOpen && fd.table != nil
+}
+
 func (fd *FileDialog) chosen() string {
 	if fd.path != nil && fd.path.Text != "" {
 		return fd.path.Text
@@ -403,6 +458,10 @@ func (fd *FileDialog) Overlay() *Overlay { return fd.overlay }
 
 // Path is the last confirmed path (empty if cancelled).
 func (fd *FileDialog) Path() string { return fd.picked }
+
+// Paths is every confirmed path (nil if cancelled). Without
+// [FileDialogOptions.Multiple] it is the one Path answers.
+func (fd *FileDialog) Paths() []string { return fd.pickedAll }
 
 // Entries is the visible listing.
 func (fd *FileDialog) Entries() []FileInfo { return fd.entries }
@@ -517,6 +576,7 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 		Title:     opts.Title,
 		Save:      opts.Mode == FileSave,
 		Directory: opts.Mode.picksFolder(),
+		Multiple:  opts.Multiple && opts.Mode == FileOpen,
 	}
 	if p, ok := from.Host().(interface{ PortalParent() string }); ok {
 		// The dialog opens as the window's child (modal to it).
@@ -551,6 +611,9 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 			}
 			if opts.OnPick != nil {
 				opts.OnPick(paths[0])
+			}
+			if opts.OnPickMany != nil {
+				opts.OnPickMany(paths)
 			}
 		})
 	})
