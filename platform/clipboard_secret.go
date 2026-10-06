@@ -68,7 +68,25 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 
 	secretMu.Lock()
 	prev := secretHeld
-	secretHeld = c
+	// Nothing is held for the length of the copy. The one being replaced is
+	// let go here, and the new one becomes the held copy only once it is
+	// actually on the clipboard, below.
+	//
+	// Because a loss arrives on the window system's own schedule, and a copy
+	// takes a round trip: on X11 the fresh selection timestamp drains the
+	// event queue, so a SelectionClear from another program's copy made
+	// milliseconds before this one is *handled inside this call*. It is a loss
+	// of the copy being replaced, but the backend only ever asked which copy
+	// is held — so with the new one already installed it was the new one that
+	// was ended: wiped, its timer stopped, OnCleared told it had gone, while
+	// the call went on to put it on the clipboard and serve it. The user's
+	// password manager said "cleared" the instant they copied, and the
+	// passphrase stayed on the clipboard until something else replaced it.
+	//
+	// Held by nobody in between, a loss handled in that window finds no copy
+	// to end, which is the truth: the one it was about has just been let go
+	// here, and the one it was not about is not on the clipboard yet.
+	secretHeld = nil
 	secretMu.Unlock()
 	// A previous secret is dropped rather than left for its own timer:
 	// it is no longer on the clipboard, so there is nothing to clear,
@@ -85,6 +103,10 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 	clipMu.Unlock()
 
 	clipboardNativeSetSecret(data)
+
+	secretMu.Lock()
+	secretHeld = c
+	secretMu.Unlock()
 
 	if clearAfter > 0 {
 		c.mu.Lock()

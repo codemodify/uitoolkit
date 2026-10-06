@@ -145,3 +145,71 @@ func TestLosingPrimaryDoesNotEndTheHeldSecretOnX11(t *testing.T) {
 		t.Error("the held secret ended without another client taking CLIPBOARD")
 	}
 }
+
+// A loss still on its way is not pinned on the copy just made.
+//
+// Another program copies, and milliseconds later this one copies a secret. The
+// SelectionClear for the first is still in the queue, and the copy's own round
+// trip for a fresh selection timestamp is what drains it — so the loss of the
+// *previous* copy is handled inside the new copy's own call. The backend only
+// ever asked which copy is held, and the new one was already installed, so it
+// was the new one that was ended: a password manager that said "cleared" the
+// instant the user copied, with the passphrase still on the clipboard.
+func TestALossOnItsWayIsNotPinnedOnTheCopyJustMade(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		t.Skip("a Wayland session too: the mirror check would rescue the copy anyway")
+	}
+	t.Cleanup(ClipboardClear)
+
+	// A reference for the length of the test, which is what a window loop
+	// holds. Without one the connection runs its own background drainer
+	// (serviceSelections) and *that* reads the SelectionClear, at a moment
+	// when the copy it is about is still the held one — the case that always
+	// worked. The bug needs the clear to still be in the queue when the next
+	// copy starts, which is exactly what an application with a window does:
+	// its loop reads events between one turn of the UI and the next.
+	conn, err := x11Retain()
+	if err != nil {
+		t.Skip("no X11 connection: ", err)
+	}
+	defer conn.release()
+
+	// One secret of this process's own, so there is a copy to lose.
+	first := ClipboardSetSecret([]byte("the-first-passphrase"), -1)
+	if !ClipboardHoldsSecret() {
+		t.Skip("the secret copy did not take")
+	}
+
+	// Another program takes CLIPBOARD, and the SelectionClear it causes is
+	// deliberately *not* read: it sits in this process's queue, which is the
+	// whole point.
+	clipOwner(t, "what the other program copied")
+	time.Sleep(50 * time.Millisecond) // time for the event to arrive, not to be read
+
+	want := []byte("the-second-passphrase")
+	secret := append([]byte(nil), want...)
+	second := ClipboardSetSecret(secret, -1)
+
+	// The end runs on a goroutine, so give it every chance to happen.
+	for i := 0; i < 20; i++ {
+		pumpX11(t)
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if second.Cleared() {
+		t.Error("the copy just made was ended by a loss of the one before it")
+	}
+	if !ClipboardHoldsSecret() {
+		t.Error("the clipboard no longer claims the secret this process just put there")
+	}
+	if !bytes.Equal(secret, want) {
+		t.Errorf("the new copy's bytes are %q, want %q — wiped under the call that was serving them", secret, want)
+	}
+	// And the one that really was lost is gone.
+	if !first.Cleared() {
+		t.Error("the copy that was replaced is still held")
+	}
+}
