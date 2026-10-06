@@ -112,8 +112,21 @@ func (s *ScrollView) MinWidth() float32 {
 	return w + s.Look().Metrics().Scroll
 }
 
+// Measure answers a question; it does not decide anything.
+//
+// It used to keep what the child measured as s.content, which is *the size the
+// view scrolls*: the range, the clamp and the thumb all read it. So a measure
+// after the layout — a splitter asking its panes' minimum widths, which probes
+// at a quarter of the natural width, or a parent measuring unbounded — left
+// the view scrolling the content as it would be at that other width, until the
+// next Arrange. A tab scrolled to the end read a range of 573 px before the
+// probe and 2979 after it: the thumb half-way down at the end of the content,
+// and the wheel going on into nothing.
+//
+// Arrange decides. This reads.
 func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 	g := s.gutter()
+	content := s.content
 	if s.child != nil {
 		cw := c.MaxW
 		if c.HasMaxW() {
@@ -127,13 +140,13 @@ func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 			// to the rest of it.
 			cw = -1
 		}
-		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
+		content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
 	}
 	lk := s.Look()
-	w, h := s.content.X+g, style.Dip(lk, 160)
+	w, h := content.X+g, style.Dip(lk, 160)
 	switch {
 	case s.ShrinkToContent:
-		h = s.content.Y
+		h = content.Y
 	case c.HasMaxH():
 		h = c.MaxH
 	}
