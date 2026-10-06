@@ -899,6 +899,10 @@ func (c *x11Conn) xdndSelNotify(xe *C.XEvent) bool {
 		// The data comes in pieces, each one a property the sender
 		// writes after we delete the last.
 		c.drop.recv.incr = true
+		// Whatever a transfer before this one had read goes first: taking
+		// the state over without zeroing left a paste's pieces in the
+		// buffer, which is the one thing dropINCRLocked exists for.
+		c.dropINCRLocked()
 		c.incrRecv = incrRecvState{active: true, win: win, prop: prop}
 		C.ui_x_del_prop(c.dpy, win, prop)
 		C.ui_x_flush(c.dpy)
@@ -925,7 +929,7 @@ func (c *x11Conn) xdndIncrPiece(piece []byte) bool {
 	c.drop.recv.data, done = AppendINCRPiece(c.drop.recv.data, piece)
 	if done {
 		c.drop.recv.done, c.drop.recv.waiting, c.drop.recv.incr = true, false, false
-		c.incrRecv = incrRecvState{}
+		c.dropINCRLocked()
 	}
 	return true
 }

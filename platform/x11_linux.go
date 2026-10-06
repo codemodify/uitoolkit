@@ -634,6 +634,7 @@ static Atom ui_sr_property(XEvent* e) { return e->xselectionrequest.property; }
 static Atom ui_sc_selection(XEvent* e) { return e->xselectionclear.selection; }
 
 static Atom ui_sn_property(XEvent* e) { return e->xselection.property; }
+static Atom ui_sn_selection(XEvent* e) { return e->xselection.selection; }
 static Atom ui_sn_target(XEvent* e) { return e->xselection.target; }
 static Window ui_sn_requestor(XEvent* e) { return e->xselection.requestor; }
 
@@ -1216,6 +1217,8 @@ type x11Conn struct {
 	// does.
 	pasteData []byte
 	pasteDone bool
+	// pasteWant is the selection the paste in hand asked about, checked
+	// against every reply (pasteAskedFor).
 	pasteWant C.Atom
 	incrRecv  incrRecvState
 	// pasteWaiting is set while readSelection is waiting for a value. It
@@ -1595,6 +1598,13 @@ func (c *x11Conn) releaseLocked() {
 }
 
 func (c *x11Conn) closeLocked() {
+	// Nothing outlives the connection. A paste's bytes and a transfer's
+	// pieces were cleared only by the *next* paste, and a manager that sits
+	// in the tray can go days between two — so the passphrase it last pasted
+	// stayed in the heap for all of them, and for the rest of the run after
+	// the X connection was let go.
+	c.wipePasteLocked()
+	c.dropINCRLocked()
 	if c.dpy != nil {
 		for k, cur := range c.cursors {
 			if cur != 0 {
@@ -2561,6 +2571,11 @@ type incrRecvState struct {
 	win    C.Window
 	prop   C.Atom
 	buf    []byte
+	// discard: the paste that started this transfer has given up, so every
+	// piece still to come is zeroed and dropped as it arrives. The transfer
+	// is kept running rather than abandoned because an owner left waiting on
+	// a property it has already written is an owner that hangs.
+	discard bool
 }
 
 type incrSendState struct {
@@ -2744,6 +2759,16 @@ func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
 		return
 	}
 	prop := C.ui_sn_property(xe)
+	// Only the answer to the paste that is waiting for one. A reply that
+	// arrives after readSelection gave up — a slow owner, another password
+	// manager, a terminal busy for a second — used to be put in pasteData all
+	// the same, and the next paste took it: of PRIMARY, or of the ordinary
+	// text another field asked for, served as the answer to a secret paste.
+	// pasteWaiting was added for the INCR path and this one never asked it.
+	if !c.pasteWaiting || !c.pasteAskedFor(xe) {
+		c.discardSelNotify(xe, prop)
+		return
+	}
 	if prop == 0 {
 		c.pasteDone = true
 		c.wipePasteLocked()
@@ -2812,6 +2837,17 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 		// A drop's data arrives in the same pieces as a paste's, into
 		// its own buffer.
 		if c.xdndIncrPiece(piece) {
+			return
+		}
+		if c.incrRecv.discard {
+			// Nobody is waiting for this one: the piece is zeroed and
+			// dropped, and the transfer is let go when its end arrives.
+			for i := range piece {
+				piece[i] = 0
+			}
+			if len(piece) == 0 {
+				c.dropINCRLocked()
+			}
 			return
 		}
 		var done bool
@@ -2973,6 +3009,77 @@ func (c *x11Conn) dropINCRLocked() {
 		c.incrRecv.buf[i] = 0
 	}
 	c.incrRecv = incrRecvState{}
+}
+
+// pasteAskedFor reports whether a conversion reply is one the paste in hand
+// asked for.
+//
+// The selection is the half that matters, and the one the bug was about: a
+// reply about PRIMARY cannot be the answer to a paste of CLIPBOARD, whatever
+// its timing. The target is checked loosely on purpose — a paste asks for
+// UTF8_STRING and then for STRING, both of them text of the same selection, so
+// either answers it, and an owner that echoes the target it converted *to*
+// rather than the one it was asked for is not made to fail over it. A reply
+// with no target at all (a refusal from a client that leaves the field out) is
+// taken, because answering the paste with "nothing" at once is better than
+// making it wait out its deadline.
+func (c *x11Conn) pasteAskedFor(xe *C.XEvent) bool {
+	if C.ui_sn_selection(xe) != c.pasteWant {
+		return false
+	}
+	switch C.ui_sn_target(xe) {
+	case c.atomUTF8, c.atomString, 0:
+		return true
+	}
+	return false
+}
+
+// discardSelNotify throws away a conversion nobody is waiting for.
+//
+// Read rather than ignored, and zeroed rather than merely freed: the value is
+// in this process's heap either way, and the property has to be deleted or an
+// owner that waits for the requestor to take it is left waiting forever. An
+// INCR reply becomes a transfer that reads its pieces into nothing, for that
+// same reason.
+func (c *x11Conn) discardSelNotify(xe *C.XEvent, prop C.Atom) {
+	if prop == 0 || c.dpy == nil {
+		return
+	}
+	var data *C.uchar
+	var n C.ulong
+	var typ C.Atom
+	C.ui_get_prop(c.dpy, C.ui_sn_requestor(xe), prop, &data, &n, &typ)
+	if data != nil {
+		C.ui_zero(unsafe.Pointer(data), C.size_t(max(n, 0)))
+		C.ui_xfree(unsafe.Pointer(data))
+	}
+	if typ == c.atomINCR && !c.incrRecv.active {
+		c.incrRecv = incrRecvState{active: true, win: C.ui_sn_requestor(xe), prop: prop, discard: true}
+	}
+}
+
+// discardINCRLocked keeps a transfer running with nowhere for it to go: what it
+// has read is zeroed at once, and every piece still to come is zeroed as it
+// arrives.
+//
+// For a transfer still going when its paste gave up. Abandoning it outright is
+// the other option and it is worse twice over — the pieces already read would
+// sit in the buffer until some later paste replaced them, which for the private
+// key that made the transfer long enough to need INCR is the whole point of
+// this path, and the owner would be left waiting on a property.
+func (c *x11Conn) discardINCRLocked() {
+	for i := range c.incrRecv.buf {
+		c.incrRecv.buf[i] = 0
+	}
+	c.incrRecv.buf = nil
+	c.incrRecv.discard = true
+}
+
+// endPasteWaitLocked says nobody is waiting for a conversion any more, so that
+// whatever arrives next is thrown away instead of answering the paste after it.
+func (c *x11Conn) endPasteWaitLocked() {
+	c.pasteWaiting = false
+	c.pasteWant = 0
 }
 
 // wipePasteLocked zeroes whatever a paste read back and drops it. A
@@ -3160,7 +3267,7 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 		C.ui_wait(dpy, 5)
 		x11Mu.Lock()
 		if c.dpy == nil {
-			c.pasteWaiting = false
+			c.endPasteWaitLocked()
 			x11Mu.Unlock()
 			return false, false
 		}
@@ -3180,14 +3287,18 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) 
 			C.ui_wait(dpy, 5)
 			x11Mu.Lock()
 			if c.dpy == nil {
-				c.pasteWaiting = false
+				c.endPasteWaitLocked()
 				x11Mu.Unlock()
 				return false, false
 			}
 		}
 	}
 	ok := c.pasteDone
-	c.pasteWaiting = false
+	c.endPasteWaitLocked()
+	if !ok && c.incrRecv.active {
+		// A transfer still running when its paste gave up.
+		c.discardINCRLocked()
+	}
 	x11Mu.Unlock()
 	return ok, ok
 }

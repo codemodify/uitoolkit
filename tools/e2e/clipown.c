@@ -9,7 +9,13 @@
 // It prints "owned" and flushes as soon as the server has acknowledged the
 // ownership, so the test can wait for that rather than sleep.
 //
-// usage: clipown TEXT SECONDS
+// A third argument, SLOW_MS, makes it answer a conversion request that many
+// milliseconds late. That is the "slow owner" the paste reader has to cope
+// with — another password manager, a terminal busy for a second — and a
+// reply that arrives after the paste asking for it gave up waiting is the
+// only way to test what becomes of one.
+//
+// usage: clipown TEXT SECONDS [SLOW_MS]
 #define _POSIX_C_SOURCE 199309L
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,12 +26,13 @@
 
 int main(int argc, char **argv) {
 	if (argc < 3) {
-		fprintf(stderr, "usage: clipown TEXT SECONDS\n");
+		fprintf(stderr, "usage: clipown TEXT SECONDS [SLOW_MS]\n");
 		return 2;
 	}
 	const char *text = argv[1];
 	int len = (int)strlen(text);
 	double secs = atof(argv[2]);
+	long slow_ms = argc > 3 ? atol(argv[3]) : 0;
 
 	Display *d = XOpenDisplay(NULL);
 	if (!d) {
@@ -83,6 +90,14 @@ int main(int argc, char **argv) {
 				XChangeProperty(d, r->requestor, r->property, r->target, 8,
 					PropModeReplace, (const unsigned char *)text, len);
 				a.property = r->property;
+			}
+			if (slow_ms > 0) {
+				// Deliberately in the handler: one request, answered late,
+				// is the whole point, and a queue of them would need a
+				// scheduler this helper has no use for.
+				struct timespec late = {slow_ms / 1000,
+					(slow_ms % 1000) * 1000 * 1000};
+				nanosleep(&late, NULL);
 			}
 			XSendEvent(d, r->requestor, False, 0, (XEvent *)&a);
 			XFlush(d);

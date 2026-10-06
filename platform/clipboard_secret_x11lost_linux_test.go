@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -26,7 +27,7 @@ import (
 
 // clipOwner starts another program that takes CLIPBOARD and serves text on
 // it, and returns once the X server has acknowledged the ownership.
-func clipOwner(t *testing.T, text string) {
+func clipOwner(t *testing.T, text string, slow ...time.Duration) {
 	t.Helper()
 	bin, err := filepath.Abs("../tools/e2e/clipown")
 	if err != nil {
@@ -35,7 +36,11 @@ func clipOwner(t *testing.T, text string) {
 	if _, err := os.Stat(bin); err != nil {
 		t.Skip("tools/e2e/clipown is not built (tools/e2e/build.sh)")
 	}
-	cmd := exec.Command(bin, text, "20")
+	late := "0"
+	if len(slow) > 0 {
+		late = strconv.FormatInt(slow[0].Milliseconds(), 10)
+	}
+	cmd := exec.Command(bin, text, "20", late)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -211,5 +216,56 @@ func TestALossOnItsWayIsNotPinnedOnTheCopyJustMade(t *testing.T) {
 	// And the one that really was lost is gone.
 	if !first.Cleared() {
 		t.Error("the copy that was replaced is still held")
+	}
+}
+
+// A paste that gave up waiting does not keep what arrives after it.
+//
+// A slow owner — another password manager, a terminal busy for a second — can
+// answer a conversion after the paste that asked for it has returned. Nothing
+// asked whether anyone was still waiting: the value was put in pasteData, and
+// since nothing but the *next* paste ever cleared it, the passphrase sat in
+// this process's heap until then. In a manager that lives in the tray, days.
+//
+// Worse, the next paste could be answered by it: the reply was not checked
+// against what had been asked for either, so a late answer about PRIMARY, or
+// about the ordinary text another field asked for, could be served as the
+// answer to a secret paste.
+func TestAPasteThatGaveUpDoesNotKeepWhatArrivesAfterIt(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	conn, err := x11Retain()
+	if err != nil {
+		t.Skip("no X11 connection: ", err)
+	}
+	defer conn.release()
+	t.Cleanup(ClipboardClear)
+
+	const theirs = "the-late-answer-nobody-waited-for"
+	clipOwner(t, theirs, 400*time.Millisecond)
+
+	// Give up long before the owner answers.
+	if ok, _ := conn.readSelection(conn.atomClipboard, 30*time.Millisecond); ok {
+		t.Skip("the owner answered inside the deadline; it is not slow enough to test this")
+	}
+
+	// Now read the events for longer than the owner takes, which is what any
+	// window loop does.
+	deadline := time.Now().Add(1500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		pumpX11(t)
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	x11Mu.Lock()
+	got := append([]byte(nil), conn.pasteData...)
+	waiting := conn.pasteWaiting
+	x11Mu.Unlock()
+	if waiting {
+		t.Error("nothing is pasting, and the connection still says one is waiting")
+	}
+	if len(got) != 0 {
+		t.Errorf("the paste that gave up is holding %q, want nothing", got)
 	}
 }
