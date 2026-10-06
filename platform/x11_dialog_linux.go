@@ -116,6 +116,33 @@ func (s *x11Surface) setOwnerLocked(owner Surface) bool {
 	return true
 }
 
+// reassertOwnedChildrenLocked re-publishes WM_TRANSIENT_FOR on every window
+// this one owns, after this one has been made again on another visual.
+//
+// A recreated window is a *new* X window with a new id, and what each of its
+// children told the server still names the window that was destroyed. The
+// relationship on this side is a pointer and survives; the server's copy of it
+// does not, and a window manager is left keeping a utility panel together with
+// a window that no longer exists — not placed over its owner, not minimized
+// with it, not raised with it.
+//
+// It is the other half of recreateOnVisual's setOwnerLocked: that one restates
+// who *this* window belongs to, and this one who belongs to this window. An
+// application could only have fixed it by watching for native window ids to
+// change, which is the one thing a toolkit is for.
+func (s *x11Surface) reassertOwnedChildrenLocked() {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return
+	}
+	for _, o := range c.surfaces {
+		if o == nil || o == s || o.win == 0 || o.owner != s {
+			continue
+		}
+		C.ui_dlg_set_transient(c.dpy, o.win, s.win)
+	}
+}
+
 // SetSkipTaskbar keeps the window out of the desktop's window list and its
 // workspace switcher ([TaskbarSurface]).
 //

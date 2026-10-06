@@ -4272,6 +4272,9 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	// may write either of them.
 	s.setWindowRoleLocked(s.role)
 	s.setOwnerLocked(ownerOf(s.owner))
+	// And whoever belongs to *this* window: their WM_TRANSIENT_FOR names the
+	// window just destroyed, and only this side knows the new id.
+	s.reassertOwnedChildrenLocked()
 	s.setInitialStateLocked(s.state)
 	s.setXdndAwareLocked()
 	s.selectXI2Locked()

@@ -244,3 +244,49 @@ func TestARecreatedPanelKeepsItsTypeOwnerAndPolicy(t *testing.T) {
 		t.Error("the new window is in the window list the old one was out of")
 	}
 }
+
+// An owner that is re-made keeps the windows it owns.
+//
+// An X window's visual is fixed when it is created, so a frame that gains a
+// shadow destroys the window and makes another one with a new id. The windows
+// that belong to it still told the server the old id — a window manager was
+// left holding a panel together with a window that no longer exists, and the
+// only way an application could have noticed was to watch native window ids,
+// which is the one thing it should never have to do.
+func TestOwnedWindowsSurviveTheirOwnersRecreation(t *testing.T) {
+	main := x11Window(t, WindowOptions{Title: "uitoolkit-main"})
+	panel := x11Window(t, WindowOptions{
+		Title: "uitoolkit-panel", Role: RoleUtility, Owner: main,
+	})
+	was := uint64(main.win)
+	if got := transientFor(panel); got != was {
+		t.Fatalf("WM_TRANSIENT_FOR is %d before anything happened, want %d", got, was)
+	}
+	// The public way a window changes visual: a frame that needs alpha.
+	main.SetFrame(Frame{Alpha: true, Margin: FrameInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}})
+	if uint64(main.win) == was {
+		t.Skip("the window was not re-made (no compositing manager, or no 32-bit visual)")
+	}
+	if got := transientFor(panel); got != uint64(main.win) {
+		t.Errorf("after its owner was re-made as %d, the panel's WM_TRANSIENT_FOR is %d (the destroyed %d)",
+			uint64(main.win), got, was)
+	}
+	// And the owner still owns itself nothing: the relationship is one way.
+	if got := transientFor(main); got != 0 {
+		t.Errorf("the re-made owner has WM_TRANSIENT_FOR %d, want none", got)
+	}
+}
+
+// The control: a window nobody owns is not given one by the re-creation.
+func TestRecreationGivesAnUnownedWindowNoOwner(t *testing.T) {
+	main := x11Window(t, WindowOptions{Title: "uitoolkit-main"})
+	other := x11Window(t, WindowOptions{Title: "uitoolkit-other"})
+	was := uint64(main.win)
+	main.SetFrame(Frame{Alpha: true, Margin: FrameInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}})
+	if uint64(main.win) == was {
+		t.Skip("the window was not re-made")
+	}
+	if got := transientFor(other); got != 0 {
+		t.Errorf("an unowned window was made transient for %d", got)
+	}
+}
