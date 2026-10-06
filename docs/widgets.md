@@ -961,6 +961,45 @@ guide a look that rules its columns draws between them. A screen reader
 reads the pair as one row ("Blue Monday, 7:29"). Three columns with a header
 over them is a `TableView`.
 
+### Selecting, committing, and where a row is
+
+Selection and commitment are two things, and a list that has only one makes
+an application guess:
+
+```go
+l.OnSelect   = func(i int) { show(i) }   // the current row changed
+l.OnActivate = func(i int) { play(i) }   // the user committed to it
+```
+
+`OnActivate` is Return, Space, a double click, a screen reader's default
+action, and `l.Activate(i)` for an application's own gesture. With no
+`OnActivate` the list behaves as it always did and commitment arrives through
+`OnSelect`, so code written before it exists is unaffected. `TableView` has
+the same pair; `TreeView`'s commitment expands or collapses the node.
+
+**A double click is two clicks on the same row of the same content with
+nothing in between.** All three widgets drop the first click at every
+boundary a gesture cannot cross: the pointer leaving, the focus going, a
+wheel or programmatic scroll, a press on the scroll bar, a secondary press, a
+Ctrl or Shift click, a key the widget acts on, type-ahead, a press while
+disabled, and a change of row count. An application does not need a guard of
+its own against a click that pairs with one from before an interruption.
+
+`l.RowAt(p)` is the row under a point in the list's own coordinates, or −1,
+for an application that recognises a gesture of its own and needs to know what
+it is over. It checks **both** axes against the box the rows are actually
+drawn in, so a point in the view frame, in the gutter a bar takes out of the
+content, or in the gap a skin's layout leaves between its rows and its groove
+is −1 and not the row level with it. It is the same hit test the list uses
+itself, which is the point: what the application is told is under the pointer
+is what the list would act on.
+
+`l.ContextKeepsSelection` leaves the selection alone on a secondary press
+instead of making the row under it current first. Off by default, because
+selecting first is what every file manager and mail client does; it is for the
+menu that is about the *selection* ("delete these four"). `OnContext` is told
+the row either way.
+
 ## Rich text
 
 `widgets.NewRichText(placeholder)` (or `NewRichTextHTML(html)`) is a
