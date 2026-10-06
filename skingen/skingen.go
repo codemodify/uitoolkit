@@ -371,14 +371,30 @@ func Manifest(p *Plan) ([]byte, error) {
 
 	sheets := map[string]any{}
 	sprites := map[string]any{}
+	// Whether the plan's sheets agree about sampling. One pixelated sheet used
+	// to set design.pixelated for the *whole skin*, and only that sheet wrote
+	// the key — so in a mixed plan the loader, which rightly inherits the
+	// design default for an omitted key, loaded the deliberately smooth sheets
+	// as pixelated. The plan said one thing and the manifest meant another,
+	// before anything was rendered.
+	allPixelated, anyPixelated := len(p.Sheets) > 0, false
+	for _, sh := range p.Sheets {
+		allPixelated = allPixelated && sh.Pixelated
+		anyPixelated = anyPixelated || sh.Pixelated
+	}
+	mixed := anyPixelated && !allPixelated
 	for _, sh := range p.Sheets {
 		files := map[string]any{}
 		for _, s := range Scales {
 			files[scaleKey(s)] = filepath.ToSlash(sheetFile(sh.Name, s))
 		}
-		if sh.Pixelated {
+		switch {
+		case mixed:
+			// Every sheet says for itself, both ways, and no design default
+			// is promoted for one of them to inherit by accident.
+			files["pixelated"] = sh.Pixelated
+		case sh.Pixelated:
 			files["pixelated"] = true
-			put("design", map[string]any{"pixelated": true})
 		}
 		sheets[sh.Name] = files
 		sortCells(sh.Cells)
@@ -395,6 +411,10 @@ func Manifest(p *Plan) ([]byte, error) {
 			}
 			sprites[c.Name] = sp
 		}
+	}
+	if allPixelated {
+		// They agree: say it once, where a reader of the manifest looks.
+		put("design", map[string]any{"pixelated": true})
 	}
 	put("sheets", sheets)
 	put("sprites", sprites)
