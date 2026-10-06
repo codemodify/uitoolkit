@@ -4,7 +4,9 @@ package platform
 
 import (
 	"os"
+	"os/exec"
 	"testing"
+	"time"
 )
 
 // A clear gives up the selections this process owns. It used to copy an empty
@@ -134,4 +136,121 @@ func TestASecretCopyDoesNotLeaveThePrimarySelectionOwned(t *testing.T) {
 	if ok {
 		t.Errorf("a read of the primary selection is answered %q from this process's cache", got)
 	}
+}
+
+// wlPrimaryOwner makes another program hold the primary selection, and reports
+// whether it took. wl-copy is a second client, which is the only way to have a
+// selection that is not this process's — the same reason the X11 tests need
+// tools/e2e/clipown.
+func wlPrimaryOwner(t *testing.T, text string) {
+	t.Helper()
+	if _, err := exec.LookPath("wl-copy"); err != nil {
+		t.Skip("wl-clipboard is not installed")
+	}
+	// --foreground, started and killed on the way out, like tools/e2e/clipown:
+	// the default wl-copy forks a server that inherits the pipes, so waiting
+	// for the command to finish waits for the selection to be given up again.
+	cmd := exec.Command("wl-copy", "--foreground", "--primary", text)
+	if err := cmd.Start(); err != nil {
+		t.Skip("wl-copy did not start: ", err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
+	// And it has to reach the compositor before anything is asked of it.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if got, ok := wlPrimaryText(t); ok && got == text {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Skip("the compositor did not give wl-copy the primary selection")
+}
+
+// wlPrimaryText is what the primary selection holds, asked of the compositor
+// through another program rather than of this process's own cache.
+func wlPrimaryText(t *testing.T) (string, bool) {
+	t.Helper()
+	out, err := exec.Command("wl-paste", "--primary", "--no-newline").Output()
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
+}
+
+// A secret copy leaves another program's primary selection alone.
+//
+// It gives the primary selection up on purpose — a middle click anywhere would
+// otherwise paste the passphrase — but it did so with set_selection(null)
+// whenever a primary device existed at all, and that unsets whichever client's
+// selection it is. So copying a password threw away whatever the person had
+// selected somewhere else, and the middle click after it pasted nothing. The
+// copy button's click supplies a fresh serial, so a compositor that checks one
+// accepts it.
+//
+// wlClipClear has guarded this since the same bug was found there; the copy
+// path never did.
+func TestAWaylandSecretCopyLeavesAnotherProgramsPrimarySelectionAlone(t *testing.T) {
+	c := wlHeld(t)
+	t.Cleanup(ClipboardClear)
+
+	const theirs = "what the person had selected in another program"
+	wlPrimaryOwner(t, theirs)
+
+	// A window, and a serial from it. set_selection carries the serial of the
+	// input event that justifies it, and a compositor refuses one it did not
+	// issue — so a windowless test process, whose serial is 0, cannot reach
+	// this bug at all: every request it makes is dropped, including the wrong
+	// one. The application that hits it has a serial because the person
+	// clicked a copy button. This is the smallest version of that.
+	wlSerialFromAWindow(t)
+
+	// This process owns no primary source — it has copied nothing — so there
+	// is nothing of its own to give up, and anything it gives up is somebody
+	// else's.
+	if _, prim, _ := sources(c); prim {
+		t.Fatal("this process already owns the primary selection; the test would prove nothing")
+	}
+
+	ClipboardSetSecret([]byte("the-passphrase"), -1)
+	if clip, _, _ := sources(c); !clip {
+		t.Skip("the secret copy did not take the clipboard")
+	}
+
+	got, ok := wlPrimaryText(t)
+	if !ok || got != theirs {
+		t.Errorf("after a secret copy the primary selection reads %q (ok=%v), want the other program's %q", got, ok, theirs)
+	}
+}
+
+// wlSerialFromAWindow gives the connection a serial the compositor will
+// accept, by making a window and letting it be entered. Nothing is injected:
+// in a nested compositor the keyboard or pointer enter arrives on its own
+// within a frame or two.
+func wlSerialFromAWindow(t *testing.T) {
+	t.Helper()
+	raw, err := (wlBackend{}).NewSurface(WindowOptions{Title: "uitk-serial", Width: 300, Height: 200})
+	if err != nil {
+		t.Skip("no surface: ", err)
+	}
+	s, ok := raw.(*wlSurface)
+	if !ok {
+		t.Skip("not a Wayland surface")
+	}
+	t.Cleanup(func() { s.Close() })
+	s.Present(nil)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		s.Poll()
+		wlMu.Lock()
+		ser := s.conn.serial
+		wlMu.Unlock()
+		if ser != 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Skip("the window never got an input serial; the compositor would refuse every selection request")
 }

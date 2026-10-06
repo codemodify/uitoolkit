@@ -4680,17 +4680,30 @@ func wlClipSetSel(b []byte, secret bool) bool {
 	// The one that is there is dropped rather than left behind an
 	// application that believes it has just copied a password.
 	if secret {
+		// A source of *this program's own* is given up; anybody else's
+		// primary selection is not touched. set_selection with a null source
+		// unsets whichever client's selection it is, so the guard is the
+		// whole of the difference — without it, copying a password threw
+		// away whatever the person had selected in another program, and the
+		// middle click after it pasted nothing. wlClipClear has had the
+		// guard since the same bug was fixed there; this path never got it,
+		// and the reason the copy gives the primary selection up at all is
+		// about a selection of ours that would otherwise sit behind an
+		// application that believes it has just copied a password. Somebody
+		// else's selection was never part of that.
 		if c.primSrc != nil {
 			C.ui_wl_prim_source_destroy(c.primSrc)
 			c.primSrc = nil
-		}
-		if c.primMan != nil && c.primDev != nil {
-			C.ui_wl_prim_set(c.primDev, nil, C.uint32_t(c.serial))
+			if c.primMan != nil && c.primDev != nil {
+				C.ui_wl_prim_set(c.primDev, nil, C.uint32_t(c.serial))
+			}
 		}
 		// Not set(""), which marks the cache *owned*: a read of the primary
 		// selection then answered with this process's empty string instead
 		// of falling through to whichever client actually holds it. The
-		// selection is not ours any more, and the cache has to say so.
+		// cache goes either way — it is this process's copy and costs
+		// nothing to drop — while the protocol call above is only for a
+		// source of ours.
 		c.prim.invalidate()
 	} else if c.primMan != nil && c.primDev != nil {
 		if c.primSrc != nil {
