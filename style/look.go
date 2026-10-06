@@ -324,11 +324,21 @@ func (l *Classic) faceOrBody(face *Font) *Font {
 	return l.body
 }
 
+// mutedFor is face in the muted ink: the caller's own typeface, weight and
+// size, with the palette's muted colour.
+//
+// It used to keep the supplied face only when its family was the look's
+// monospace one and answer with the look's cached muted face for everything
+// else. So a text field drawn with an explicit 11-point proportional face
+// typed at 11 points and showed its *placeholder* at the look's 16 — a
+// placeholder that clips or sits wrong in a field sized for the smaller text,
+// and that looked like a deliberate style rather than a dropped argument.
+// Muting is a change of colour; it was changing the metrics with it.
 func (l *Classic) mutedFor(face *Font) *Font {
-	if face != nil && face.Family == l.MonoFamily() {
-		return BakeFamily(face.Family, WeightRegular, face.Size, l.palette.TextMuted)
+	if face == nil {
+		return l.muted
 	}
-	return l.muted
+	return BakeFamily(face.Family, face.Weight, face.Size, l.palette.TextMuted)
 }
 
 func (l *Classic) baseDrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
@@ -628,8 +638,18 @@ func (l *Classic) baseDrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Re
 	ctx.DrawRect(b, paintengine2d.Fill(l.palette.Overlay))
 }
 
+// baseDrawMenuBar paints the bar's face through the engine, which is how a
+// skin's bound "bar" art reaches it.
+//
+// All four bar painters used to call paintBezel directly — the raw token
+// drawing — instead of paintFace, which goes through the engine. The skin
+// engine delegates the *layout* of a bar to this painter precisely because the
+// face comes back through Face(), as it does for a text field; calling the
+// bezel skipped that, so a pack with a perfectly valid "bar" part painted the
+// look's grey anyway and an application had to wrap LookAndFeel.DrawMenuBar to
+// get its own back.
 func (l *Classic) baseDrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
-	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
+	l.paintFace(ctx, b, roleBar, StateNone)
 }
 
 func (l *Classic) baseDrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
@@ -848,7 +868,7 @@ func drawMenuRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, on bool, co
 }
 
 func (l *Classic) baseDrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
-	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
+	l.paintFace(ctx, b, roleBar, StateNone)
 }
 
 func (l *Classic) baseDrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
@@ -943,7 +963,7 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 
 func (l *Classic) baseDrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
 	p := l.palette
-	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
+	l.paintFace(ctx, b, roleBar, StateNone)
 	if len(parts) == 0 {
 		return
 	}
@@ -961,7 +981,7 @@ func (l *Classic) baseDrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.
 }
 
 func (l *Classic) baseDrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
-	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
+	l.paintFace(ctx, b, roleBar, StateNone)
 }
 
 // ToolItemGap is the horizontal space between adjacent tool buttons.
