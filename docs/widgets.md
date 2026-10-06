@@ -300,6 +300,31 @@ arrow-left        arrow-right       arrow-up arrow-down
 inbox    plus     x        lock     sync
 ```
 
+### A mark the toolkit does not ship
+
+`style.RegisterIcon(stem, draw)` gives the toolkit a vector for one of the
+application's own and answers the `ToolIcon` to use for it — in `Button.Icon`,
+`MenuItem.Icon`, `TableColumn.Icon`, `Label.Icon`, `DrawToolIcon`, anywhere a
+toolkit icon goes. A mail client's *server*, *compact folder*, *plain text*
+and *turn this filter off* are in neither the typed ids nor the shipped stems,
+and before this the only way to draw one was outside the icon system, losing
+the sets, the sizes and the tinting with it.
+
+It takes a **stem**, because that is what a file icon set matches on: the
+application's drawing is the fallback, not the last word, so a person whose
+icon set ships `server.svg` gets theirs exactly as for every stem the toolkit
+ships. Re-registering a stem replaces its drawing and keeps its id. The
+toolkit's own names and stems are refused — they have drawings in every set,
+and replacing one quietly would make one application's icons differ from
+everybody's for no reason the person could see.
+
+```go
+var iconServer, _ = style.RegisterIcon("server", func(ctx *paintengine2d.Context,
+	b paintengine2d.Rect, col paintengine2d.Color) {
+	// Drawn for a 24x24 box, as the toolkit's own are, and scaled from there.
+})
+```
+
 ### Choosing more than one file
 
 `FileDialogOptions.Multiple` with `OnPickMany(paths []string)`: a player adding

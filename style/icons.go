@@ -65,6 +65,9 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 		if DrawSystemToolIcon(ctx, b, icon, col, set) {
 			return
 		}
+		if drawAppIcon(ctx, b, icon, col) {
+			return
+		}
 		drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
 		return
 	}
@@ -79,11 +82,20 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 		// A stem-only icon, which nothing anywhere can draw, and a set
 		// that was never installed, which the person needs to be told
 		// about, both fall to the missing-icon mark (see loadFileIcon).
+		// An application's own icon is drawn by the application, which is
+		// the point of registering one: the set has no file for a stem it
+		// has never heard of, and the mark is still better than a box.
+		if drawAppIcon(ctx, b, icon, col) {
+			return
+		}
 		if Drawable(icon) && fileIconSetInstalled(set) {
 			drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
 			return
 		}
 		drawEmbeddedNoIcon(ctx, b, col)
+		return
+	}
+	if drawAppIcon(ctx, b, icon, col) {
 		return
 	}
 	switch set {

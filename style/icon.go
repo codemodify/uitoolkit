@@ -456,6 +456,11 @@ func IconByStem(stem string) (ToolIcon, bool) {
 			return stemIconBase + ToolIcon(i), true
 		}
 	}
+	// And an icon the application registered under that stem
+	// ([RegisterIcon]), which the toolkit can draw like its own.
+	if icon, ok := RegisteredIcon(stem); ok {
+		return icon, true
+	}
 	return IconNone, false
 }
 
@@ -475,11 +480,16 @@ const stemIconBase ToolIcon = 1 << 12
 // — and the toolkit has its own vector to draw meanwhile. A set missing
 // a *stem-only* icon has nothing behind it anywhere, and the
 // missing-icon mark is the only honest answer.
-func Drawable(icon ToolIcon) bool { return icon != IconNone && icon < stemIconBase }
+func Drawable(icon ToolIcon) bool {
+	return icon != IconNone && (icon < stemIconBase || appIcon(icon))
+}
 
 // StemOf is the file stem an icon resolves to, including the stem-only
 // ones from [IconByStem]. It is "" for IconNone.
 func StemOf(icon ToolIcon) string {
+	if stem := appIconStem(icon); stem != "" {
+		return stem
+	}
 	if icon >= stemIconBase {
 		if i := int(icon - stemIconBase); i >= 0 && i < len(shippedIconStems) {
 			return shippedIconStems[i]
