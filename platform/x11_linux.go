@@ -1094,6 +1094,9 @@ func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		}
 		s.task.init(opts)
 		s.setWindowRoleLocked(opts.Role)
+		// Asked for hidden: the first Present draws into the window and
+		// leaves it unmapped (WindowOptions.Hidden).
+		s.hidden = opts.Hidden
 		if opts.KeepAbove {
 			s.state.KeepAbove = true
 		}

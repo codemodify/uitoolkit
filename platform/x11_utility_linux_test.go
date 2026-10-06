@@ -290,3 +290,42 @@ func TestRecreationGivesAnUnownedWindowNoOwner(t *testing.T) {
 		t.Errorf("an unowned window was made transient for %d", got)
 	}
 }
+
+// A window asked for hidden is never mapped, and says so.
+//
+// Surface.Visible answers the surface's *current* state, so a fresh window
+// reports false whether it is about to appear or not — and an application
+// guarding its Hide with `if win.Visible()` skipped it and let the window
+// show on the next presentation. WindowOptions.Hidden is the intent, stated
+// before anything is presented.
+func TestAWindowAskedForHiddenIsNeverMapped(t *testing.T) {
+	s := x11Window(t, WindowOptions{Title: "uitoolkit-hidden", Hidden: true})
+	if s.Visible() {
+		t.Error("a hidden window reports itself visible before any frame")
+	}
+	if err := s.Present(nil); err != nil {
+		t.Fatalf("present: %v", err)
+	}
+	if s.Visible() {
+		t.Error("the first present mapped a window asked for hidden")
+	}
+	// Show maps it, which is how the application brings it out.
+	s.Show()
+	if err := s.Present(nil); err != nil {
+		t.Fatalf("present after Show: %v", err)
+	}
+	if !s.Visible() {
+		t.Error("Show did not map it")
+	}
+}
+
+// The control: an ordinary window maps on its first frame, as it always did.
+func TestAnOrdinaryX11WindowMapsOnItsFirstFrame(t *testing.T) {
+	s := x11Window(t, WindowOptions{Title: "uitoolkit-shown"})
+	if err := s.Present(nil); err != nil {
+		t.Fatalf("present: %v", err)
+	}
+	if !s.Visible() {
+		t.Error("an ordinary window was not mapped by its first present")
+	}
+}

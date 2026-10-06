@@ -640,7 +640,9 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	if opts.KeepAbove {
 		s.SetKeepAbove(true)
 	}
-	if !opts.Headless {
+	if !opts.Headless && !opts.Hidden {
+		// Hidden: made, drawn into, and shown when the application says so
+		// (WindowOptions.Hidden).
 		procShowWindow.Call(hwnd, swShow)
 		s.visible = true
 	}

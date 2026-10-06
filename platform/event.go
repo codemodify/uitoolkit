@@ -420,6 +420,20 @@ type WindowOptions struct {
 	// its nature; this is for a window that wants it without the rest of the
 	// role, and for one that wants it back.
 	SkipTaskbar bool
+	// Hidden opens the window without showing it: the first Present draws
+	// into it and does not put it on screen, and [Surface.Visible] answers
+	// false and means it until Show.
+	//
+	// It is for a window whose visibility the application decides, which is
+	// the panel of a player that remembers whether its playlist was open.
+	// Without it such a window had to be made and then hidden, and
+	// "visible?" could not be asked in between: a fresh surface has not been
+	// mapped yet, so Visible() is false whether it is about to appear or
+	// not, and an application guarding its Hide with `if win.Visible()`
+	// skipped it and let the panel show on the next frame. The two facts —
+	// what the window is *doing* and what was *asked for* — are only the
+	// same once the first frame has been presented.
+	Hidden bool
 	// Center opens the window in the middle of the monitor it lands on,
 	// rather than wherever the desktop would have cascaded it. It is for
 	// a prompt: a passphrase dialog that opens in a corner is one the

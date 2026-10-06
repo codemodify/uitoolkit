@@ -1185,6 +1185,11 @@ func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Popup {
 		s.wantDeco = DecorationsNone
 	}
+	// Asked for hidden: the surface is made and configured like any other —
+	// its size is the compositor's answer and the application needs it — and
+	// then taken off screen before anything is presented into it
+	// (WindowOptions.Hidden, applied at the end of this function).
+	s.hidden = opts.Hidden
 	s.decoMode = s.effectiveDeco()
 	bw, bh := w, h
 	if sc := int(c.outScale + 0.1); sc > 1 {
@@ -1241,6 +1246,15 @@ func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	s.tryBindGPU()
 	if s.gpu != nil {
 		s.img = nil
+	}
+	if opts.Hidden && !opts.Headless {
+		// Off screen, now that the compositor has configured it: the role is
+		// dropped the way Hide drops it, and Show binds it again. Nothing is
+		// minimized, because nothing has been shown to minimize.
+		s.unmapToplevelLocked()
+		if c.dpy != nil {
+			C.ui_wl_flush(c.dpy)
+		}
 	}
 	return s, nil
 }

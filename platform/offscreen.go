@@ -91,6 +91,7 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 	o.frame.role = opts.Role
 	o.frame.owner = opts.Owner
 	o.frame.task.init(opts)
+	o.hidden = opts.Hidden
 	o.frame.centered = opts.Center
 	if opts.Center {
 		o.frame.centerings++

@@ -174,7 +174,9 @@ func newAkSurface(opts WindowOptions) (Surface, error) {
 	if opts.KeepAbove {
 		FrameOf(s).SetKeepAbove(true)
 	}
-	if !opts.Headless {
+	if !opts.Headless && !opts.Hidden {
+		// Hidden: made, drawn into, and ordered front when the application
+		// says so (WindowOptions.Hidden).
 		C.uitk_ak_window_show(s.win)
 	}
 	return s, nil
