@@ -534,15 +534,51 @@ func (w *Window) dropWindowMenu(l platform.ButtonLayout) platform.ButtonLayout {
 }
 
 // SetHideWindowMenu drops the window-menu button from the caption of every
-// frame the toolkit draws, or puts it back (the user's look.json
-// "hideWindowMenu").
+// frame the toolkit draws, or puts it back, **and pins the choice**: the
+// user's look.json "hideWindowMenu" no longer overwrites it.
+//
+// Pinning is the point. The preference is the user's, and ApplyAppearance
+// re-applies it from the file on every change Settings makes — so an
+// application that wanted no window-menu button on any of its windows had
+// nowhere to say so: setting it once was undone by the next ApplyAppearance,
+// and the per-window Window.SetCaptionButtonVisible has to be repeated for
+// every window the application opens and cannot reach the ones the toolkit
+// opens for it. The way out was to set it again from OnLookChange after every
+// look, which works only because ApplyAppearance happens to end in SetLook.
+//
+// It is the same shape as [Application.SetTitleBarPrefs], which pins the
+// button layout for the same reason, and it lasts for the life of the
+// application: there is no way to hand the choice back to the file, because
+// an application that pinned it has a reason that does not expire.
 func (a *Application) SetHideWindowMenu(hide bool) {
-	if a == nil || hide == a.hideMenuBtn {
+	if a == nil {
+		return
+	}
+	a.hideMenuPinned = true
+	a.setHideWindowMenu(hide)
+}
+
+// applyHideWindowMenuPref is the preference as it arrives from the user's
+// file, which an application's own choice outranks.
+func (a *Application) applyHideWindowMenuPref(hide bool) {
+	if a == nil || a.hideMenuPinned {
+		return
+	}
+	a.setHideWindowMenu(hide)
+}
+
+func (a *Application) setHideWindowMenu(hide bool) {
+	if hide == a.hideMenuBtn {
 		return
 	}
 	a.hideMenuBtn = hide
 	a.titleBarPrefsChanged()
 }
+
+// HideWindowMenuPinned reports whether the application has made the choice
+// its own ([Application.SetHideWindowMenu]), so Settings can show that the
+// preference is not the one in force.
+func (a *Application) HideWindowMenuPinned() bool { return a != nil && a.hideMenuPinned }
 
 // HideWindowMenu reports whether toolkit-drawn captions leave the
 // window-menu button out (see SetHideWindowMenu).

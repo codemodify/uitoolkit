@@ -148,7 +148,9 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	// whatever the preference says (resolveDecorations).
 	a.setDecorationsPref(ap.Decorations)
 	a.SetCaptionButtons(ap.CaptionButtons)
-	a.SetHideWindowMenu(ap.HideWindowMenu)
+	// From the file, so an application that pinned its own choice keeps it
+	// (Application.SetHideWindowMenu).
+	a.applyHideWindowMenuPref(ap.HideWindowMenu)
 	a.SetRenderer(ap.Renderer)
 	// What reached the app from outside is what a cleared
 	// Application.SetTheme goes back to; the application's own level of

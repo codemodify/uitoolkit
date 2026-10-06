@@ -173,6 +173,9 @@ type Application struct {
 	// hideMenuBtn drops the window-menu button from a toolkit-drawn
 	// caption (style.Appearance.HideWindowMenu).
 	hideMenuBtn bool
+	// hideMenuPinned: the application chose for itself, so the user's
+	// look.json no longer overwrites it (Application.SetHideWindowMenu).
+	hideMenuPinned bool
 	// captionPref is where toolkit frames put their caption buttons: the
 	// desktop's layout or the look's own (look.json "captionButtons").
 	captionPref style.CaptionButtonsPref
