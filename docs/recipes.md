@@ -505,6 +505,26 @@ Lock mark with no application code at all.
 
 ---
 
+## Following the window's focus
+
+**Obvious:** `Window.Active()` on every paint.
+
+**That is a check per frame for an event that happens twice a minute**, and
+it is only right for as long as the toolkit happens to repaint on the change.
+
+**Instead** `Window.OnActiveChange(func(active bool))`, which is called when
+the window takes or loses the keyboard focus and only when that changes — so
+an application does not have to remember what it was last told. It is what a
+tray icon that marks unread mail until the window is looked at is built from
+(Qt's `QEvent::WindowActivate`, GTK's `notify::is-active`, Win32's
+`WM_ACTIVATE`).
+
+It is one callback a window, like `OnMove` and `OnLockKeys`: the window's own
+code. Installing it reports nothing by itself — the first call is the first
+*change* after it — so ask `Window.Active()` for where things stand.
+
+---
+
 ## Anything at all in a list, a cell or a menu
 
 Reach for the icon fields rather than characters — `TableColumn.Icon`,

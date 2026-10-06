@@ -51,7 +51,10 @@ type Window struct {
 	// is actually in effect, and onSecureInput the window's callback for
 	// changes in the second (app/secure.go).
 	// onMove is called when the desktop moves the window (app/move.go).
-	onMove        func(x, y int)
+	onMove func(x, y int)
+	// onActive is called when the window takes or loses the keyboard focus
+	// (app/active.go).
+	onActive      func(active bool)
 	secureWanted  bool
 	secureGot     bool
 	secureHeld    bool
@@ -546,6 +549,11 @@ func (w *Window) setActive(active bool) {
 	w.inactive = !active
 	w.dropScene()
 	w.fullInvalidate()
+	// After the repaint is scheduled, so an application that asks the window
+	// anything from inside the callback is told what it has just become.
+	if w.onActive != nil {
+		w.onActive(active)
+	}
 }
 
 // SetOverlay replaces the whole overlay stack with c, dismissing every
