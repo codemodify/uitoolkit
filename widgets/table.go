@@ -113,8 +113,13 @@ type TableView struct {
 	hbar      scrollDrag
 	draggingH bool
 	rows      rowSceneCache
+	// lastRow, lastAt and lastCount are the row the last click landed on,
+	// when, and how many rows the table held then. They are dropped at every
+	// boundary a gesture cannot cross (resetClicks) — the same contract as
+	// ListView's, and for the same reason.
 	lastRow   int
 	lastAt    time.Time
+	lastCount int
 	reveal    int // row+1 to bring into view at the next Arrange
 	find      typeAhead
 	// SearchColumn is the column type-ahead find matches (-1: the first
@@ -348,8 +353,12 @@ func (t *TableView) RowBounds(i int) paintengine2d.Rect { return fromView(t.rowR
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TableView) ScrollTo(y float32) {
+	before := t.OffsetY
 	t.OffsetY = y
 	t.clamp()
+	if t.OffsetY != before {
+		t.resetClicks()
+	}
 	t.Invalidate()
 }
 
@@ -882,7 +891,14 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
+// FocusLost ends a click gesture (see ListView.FocusLost).
+func (t *TableView) FocusLost() {
+	t.resetClicks()
+	t.Base.FocusLost()
+}
+
 func (t *TableView) MouseExit() {
+	t.resetClicks()
 	oldRow := t.hovered
 	hadCol := t.hoverCol != -1
 	t.hovered = -1
@@ -908,16 +924,19 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		// here reaches an enabled container and is acted on as *its*
 		// own. A disabled list still changed its selection, called
 		// OnSelect, and opened a context menu for a secondary press.
+		t.resetClicks()
 		return true
 	}
 	t.RequestFocus()
 	p := toView(e.Pos, t.frame())
 	if t.vbar.press(t, p, t.vaxis()) {
+		t.resetClicks()
 		t.draggingH = false
 		t.Invalidate()
 		return true
 	}
 	if t.Horizontal && t.hbar.press(t, p, t.haxis()) {
+		t.resetClicks()
 		t.draggingH = true
 		t.Invalidate()
 		return true
@@ -962,16 +981,19 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		if changed {
 			t.selectionChanged()
 		}
-		// A Ctrl or Shift click edits the selection; it never activates.
+		// A Ctrl or Shift click edits the selection; it never activates,
+		// and it ends any gesture before it.
 		if e.Button == platform.ButtonLeft && !e.Mods.Ctrl() && !e.Mods.Shift() {
-			if i == t.lastRow && time.Since(t.lastAt) < doubleClickInterval {
-				t.lastRow = -1
+			if t.doubleClick(i) {
 				t.activate(i)
 			} else {
-				t.lastRow = i
-				t.lastAt = time.Now()
+				t.noteClick(i)
 			}
+		} else {
+			t.resetClicks()
 		}
+	} else {
+		t.resetClicks()
 	}
 	if e.Button == platform.ButtonRight && t.OnContext != nil {
 		o := widget.DeviceOrigin(t)
@@ -1009,6 +1031,7 @@ func (t *TableView) activate(row int) {
 	if row < 0 || row >= t.RowCount {
 		return
 	}
+	t.resetClicks()
 	if t.OnActivate != nil {
 		t.OnActivate(row)
 		return
@@ -1020,6 +1043,20 @@ func (t *TableView) activate(row int) {
 
 // Activate commits row (the programmatic form of Return / double click).
 func (t *TableView) Activate(row int) { t.activate(row) }
+
+// noteClick, resetClicks and doubleClick are ListView's click-gesture rules on
+// a table: two clicks are a double click only when nothing happened in between
+// and the content is the one that was clicked. See ListView.lastRow.
+func (t *TableView) noteClick(i int) {
+	t.lastRow, t.lastAt, t.lastCount = i, time.Now(), t.RowCount
+}
+
+func (t *TableView) resetClicks() { t.lastRow, t.lastAt = -1, time.Time{} }
+
+func (t *TableView) doubleClick(i int) bool {
+	return i >= 0 && i == t.lastRow && t.RowCount == t.lastCount &&
+		!t.lastAt.IsZero() && time.Since(t.lastAt) < doubleClickInterval
+}
 
 // IsSelected reports whether row i is selected (in SelectSingle, whether it
 // is the current row).
@@ -1112,14 +1149,25 @@ func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
 	if t.OffsetY == beforeY && t.OffsetX == beforeX {
 		return false
 	}
+	t.resetClicks()
 	t.Invalidate()
 	return true
 }
 
+// KeyPress handles the table's keys; one it takes ends a click gesture, as on
+// ListView.
 func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() || t.RowCount <= 0 {
 		return false
 	}
+	handled := t.keyPress(e)
+	if handled {
+		t.resetClicks()
+	}
+	return handled
+}
+
+func (t *TableView) keyPress(e widget.KeyEvent) bool {
 	if contextKey(e) {
 		if t.OnContext == nil {
 			return false
@@ -1222,6 +1270,9 @@ func (t *TableView) TextInput(r rune) bool {
 	i, searched := t.find.next(r, t.Selected, t.RowCount, func(row int) string { return t.CellText(row, col) })
 	if i >= 0 {
 		t.navigate(i, 0)
+	}
+	if searched {
+		t.resetClicks()
 	}
 	return searched
 }

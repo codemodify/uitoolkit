@@ -89,9 +89,14 @@ type TreeView struct {
 	dropDepth int
 	// Sidebar paints the tree as a sidebar (a mail app's folders), where
 	// the look has a sidebar style (see ListView.Sidebar).
-	Sidebar   bool
-	hover     *TreeNode
-	hoverExp  bool // the pointer is on the hovered row's expander
+	Sidebar  bool
+	hover    *TreeNode
+	hoverExp bool // the pointer is on the hovered row's expander
+	// lastClick and lastAt are the node the last click landed on and when,
+	// dropped at every boundary a gesture cannot cross (resetClicks) — the
+	// same contract as ListView's. The node is named by pointer, so a tree
+	// rebuilt under the pointer needs no content check: a new node is not the
+	// one that was clicked.
 	lastClick *TreeNode
 	lastAt    time.Time
 	vbar      scrollDrag
@@ -258,8 +263,12 @@ func (t *TreeView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.sc
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TreeView) ScrollTo(y float32) {
+	before := t.OffsetY
 	t.OffsetY = y
 	t.clamp()
+	if t.OffsetY != before {
+		t.resetClicks()
+	}
 	t.Invalidate()
 }
 
@@ -588,7 +597,18 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
+// resetClicks drops the click history at a gesture boundary (see
+// ListView.resetClicks).
+func (t *TreeView) resetClicks() { t.lastClick, t.lastAt = nil, time.Time{} }
+
+// FocusLost ends a click gesture (see ListView.FocusLost).
+func (t *TreeView) FocusLost() {
+	t.resetClicks()
+	t.Base.FocusLost()
+}
+
 func (t *TreeView) MouseExit() {
+	t.resetClicks()
 	old := t.hover
 	t.hover, t.hoverExp = nil, false
 	t.vbar.exit()
@@ -605,21 +625,25 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		// here reaches an enabled container and is acted on as *its*
 		// own. A disabled list still changed its selection, called
 		// OnSelect, and opened a context menu for a secondary press.
+		t.resetClicks()
 		return true
 	}
 	t.RequestFocus()
 	p := toView(e.Pos, t.frame())
 	if t.vbar.press(t, p, t.vaxis()) {
+		t.resetClicks()
 		t.Invalidate()
 		return true
 	}
 	i := t.rowAt(p.Y)
 	if i < 0 || p.Y < 0 || p.Y >= t.inner().Dy() {
+		t.resetClicks()
 		return true
 	}
 	rows := t.flatten()
 	n := rows[i].node
 	if e.Button == platform.ButtonRight {
+		t.resetClicks()
 		t.selectNode(n)
 		if t.OnContext != nil {
 			o := widget.DeviceOrigin(t)
@@ -628,12 +652,15 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		return true
 	}
 	if t.expanderHit(p.X, n, rows[i].depth) {
+		// The expander is its own gesture, and the rows move under the
+		// pointer as it runs.
+		t.resetClicks()
 		t.Toggle(n)
 		return true
 	}
-	if n == t.lastClick && time.Since(t.lastAt) < doubleClickInterval {
+	if n == t.lastClick && !t.lastAt.IsZero() && time.Since(t.lastAt) < doubleClickInterval {
+		t.resetClicks()
 		t.Toggle(n)
-		t.lastClick = nil
 		return true
 	}
 	t.lastClick = n
@@ -663,14 +690,25 @@ func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
 	if t.OffsetY == before {
 		return false
 	}
+	t.resetClicks()
 	t.Invalidate()
 	return true
 }
 
+// KeyPress handles the tree's keys; one it takes ends a click gesture, as on
+// ListView.
 func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() {
 		return false
 	}
+	handled := t.keyPress(e)
+	if handled {
+		t.resetClicks()
+	}
+	return handled
+}
+
+func (t *TreeView) keyPress(e widget.KeyEvent) bool {
 	rows := t.flatten()
 	if len(rows) == 0 {
 		return false
@@ -775,6 +813,9 @@ func (t *TreeView) TextInput(r rune) bool {
 	i, searched := t.find.next(r, t.indexOf(t.Selected), len(rows), func(i int) string { return rows[i].node.Label })
 	if i >= 0 {
 		t.selectNode(rows[i].node)
+	}
+	if searched {
+		t.resetClicks()
 	}
 	return searched
 }
