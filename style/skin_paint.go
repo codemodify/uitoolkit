@@ -27,6 +27,25 @@ import (
 // — how a single-colour glyph (an arrow, a tick) follows the label colour
 // instead of being redrawn per state.
 func (sk *Skin) skinDraw(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *SkinSprite, scale float32, tint paintengine2d.Color) bool {
+	return sk.skinDrawAt(ctx, b, sp, scale, tint, false)
+}
+
+// skinDrawPanel is skinDraw for art a *layout* placed, where the box is the
+// layout's and the art has to fill exactly it.
+//
+// The difference is geometry, not sampling: a pixelated sheet is still drawn
+// nearest, but its slice edges and its box follow the true display scale
+// instead of the whole multiple a control face is fitted to. A control face
+// may be centred at 1× inside a 1.75 box and look right; a panel's background
+// may not, because the controls standing on it were placed by the layout at
+// 1.75 and the art has to meet them.
+func (sk *Skin) skinDrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *SkinSprite, scale float32, tint paintengine2d.Color) bool {
+	return sk.skinDrawAt(ctx, b, sp, scale, tint, true)
+}
+
+// skinDrawAt is both. exact says the geometry is the layout's: no flooring of
+// the texel scale, and no whole-multiple fit inside the box.
+func (sk *Skin) skinDrawAt(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *SkinSprite, scale float32, tint paintengine2d.Color, exact bool) bool {
 	if sk == nil || ctx == nil || sp == nil || b.Empty() {
 		return false
 	}
@@ -46,11 +65,11 @@ func (sk *Skin) skinDraw(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *S
 		// grille, a window background. It repeats at its own size rather
 		// than stretching, which is the whole reason a skin says "tile".
 		if sp.Middle == FillTile {
-			return tilePiece(ctx, v.pieces[pieceWhole], b, sk.texelScale(sp, v, scale), true, true, paint)
+			return tilePiece(ctx, v.pieces[pieceWhole], b, sk.texelScaleFor(sp, v, scale, exact), true, true, paint)
 		}
-		return blitPiece(ctx, v.pieces[pieceWhole], sk.fitBox(b, v, sp, scale), paint)
+		return blitPiece(ctx, v.pieces[pieceWhole], sk.fitBoxFor(b, v, sp, scale, exact), paint)
 	}
-	return sk.drawSlice(ctx, b, v, sp, scale, paint)
+	return sk.drawSlice(ctx, b, v, sp, scale, paint, exact)
 }
 
 // panelDraw paints a sprite that is a piece of a panel — an app's sprite
@@ -70,8 +89,20 @@ func (sk *Skin) panelDraw(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *
 	if sk == nil || ctx == nil || sp == nil || b.Empty() {
 		return false
 	}
-	if sp.Sheet == nil || !sp.Sheet.Pixelated || !sk.ownSize(b, sp, scale) {
+	if sp.Sheet == nil || !sp.Sheet.Pixelated {
 		return sk.skinDraw(ctx, b, sp, scale, tint)
+	}
+	if !sk.ownSize(b, sp, scale) {
+		// Resized by the layout, so the layout's scale is the one that
+		// counts. The whole-multiple rule is a *control face* policy — a
+		// button, a field, a check, each drawn alone in a box of its own —
+		// and applying it here made a panel's own background disagree with
+		// the controls it is drawn to surround: at 1.75 a 38-design-pixel
+		// footer edge came out 38 device pixels while the slot the footer
+		// sits in came out 66.5, and the artwork and the controls parted
+		// company by 28 pixels. The art is still nearest-sampled; only its
+		// geometry changes.
+		return sk.skinDrawPanel(ctx, b, sp, scale, tint)
 	}
 	v := sk.variant(sp, sk.assetTarget(sp, scale))
 	if v == nil {
@@ -239,6 +270,15 @@ func gridSpans(n int, f, k float64) ([]int, int) {
 
 // texelScale is how many device pixels one texel of the chosen asset covers.
 // Pixelated art takes the whole part of it, so its pixels stay square.
+// texelScaleFor is texelScale, or the true ratio where the geometry is the
+// layout's (see skinDrawPanel).
+func (sk *Skin) texelScaleFor(sp *SkinSprite, v *skinVariant, scale float32, exact bool) float32 {
+	if exact {
+		return scale / v.scale
+	}
+	return sk.texelScale(sp, v, scale)
+}
+
 func (sk *Skin) texelScale(sp *SkinSprite, v *skinVariant, scale float32) float32 {
 	k := scale / v.scale
 	if sp.Sheet != nil && sp.Sheet.Pixelated {
@@ -271,6 +311,15 @@ func (sk *Skin) assetTarget(sp *SkinSprite, scale float32) float32 {
 // of its own texels, centred and snapped to the device grid, so its pixels
 // stay square at 1.25, 1.5 and 1.75 — the art keeps its integer scale while
 // layout, text and hit-testing stay at the true fractional one.
+// fitBoxFor is fitBox, or the box itself where the geometry is the layout's
+// (see skinDrawPanel): a panel's background fills the box it was placed in.
+func (sk *Skin) fitBoxFor(b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, scale float32, exact bool) paintengine2d.Rect {
+	if exact {
+		return b
+	}
+	return sk.fitBox(b, v, sp, scale)
+}
+
 func (sk *Skin) fitBox(b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, scale float32) paintengine2d.Rect {
 	if sp.Sheet == nil || !sp.Sheet.Pixelated {
 		return b
@@ -300,10 +349,10 @@ func (sk *Skin) fitBox(b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, sca
 // small for its own corners shrinks them proportionally rather than letting
 // them overlap, so a sprite drawn into a 6px-tall track still looks like
 // itself.
-func (sk *Skin) drawSlice(ctx *paintengine2d.Context, b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, scale float32, paint paintengine2d.Paint) bool {
+func (sk *Skin) drawSlice(ctx *paintengine2d.Context, b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, scale float32, paint paintengine2d.Paint, exact bool) bool {
 	// Piece pixels → device pixels: the art's own scale, taken to the
 	// display's.
-	k := sk.texelScale(sp, v, scale)
+	k := sk.texelScaleFor(sp, v, scale, exact)
 	l := skinEdge(v.slice.Left * k)
 	r := skinEdge(v.slice.Right * k)
 	t := skinEdge(v.slice.Top * k)
