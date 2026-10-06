@@ -410,7 +410,7 @@ func (s *linuxStatusItem) Notify(n Notification) error {
 	}
 	icon := n.Icon.Name
 	if icon == "" {
-		icon = statusIconName(s.icon)
+		icon = notifyStatusIconName(s.icon)
 	}
 	hints := map[string]dbus.Variant{
 		"desktop-entry": dbus.MakeVariant(s.opts.ID),

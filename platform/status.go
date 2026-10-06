@@ -250,14 +250,41 @@ func copyMenu(in []StatusMenuItem) []StatusMenuItem {
 	return out
 }
 
-// statusIconName is the freedesktop / SNI IconName. Empty Name falls
-// back to a generic theme icon so hosts that ignore IconPixmap still
-// show something (not a Mail-specific name).
+// genericStatusIconName is the theme icon a host shows when the application
+// supplied no pictogram of its own.
+const genericStatusIconName = "application-default-icon"
+
+// statusIconName is the freedesktop / SNI IconName.
+//
+// Empty where the caller supplied a picture, which is the whole of the fix:
+// the StatusNotifierItem specification has hosts *prefer* the name over the
+// pixmap, so exporting a generic theme name beside an application's own raster
+// invites the host to show the generic one instead. The documented order is
+// Image, then Path, then Name, and this is the half of it that reaches the
+// bus; a player worked around it by inventing a name no installed theme has.
+//
+// The generic name is still the answer when nothing was supplied, so a host
+// that ignores IconPixmap shows something rather than a blank — and it is
+// still the answer for a Path that does not load, where there is no raster to
+// mask.
 func statusIconName(icon StatusIcon) string {
 	if icon.Name != "" {
 		return icon.Name
 	}
-	return "application-default-icon"
+	if statusIconHasPicture(icon) {
+		return ""
+	}
+	return genericStatusIconName
+}
+
+// notifyStatusIconName is the name a desktop *notification* shows. A
+// notification carries no pixmap, so where the item has only a picture there
+// is nothing to send but the generic name.
+func notifyStatusIconName(icon StatusIcon) string {
+	if n := statusIconName(icon); n != "" {
+		return n
+	}
+	return genericStatusIconName
 }
 
 // menuItemChildren is the rows a menu row actually opens: a separator is

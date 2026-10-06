@@ -23,6 +23,22 @@ func resolveStatusImage(icon StatusIcon, size int) *paintengine2d.Image {
 	return paintengine2d.NewImage(size, size)
 }
 
+// statusIconHasPicture reports whether the caller supplied a pictogram this
+// backend can actually export: an Image with pixels in it, or a Path that
+// loads. It follows resolveStatusImage exactly, because the question it
+// answers is "will there be a raster on the bus".
+func statusIconHasPicture(icon StatusIcon) bool {
+	if icon.Image != nil && icon.Image.Width > 0 && icon.Image.Height > 0 {
+		return true
+	}
+	if icon.Path != "" {
+		if img, err := loadStatusPNG(icon.Path); err == nil && img != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func loadStatusPNG(path string) (*paintengine2d.Image, error) {
 	f, err := os.Open(path)
 	if err != nil {
