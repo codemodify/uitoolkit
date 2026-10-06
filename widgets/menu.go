@@ -1046,9 +1046,7 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 	case platform.KeyUp:
 		if !wasKey && p.hover < 0 {
 			// Nothing was highlighted yet: land on the last item.
-			p.focus = lastEnabled(p.Items)
-			p.hover = p.focus
-			p.Invalidate()
+			p.focusItem(lastEnabled(p.Items))
 			return true
 		}
 		p.moveFocus(-1)
@@ -1057,22 +1055,16 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 		if !wasKey && p.hover < 0 {
 			// Nothing was highlighted yet (mouse-opened menu): the first
 			// Down lands on the first item instead of skipping it.
-			p.focus = firstEnabled(p.Items)
-			p.hover = p.focus
-			p.Invalidate()
+			p.focusItem(firstEnabled(p.Items))
 			return true
 		}
 		p.moveFocus(1)
 		return true
 	case platform.KeyHome:
-		p.focus = firstEnabled(p.Items)
-		p.hover = p.focus
-		p.Invalidate()
+		p.focusItem(firstEnabled(p.Items))
 		return true
 	case platform.KeyEnd:
-		p.focus = lastEnabled(p.Items)
-		p.hover = p.focus
-		p.Invalidate()
+		p.focusItem(lastEnabled(p.Items))
 		return true
 	case platform.KeyRight:
 		if p.focus >= 0 && p.focus < len(p.Items) && p.Items[p.focus].HasSubmenu() {
@@ -1174,6 +1166,23 @@ func (p *PopupMenu) rootMenu() *PopupMenu {
 	return r
 }
 
+// focusItem makes item i the focused one, and scrolls it into view.
+//
+// Every way the keyboard moves the focus goes through this. Four of them used
+// to set the focus directly and skip the scroll — the first Up, the first
+// Down, Home and End — so a menu too long for its host was left with its
+// selected row outside the viewport, and Return invoked an item the person
+// could not see. A twelve-appearance list in a 275x116 window: End selected
+// the last one at y 292..318 of a 108-pixel view, and Home, after arrowing to
+// the end, selected the first at y -212..-186.
+func (p *PopupMenu) focusItem(i int) {
+	p.focus, p.hover = i, i
+	if i >= 0 {
+		p.ensureItemVisible(i)
+	}
+	p.Invalidate()
+}
+
 func (p *PopupMenu) moveFocus(dir int) {
 	if len(p.Items) == 0 {
 		return
@@ -1183,10 +1192,7 @@ func (p *PopupMenu) moveFocus(dir int) {
 		i = (i + dir + len(p.Items)) % len(p.Items)
 		it := p.Items[i]
 		if it != nil && !it.Separator && !it.Disabled {
-			p.focus = i
-			p.hover = i
-			p.ensureItemVisible(i)
-			p.Invalidate()
+			p.focusItem(i)
 			return
 		}
 	}
