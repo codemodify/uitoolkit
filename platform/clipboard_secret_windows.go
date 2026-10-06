@@ -44,13 +44,24 @@ func registerClipboardFormat(name string) uintptr {
 	return r
 }
 
-func clipboardNativeSetSecret(b []byte) {
-	defer func() { winClipSeq.Store(clipboardSeq()) }()
+// It reports whether the copy was actually made, and notes the sequence
+// number only then.
+//
+// The number used to be noted in a defer, whether or not anything was copied.
+// Two ways that happens: another program can hold the clipboard open for all
+// of withClipboard's tries, and SetClipboardData can refuse the block after
+// EmptyClipboard has already emptied the clipboard. Either way the program was
+// told it had copied — a SecretField paste was served the held secret while
+// the clipboard held something else, ClipboardHoldsSecret said a secret was
+// there, and the clear at its time found the number unchanged and emptied a
+// clipboard holding the person's own work, which is the one thing that check
+// exists to prevent.
+func clipboardNativeSetSecret(b []byte) bool {
 	// UTF-16 without going through a Go string: a string of the
 	// passphrase could not be wiped, and this one can.
 	u := utf16FromBytes(b)
 	defer wipeUint16(u)
-	withClipboard(func() bool {
+	ok := withClipboard(func() bool {
 		procEmptyClipboard.Call()
 		raw := unsafe.Slice((*byte)(unsafe.Pointer(&u[0])), len(u)*2)
 		h := winGlobalOf(raw)
@@ -58,7 +69,12 @@ func clipboardNativeSetSecret(b []byte) {
 			return false
 		}
 		if r, _, _ := procSetClipboardData.Call(cfUnicodeText, h); r == 0 {
-			procGlobalFree.Call(h)
+			// The block holds the passphrase as UTF-16 and the clipboard
+			// did not take it, so this process still owns it: zeroed
+			// before it is released, because GlobalFree does not clear it
+			// and a passphrase in a freed allocation is readable by
+			// whatever gets that memory next.
+			winGlobalWipeFree(h, len(raw))
 			return false
 		}
 		// The three hints, on the same entry. A failure to set one is
@@ -70,6 +86,26 @@ func clipboardNativeSetSecret(b []byte) {
 		setClipboardFlag(cfCanUploadCloud, zero)
 		return true
 	})
+	if ok {
+		winClipSeq.Store(clipboardSeq())
+	}
+	return ok
+}
+
+// winGlobalWipeFree zeroes a global block before releasing it, for a block
+// this process still owns because the clipboard refused it.
+func winGlobalWipeFree(h uintptr, n int) {
+	if h == 0 {
+		return
+	}
+	if p, _, _ := procGlobalLock.Call(h); p != 0 {
+		blk := unsafe.Slice(lparamAs[byte](p), n)
+		for i := range blk {
+			blk[i] = 0
+		}
+		procGlobalUnlock.Call(h)
+	}
+	procGlobalFree.Call(h)
 }
 
 // setClipboardFlag puts one marker format on the open clipboard. An

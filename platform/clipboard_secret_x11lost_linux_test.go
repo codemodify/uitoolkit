@@ -89,7 +89,7 @@ func TestAnotherClientTakingTheClipboardEndsTheHeldSecretOnX11(t *testing.T) {
 	secret := []byte("the-held-passphrase")
 	c := ClipboardSetSecret(secret, -1)
 	if !ClipboardHoldsSecret() {
-		t.Skip("the secret copy did not take")
+		t.Fatal("the secret copy did not take the clipboard")
 	}
 
 	const theirs = "what the other program copied"
@@ -140,7 +140,7 @@ func TestLosingPrimaryDoesNotEndTheHeldSecretOnX11(t *testing.T) {
 	secret := []byte("still-ours")
 	ClipboardSetSecret(secret, -1)
 	if !ClipboardHoldsSecret() {
-		t.Skip("the secret copy did not take")
+		t.Fatal("the secret copy did not take the clipboard")
 	}
 	for i := 0; i < 20; i++ {
 		pumpX11(t)
@@ -185,7 +185,7 @@ func TestALossOnItsWayIsNotPinnedOnTheCopyJustMade(t *testing.T) {
 	// One secret of this process's own, so there is a copy to lose.
 	first := ClipboardSetSecret([]byte("the-first-passphrase"), -1)
 	if !ClipboardHoldsSecret() {
-		t.Skip("the secret copy did not take")
+		t.Fatal("the secret copy did not take the clipboard")
 	}
 
 	// Another program takes CLIPBOARD, and the SelectionClear it causes is

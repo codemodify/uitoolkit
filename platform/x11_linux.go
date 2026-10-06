@@ -2903,11 +2903,15 @@ func (c *x11Conn) setClipboardSel(s string, secret bool) {
 // secret. A passphrase must not go on PRIMARY: that selection is pasted
 // by a middle click anywhere on the desktop, with no Ctrl+V and no
 // intent, and there is no gesture in X11 that undoes it.
-func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) {
+// It reports whether the server made this process the owner. An X server can
+// refuse — a stale timestamp, a connection closed under the call — and until
+// now nothing said so, which is the same shape of bug as a pasteboard write
+// whose BOOL was dropped.
+func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) bool {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	if c.dpy == nil || c.helper == 0 {
-		return
+		return false
 	}
 	// A reference for the length of this. The fresh timestamp below is a
 	// round trip and lets x11Mu go while it waits, and the selection service
@@ -2923,7 +2927,7 @@ func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) {
 	// value that had just been written.
 	t := c.freshSelectionTimeLocked()
 	if c.dpy == nil || c.helper == 0 {
-		return
+		return false
 	}
 	c.wipeClipLocked()
 	// A copy of the caller's bytes, so the caller may wipe its own at
@@ -2948,6 +2952,7 @@ func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) {
 	c.keep = c.ownClip || c.ownPrim
 	C.ui_flush(c.dpy)
 	c.startSelectionServiceLocked()
+	return c.ownClip
 }
 
 // clearClipboard drops both selections and wipes what was being served.

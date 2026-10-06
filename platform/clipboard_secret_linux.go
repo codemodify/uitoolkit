@@ -28,15 +28,24 @@ import "os"
 // replaced. Nothing on this path makes a Go string of a secret, which
 // could not be zeroed and would sit in the heap until the collector got
 // to it.
-func clipboardNativeSetSecret(b []byte) {
+// It reports whether the value is actually on a clipboard. "No window system
+// at all" counts as success — there is nothing to refuse the copy, and the
+// in-memory copy is the copy — while a backend that was asked and did not take
+// the selection is a copy that was not made. With both (XWayland beside a
+// compositor) either one taking it is enough: the secret is on a clipboard.
+func clipboardNativeSetSecret(b []byte) bool {
+	asked, took := false, false
 	if waylandLive() || (os.Getenv("WAYLAND_DISPLAY") != "" && waylandProbe()) {
-		wlClipSetSecret(b)
+		asked = true
+		took = wlClipSetSecret(b) || took
 	}
 	if x11Live() || os.Getenv("DISPLAY") != "" {
 		if c, err := x11Get(); err == nil {
-			c.setClipboardSelBytes(b, true)
+			asked = true
+			took = c.setClipboardSelBytes(b, true) || took
 		}
 	}
+	return !asked || took
 }
 
 func clipboardNativeClear() {

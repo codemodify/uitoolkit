@@ -42,6 +42,13 @@ var (
 	secretHeld *SecretClip
 )
 
+// nativeSetSecret is the platform's secret copy, named here so a test can
+// stand in for it. A refusal is another program holding the Windows clipboard
+// open, or a pasteboard write the window server declines; neither can be
+// arranged from outside, and what the portable half does with one — whether
+// the program is told it holds a secret — is the part that matters most.
+var nativeSetSecret = clipboardNativeSetSecret
+
 // DefaultSecretClipboardTimeout is the usual "clear it after a while",
 // and what ClipboardSetSecret uses when clearAfter is zero. Forty-five
 // seconds is KeePassXC's default and about what 1Password and Bitwarden
@@ -60,6 +67,12 @@ const DefaultSecretClipboardTimeout = 45 * time.Second
 // The returned handle clears this copy and only this copy, so a caller
 // that has moved on does not wipe somebody else's. Call it from the UI
 // goroutine, like every other clipboard call.
+//
+// A copy the platform refuses comes back **already cleared** — data wiped,
+// [SecretClip.Cleared] true, [SecretClip.OnCleared] calling back at once —
+// because a program told it copied a password that is not on the clipboard
+// will say so to the person, and will leave a clear running against whatever
+// is there instead.
 func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 	if clearAfter == 0 {
 		clearAfter = DefaultSecretClipboardTimeout
@@ -102,7 +115,22 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 	clip = ""
 	clipMu.Unlock()
 
-	clipboardNativeSetSecret(data)
+	if !nativeSetSecret(data) {
+		// The copy was refused — the clipboard was held open by another
+		// program for every try, or the window system would not take the
+		// value. The program must not be told it holds a secret it does
+		// not: a paste into a SecretField would be served this copy in
+		// preference to whatever is really on the clipboard,
+		// ClipboardHoldsSecret would say one is held, and the clear at its
+		// time would empty a clipboard holding somebody else's work.
+		//
+		// So the copy ends here, at once: wiped, its timer never started,
+		// and Cleared reporting true — which is how the application finds
+		// out, since OnCleared on a copy that has already gone calls back
+		// straight away.
+		c.forget()
+		return c
+	}
 
 	secretMu.Lock()
 	secretHeld = c

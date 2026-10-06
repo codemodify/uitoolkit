@@ -140,3 +140,57 @@ func TestASecretIsWipedBeforeItStopsBeingHeld(t *testing.T) {
 		}
 	}
 }
+
+// A copy the platform refuses comes back already cleared, and is not held.
+//
+// Windows notes the clipboard's sequence number whether or not anything was
+// copied, and macOS the pasteboard's changeCount, so a copy that failed — the
+// clipboard held open by another program for every try, or SetClipboardData
+// refusing the block after EmptyClipboard had already emptied the clipboard —
+// was taken for one that was made. The program said it had copied, a paste was
+// served the held secret while the clipboard held something else, and the clear
+// at its time found the number unchanged and emptied a clipboard holding the
+// person's own work.
+//
+// The seam reports now, and this is the rule the report feeds: a refusal ends
+// the copy at once. What a given backend *does* with a refusal is its own test,
+// and on Windows and macOS needs those machines.
+func TestARefusedCopyComesBackCleared(t *testing.T) {
+	t.Cleanup(ClipboardClear)
+	secret := []byte("the-refused-passphrase")
+	c := refuseNativeCopy(t, func() *SecretClip { return ClipboardSetSecret(secret, -1) })
+
+	if !c.Cleared() {
+		t.Error("a refused copy is not cleared")
+	}
+	if ClipboardHoldsSecret() {
+		t.Error("a refused copy is held: a paste would be served it, and the clear would empty somebody else's clipboard")
+	}
+	if !bytes.Equal(secret, make([]byte, len(secret))) {
+		t.Errorf("a refused copy left the passphrase in the heap: %q", secret)
+	}
+	// And the application hears about it without polling.
+	told := false
+	c.OnCleared(func() { told = true })
+	if !told {
+		t.Error("OnCleared on a refused copy did not call back")
+	}
+}
+
+// A copy with no window system at all is still a copy: there is nothing to
+// refuse it, and the in-memory copy is the copy. This is the half of the rule
+// that every displayless test depends on, and the one a careless reading of
+// "report whether it took" would break.
+func TestACopyWithNoWindowSystemIsStillHeld(t *testing.T) {
+	t.Cleanup(ClipboardClear)
+	c := ClipboardSetSecret([]byte("hunter2"), -1)
+	if c.Cleared() {
+		t.Fatal("a copy with no window system came back cleared")
+	}
+	if !ClipboardHoldsSecret() {
+		t.Error("a copy with no window system is not held")
+	}
+	if got := ClipboardGetSecret(); string(got) != "hunter2" {
+		t.Errorf("read back %q, want the copy", got)
+	}
+}

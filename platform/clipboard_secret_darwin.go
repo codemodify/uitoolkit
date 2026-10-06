@@ -22,7 +22,14 @@ package platform
 //
 // It takes a pointer and a length rather than a C string, so the caller
 // never has to build one, and copies nothing it does not have to.
-static void uitk_pb_set_secret(const void *bytes, int len) {
+//
+// It returns whether the passphrase actually went on the pasteboard.
+// setString:forType: answers a BOOL and this threw all three away, so a
+// refused write looked exactly like one that took — the same defect, in the
+// same file's neighbourhood, as the drag types that could not be written at
+// all. The two hints are advisory: a clipboard manager that does not honour
+// them is not a copy that failed, and only the string decides.
+static int uitk_pb_set_secret(const void *bytes, int len) {
 	@autoreleasepool {
 		NSPasteboard *pb = [NSPasteboard generalPasteboard];
 		NSString *s = [[NSString alloc] initWithBytes:bytes
@@ -34,9 +41,10 @@ static void uitk_pb_set_secret(const void *bytes, int len) {
 		                   @"org.nspasteboard.ConcealedType",
 		                   @"org.nspasteboard.TransientType"]
 		           owner:nil];
-		[pb setString:s forType:NSPasteboardTypeString];
+		BOOL ok = [pb setString:s forType:NSPasteboardTypeString];
 		[pb setString:@"" forType:@"org.nspasteboard.ConcealedType"];
 		[pb setString:@"" forType:@"org.nspasteboard.TransientType"];
+		return ok ? 1 : 0;
 	}
 }
 
@@ -92,13 +100,23 @@ import (
 	"unsafe"
 )
 
-func clipboardNativeSetSecret(b []byte) {
-	defer func() { akPbChange.Store(int64(C.uitk_pb_change_count())) }()
+// It reports whether the copy was made, and notes the changeCount only then.
+//
+// The count used to be noted in a defer whether or not the write took, which
+// on a refusal left the program saying it held a secret the pasteboard did
+// not have — and left the clear at its time finding the count unchanged and
+// clearing a pasteboard holding the person's own work.
+func clipboardNativeSetSecret(b []byte) bool {
+	ok := false
 	if len(b) == 0 {
-		C.uitk_pb_set_secret(nil, 0)
-		return
+		ok = C.uitk_pb_set_secret(nil, 0) != 0
+	} else {
+		ok = C.uitk_pb_set_secret(unsafe.Pointer(&b[0]), C.int(len(b))) != 0
 	}
-	C.uitk_pb_set_secret(unsafe.Pointer(&b[0]), C.int(len(b)))
+	if ok {
+		akPbChange.Store(int64(C.uitk_pb_change_count()))
+	}
+	return ok
 }
 
 // akPbChange is the pasteboard's changeCount as of the last secret copy.
