@@ -165,10 +165,19 @@ type ListView struct {
 	OnSelectionChange func(rows []int)
 	sel               rowSelection
 	hovered           int
-	// lastRow and lastAt are the last row pressed and when, for telling a
-	// double click from two clicks.
-	lastRow int
-	lastAt  time.Time
+	// lastRow, lastAt and lastCount are the row the last click landed on,
+	// when, and how many rows the list held then — what a second click is
+	// measured against to tell a double click from two clicks.
+	//
+	// They are dropped at every boundary a gesture cannot cross (see
+	// resetClicks), because two clicks a quarter of a second apart are only
+	// a double click when nothing happened in between: the pointer left, the
+	// list lost the focus, the view scrolled, a context menu opened, the
+	// keyboard moved the selection, the content was replaced. A list that
+	// kept them activated a row the user clicked once.
+	lastRow   int
+	lastAt    time.Time
+	lastCount int
 	// dropRow is the row a drag is over, -1 for none; dropAt is the gap
 	// it would be inserted into instead, -1 for none.
 	dropRow int
@@ -382,8 +391,12 @@ func (l *ListView) ScrollTrack() (track, thumb paintengine2d.Rect) { return l.sc
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (l *ListView) ScrollTo(y float32) {
+	before := l.OffsetY
 	l.OffsetY = y
 	l.clamp()
+	if l.OffsetY != before {
+		l.resetClicks()
+	}
 	l.Invalidate()
 }
 
@@ -548,6 +561,14 @@ func (l *ListView) invalidateRow(i int) {
 
 func (l *ListView) MouseEnter() {}
 
+// FocusLost ends a click gesture: the list the user comes back to is not the
+// one they left, and a click before a dialog took the focus must not pair
+// with the first click after it.
+func (l *ListView) FocusLost() {
+	l.resetClicks()
+	l.Base.FocusLost()
+}
+
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 	p := toView(e.Pos, l.pad())
 	if handled, dirty := l.vbar.move(l, p, l.vaxis()); handled || dirty {
@@ -558,10 +579,7 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 			return true
 		}
 	}
-	h := l.indexAt(p.Y)
-	if p.Y < 0 || p.Y >= l.inner().Dy() {
-		h = -1
-	}
+	h := l.rowAtView(p)
 	if h != l.hovered {
 		old := l.hovered
 		l.hovered = h
@@ -572,6 +590,7 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 }
 
 func (l *ListView) MouseExit() {
+	l.resetClicks()
 	old := l.hovered
 	l.hovered = -1
 	l.vbar.exit()
@@ -596,18 +615,21 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 		// here reaches an enabled container and is acted on as *its*
 		// own. A disabled list still changed its selection, called
 		// OnSelect, and opened a context menu for a secondary press.
+		//
+		// It is still a boundary: a click, the list disabled under the
+		// pointer, a press it ignores, the list enabled again and a
+		// second click is not a double click.
+		l.resetClicks()
 		return true
 	}
 	l.RequestFocus()
 	p := toView(e.Pos, l.pad())
 	if l.vbar.press(l, p, l.vaxis()) {
+		l.resetClicks()
 		l.Invalidate()
 		return true
 	}
-	i := l.indexAt(p.Y)
-	if p.Y < 0 || p.Y >= l.inner().Dy() {
-		i = -1
-	}
+	i := l.rowAtView(p)
 	if i >= 0 && !(e.Button == platform.ButtonRight && l.ContextKeepsSelection) {
 		changed := false
 		if l.Mode != SelectSingle {
@@ -625,16 +647,21 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 		if changed {
 			l.selectionChanged()
 		}
-		// A Ctrl or Shift click edits the selection; it never activates.
+		// A Ctrl or Shift click edits the selection; it never activates,
+		// and it ends any gesture before it.
 		if e.Button == platform.ButtonLeft && !e.Mods.Ctrl() && !e.Mods.Shift() {
-			if i == l.lastRow && time.Since(l.lastAt) < doubleClickInterval {
-				l.lastRow = -1
+			if l.doubleClick(i) {
 				l.activate(i)
 			} else {
-				l.lastRow = i
-				l.lastAt = time.Now()
+				l.noteClick(i)
 			}
+		} else {
+			l.resetClicks()
 		}
+	} else {
+		// A press on no row at all, or a secondary press a context policy
+		// kept the selection through.
+		l.resetClicks()
 	}
 	if e.Button == platform.ButtonRight && l.OnContext != nil {
 		o := widget.DeviceOrigin(l)
@@ -656,14 +683,27 @@ func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
 	if l.OffsetY == before {
 		return false
 	}
+	l.resetClicks()
 	l.Invalidate()
 	return true
 }
 
+// KeyPress handles the list's keys. A key it takes is a gesture of its own: a
+// click, an arrow, and a click is two single clicks on two different rows. A
+// key it does not take is not the list's doing and leaves the click history
+// alone, so a shortcut the window handles does not break a double click.
 func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	if !l.Enabled() || l.Count <= 0 {
 		return false
 	}
+	handled := l.keyPress(e)
+	if handled {
+		l.resetClicks()
+	}
+	return handled
+}
+
+func (l *ListView) keyPress(e widget.KeyEvent) bool {
 	if contextKey(e) {
 		if l.OnContext == nil {
 			return false
@@ -730,6 +770,9 @@ func (l *ListView) activate(row int) {
 	if row < 0 || row >= l.Count {
 		return
 	}
+	// Committed: whatever follows is a new gesture, so a click after a
+	// Return cannot be the second half of one.
+	l.resetClicks()
 	if l.OnActivate != nil {
 		l.OnActivate(row)
 		return
@@ -742,6 +785,29 @@ func (l *ListView) activate(row int) {
 // Activate commits row: the programmatic form of Return or a double click.
 func (l *ListView) Activate(row int) { l.activate(row) }
 
+// noteClick records a click on row i as the first half of a possible double
+// click.
+func (l *ListView) noteClick(i int) {
+	l.lastRow, l.lastAt, l.lastCount = i, time.Now(), l.Count
+}
+
+// resetClicks drops the click history at a gesture boundary, so that the next
+// click is a first click. Called wherever something happened that a double
+// click cannot be made of: see lastRow.
+func (l *ListView) resetClicks() { l.lastRow, l.lastAt = -1, time.Time{} }
+
+// doubleClick reports whether a primary press on row i completes the click
+// noteClick recorded: the same row, of the same content, inside the interval.
+//
+// The content is part of it because a list is virtual — its rows are indices
+// into whatever the application holds now — so "row 3" after a playlist is
+// replaced is not the row that was clicked. A changed Count is the only part
+// of that the list can see for itself, and it is the common case.
+func (l *ListView) doubleClick(i int) bool {
+	return i >= 0 && i == l.lastRow && l.Count == l.lastCount &&
+		!l.lastAt.IsZero() && time.Since(l.lastAt) < doubleClickInterval
+}
+
 // RowAt is the row at a point in this list's own coordinates, or -1 where
 // there is none — past the last row, in the scroll bar, or outside the view.
 //
@@ -749,18 +815,31 @@ func (l *ListView) Activate(row int) { l.activate(row) }
 // it and had no way to ask: the row geometry is the list's, and a skinned one
 // takes it from the skin's layout rather than from the look.
 func (l *ListView) RowAt(p paintengine2d.Point) int {
-	v := toView(p, l.pad())
+	return l.rowAtView(toView(p, l.pad()))
+}
+
+// rowAtView is the row at a point already in view space, or -1 where there is
+// none. One hit test, used by RowAt and by the list's own pointer handling, so
+// that what an application is told is under the pointer is what the list acts
+// on.
+//
+// Both axes are checked, against the box the rows are actually drawn in
+// (rowsW, which is the whole of a skin's rows slot and, on a look whose bar
+// takes a gutter out of the content, the view without that gutter). A point
+// level with a row but beside it — in the view frame, in the gutter, in the
+// gap a skin's layout leaves between its rows and its groove — is not on that
+// row, and a Y-only test answered with it.
+func (l *ListView) rowAtView(v paintengine2d.Point) int {
 	if v.Y < 0 || v.Y >= l.inner().Dy() {
+		return -1
+	}
+	if v.X < 0 || v.X >= l.rowsW() {
 		return -1
 	}
 	if sp := l.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(v) {
 		return -1
 	}
-	i := l.indexAt(v.Y)
-	if i < 0 || i >= l.Count {
-		return -1
-	}
-	return i
+	return l.indexAt(v.Y)
 }
 
 // navigate makes row next current the way keyboard navigation does: plain
@@ -798,6 +877,9 @@ func (l *ListView) TextInput(r rune) bool {
 	i, searched := l.find.next(r, l.Selected, l.Count, l.ItemText)
 	if i >= 0 {
 		l.navigate(i, 0)
+	}
+	if searched {
+		l.resetClicks()
 	}
 	return searched
 }
