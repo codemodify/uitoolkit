@@ -42,6 +42,22 @@ type Label struct {
 	Align style.Align
 	Title bool
 	Mono  bool
+	// Bold is the look's bold face at the body's own size: a run-in
+	// heading, the way GTK's `heading` class, Qt's QFont::setBold and
+	// HTML's <strong> give one.
+	//
+	// Title is the *page* title's size, a step above the section titles it
+	// would sit under, so a line naming the paragraph beneath it had
+	// nowhere to go: an application had to draw the line itself with the
+	// look's BoldFont and do its own wrapping, which is a label
+	// reimplemented to change one thing about the face. A look with no
+	// bold face of its own answers with the body face, so a label asking
+	// for bold on a pack that has none reads as an ordinary one rather
+	// than as a missing font.
+	//
+	// Title wins where both are set: a title is already the louder of the
+	// two.
+	Bold bool
 	// Wrap breaks long lines at spaces to fit the label's width (QLabel's
 	// wordWrap, GtkLabel's wrap): the label grows taller instead of
 	// eliding. It measures to the width its parent offers.
@@ -102,6 +118,9 @@ func (l *Label) font() *style.Font {
 	if l.Mono {
 		return lk.MonoFont()
 	}
+	if l.Bold {
+		return lk.BoldFont()
+	}
 	if l.Color != (paintengine2d.Color{}) && near(l.Color, lk.Palette().TextMuted) {
 		return lk.MutedFont()
 	}
@@ -141,7 +160,7 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	f := l.font()
 	wrapW := float32(-1)
 	if l.Wrap && c.HasMaxW() {
-		wrapW = c.MaxW - 2
+		wrapW = l.wrapWidth(f, c.MaxW)
 	}
 	lines := l.layoutLines(f, wrapW)
 	var w float32
@@ -149,10 +168,52 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 		w = max(w, f.Advance(line))
 	}
 	n := max(len(lines), l.MinLines)
-	if l.Icon != style.IconNone {
-		w += l.iconSide(f) + l.iconGap(f)
+	w += l.iconRoom(f)
+	width := w + 2
+	if l.Wrap {
+		// Whole pixels, rounded up, for the width of a label that wraps.
+		//
+		// Layout rounds every component's bounds to the pixel grid
+		// (widget.PixelRect, to the *nearest* pixel), so a box asked for at
+		// 238.12 is handed over at 238 — and the longest line, which needed
+		// 208.12 of it, no longer fits. It wraps once more, and the extra
+		// line is pushed out of a box measured without it. Half a pixel, one
+		// line of a warning gone. It is the rule Grid already follows for a
+		// child sized to its content (ceilPx there).
+		//
+		// The width only, and only when wrapping: that is where a fraction
+		// costs a whole line rather than a hair off an ellipsis, and rounding
+		// every label would move layouts all over the toolkit for no one.
+		width = ceilPx(width)
 	}
-	return c.Constrain(paintengine2d.Pt(w+2, f.Height()*float32(n)+2))
+	return c.Constrain(paintengine2d.Pt(width, f.Height()*float32(n)+2))
+}
+
+// iconRoom is what the mark takes out of the text's width, or zero.
+func (l *Label) iconRoom(f *style.Font) float32 {
+	if l.Icon == style.IconNone {
+		return 0
+	}
+	return l.iconSide(f) + l.iconGap(f)
+}
+
+// wrapWidth is the width the text really gets out of a box this wide: less
+// the border, and less the room the mark takes.
+//
+// Measure and Paint have to agree on it exactly. Measure used to wrap at the
+// whole width and add the mark's room afterwards, while Paint took the mark's
+// room off first and wrapped at what was left — so a label measured for two
+// lines painted three, and the lines, centred in a box only tall enough for
+// two, lost the first and the last. A sender warning, a signed-and-encrypted
+// line, a "Not available: ..." — all of them, at ordinary widths.
+func (l *Label) wrapWidth(f *style.Font, avail float32) float32 {
+	w := avail - 2 - l.iconRoom(f)
+	if w < 4 {
+		// The floor Paint elides at: a width with no room for text is not a
+		// width to wrap at, and one character per line is not an answer.
+		w = 4
+	}
+	return w
 }
 
 // NewIconLabel is a label that leads with a mark — a status bar's ahead
@@ -211,16 +272,15 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 		style.DrawToolIcon(ctx, paintengine2d.XYWH(b.Min.X, top, side, side), l.Icon, col, style.IconSetOf(lk))
 		b.Min.X += side + gap
 	}
-	lines := l.layoutLines(f, b.Dx()-2)
+	// The same width Measure wrapped at. b has already lost the mark's room
+	// above, so this is the full box again.
+	lines := l.layoutLines(f, l.wrapWidth(f, l.LocalBounds().Dx()))
 	th := f.Height()
 	y := b.Min.Y + (b.Dy()-th*float32(len(lines)))*0.5
 	if l.MinLines > len(lines) {
 		y = b.Min.Y + 1
 	}
-	maxW := b.Dx() - 2
-	if maxW < 4 {
-		maxW = 4
-	}
+	maxW := l.wrapWidth(f, l.LocalBounds().Dx())
 	ctx.Save()
 	ctx.ClipRect(b)
 	for _, show := range lines {

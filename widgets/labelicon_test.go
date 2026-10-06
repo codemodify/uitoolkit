@@ -67,3 +67,53 @@ func visiblyDifferentPx(a, b *paintengine2d.Image) int {
 	}
 	return n
 }
+
+// A wrapping label with a mark is measured at the width its text will have.
+//
+// Measure wrapped at the whole width and added the mark's room afterwards;
+// Paint took the mark's room off first and wrapped at what was left. So the
+// text wrapped to more lines than the box was measured for, and the lines,
+// centred in it, lost the first and the last — a sender warning, a
+// signed-and-encrypted line, a "Not available: ..." — at ordinary widths.
+func TestAWrappingIconLabelIsMeasuredAtTheWidthItsTextGets(t *testing.T) {
+	const text = "This message came from a server that is not the one its sender claims, " +
+		"which is usually a mistake and occasionally not."
+	lk := style.DarkLook()
+	for _, w := range []float32{180, 240, 320, 460} {
+		l := NewIconLabel(style.IconWarning, text)
+		l.Wrap = true
+		l.SetHost(&fakeWindow{look: lk})
+		got := l.Measure(layout.Loose(w, 1000))
+		l.Arrange(paintengine2d.XYWH(0, 0, got.X, got.Y))
+
+		// The invariant, asked of the box Measure actually returned rather
+		// than of a width the test works out for itself: the lines Paint
+		// wraps to must fit in it. Either half of the bug — wrapping at a
+		// width the text will not get, or losing the last fraction of a
+		// pixel to layout rounding — shows up as lines that do not.
+		f := l.font()
+		painted := len(l.layoutLines(f, l.wrapWidth(f, l.LocalBounds().Dx())))
+		need := f.Height()*float32(painted) + 2
+		if got.Y < need-0.01 {
+			t.Errorf("at %.0f wide: measured a box %.2f tall, paints %d lines needing %.2f",
+				w, got.Y, painted, need)
+		}
+	}
+}
+
+// And the mark still gets its room: the text is not simply given the whole
+// width back.
+func TestAWrappingIconLabelKeepsRoomForItsMark(t *testing.T) {
+	lk := style.DarkLook()
+	const text = "a warning that runs on for long enough to wrap at any sensible width"
+	plain, marked := NewLabel(text), NewIconLabel(style.IconWarning, text)
+	for _, l := range []*Label{plain, marked} {
+		l.Wrap = true
+		l.SetHost(&fakeWindow{look: lk})
+	}
+	bare := plain.Measure(layout.Loose(240, 1000))
+	wide := marked.Measure(layout.Loose(240, 1000))
+	if wide.Y < bare.Y {
+		t.Errorf("the marked label is shorter (%.0f) than the plain one (%.0f): the mark took no room from the text", wide.Y, bare.Y)
+	}
+}
