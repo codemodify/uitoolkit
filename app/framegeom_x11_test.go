@@ -5,6 +5,7 @@ package app
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -90,8 +91,18 @@ func TestAnExactlyGrantedResizeReachesTheLayout(t *testing.T) {
 	const wantW, wantH = 700, 450
 
 	w.SetSize(wantW, wantH)
-	a.PumpOnce()
-	a.PumpOnce()
+	// Pumped until the configure arrives, not twice and hope: the window
+	// manager answers a resize when it answers, and on a loaded machine that
+	// is not within two turns of the loop. A test that assumed two reported
+	// the *old* size and read as this defect coming back.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		a.PumpOnce()
+		if gw, gh := w.Size(); gw == wantW && gh == wantH {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	gw, gh := w.Size()
 	if gw != wantW || gh != wantH {
