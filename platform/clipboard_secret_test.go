@@ -10,6 +10,12 @@ import (
 // clipboard as a string, and comes back as bytes.
 func TestSecretClipboardRoundTrip(t *testing.T) {
 	t.Cleanup(ClipboardClear)
+	// About SecretClip's own bookkeeping, not about any backend, so the
+	// native seam stands in: under a live session (tools/test-display.sh)
+	// the compositor cancels the data source of a client with no window and
+	// no focus within milliseconds, which legitimately ends the held copy —
+	// and this test would then be measuring the compositor.
+	noNativeClipboard(t)
 	ClipboardSet("something ordinary")
 	c := ClipboardSetSecret([]byte("hunter2"), -1)
 	if !ClipboardHoldsSecret() {
@@ -70,6 +76,7 @@ func TestSecretClipboardClearsItself(t *testing.T) {
 // than left for a timer that would clear a clipboard it no longer owns.
 func TestSecondSecretSupersedesTheFirst(t *testing.T) {
 	t.Cleanup(ClipboardClear)
+	noNativeClipboard(t) // see TestSecretClipboardRoundTrip
 	first := []byte("first")
 	c1 := ClipboardSetSecret(first, -1)
 	second := []byte("second")
@@ -110,6 +117,7 @@ func TestClearSecretLeavesAnOrdinaryCopy(t *testing.T) {
 // Zero means the default timeout rather than "clear immediately".
 func TestZeroTimeoutIsTheDefault(t *testing.T) {
 	t.Cleanup(ClipboardClear)
+	noNativeClipboard(t) // see TestSecretClipboardRoundTrip
 	ClipboardSetSecret([]byte("hunter2"), 0)
 	if !ClipboardHoldsSecret() {
 		t.Fatal("a zero timeout cleared it at once")
