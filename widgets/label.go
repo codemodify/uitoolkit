@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
@@ -160,7 +161,23 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	f := l.font()
 	wrapW := float32(-1)
 	if l.Wrap && c.HasMaxW() {
-		wrapW = l.wrapWidth(f, c.MaxW)
+		// At the *narrowest* whole width this box can be handed, not at the
+		// fractional width it is offered.
+		//
+		// Layout rounds each edge of a component's bounds to the nearest
+		// pixel (widget.PixelRect), and which way each edge goes depends on
+		// where the box sits — so a label offered 248.5 is handed 248 or
+		// 249, and 248 is a width it was never measured at. At a fractional
+		// scale that is the common case: a column's inner width is
+		// fractional, the text is measured for six lines at 248.5 and wraps
+		// to seven at 248, and the lines, centred in a box tall enough for
+		// six, lose the first and the last. That is the symptom the icon
+		// label fix was about, back again at a width nobody measured.
+		//
+		// Flooring here and rounding the answer up below are conservative in
+		// the same direction: wrap for the worst width the box may be, and
+		// ask for a width that still holds the longest line.
+		wrapW = l.wrapWidth(f, floorPx(c.MaxW))
 	}
 	lines := l.layoutLines(f, wrapW)
 	var w float32
@@ -169,27 +186,36 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	}
 	n := max(len(lines), l.MinLines)
 	w += l.iconRoom(f)
-	width := w + 2
-	if l.Wrap {
-		// Whole pixels, rounded up, for the width of a label that wraps.
-		//
-		// Layout rounds every component's bounds to the pixel grid
-		// (widget.PixelRect, to the *nearest* pixel), so a box asked for at
-		// 238.12 is handed over at 238 — and the longest line, which needed
-		// 208.12 of it, no longer fits. It wraps once more, and the extra
-		// line is pushed out of a box measured without it. Half a pixel, one
-		// line of a warning gone. It is the rule Grid already follows for a
-		// child sized to its content (ceilPx there).
-		//
-		// The width only, and only when wrapping: that is where a fraction
-		// costs a whole line rather than a hair off an ellipsis, and rounding
-		// every label would move layouts all over the toolkit for no one.
-		width = ceilPx(width)
-	}
-	return c.Constrain(paintengine2d.Pt(width, f.Height()*float32(n)+2))
+	// A measured size is whole pixels, both ways and always.
+	//
+	// Layout rounds every component's bounds to the pixel grid
+	// (widget.PixelRect) and it rounds to the *nearest* pixel — which is
+	// right, because that is what makes neighbours that share an edge go on
+	// sharing it. The consequence is that a fractional measurement can be
+	// handed back smaller than it asked for: a label measured 238.12 wide is
+	// given 238, and the longest line, which needed 208.12, no longer fits —
+	// it wraps once more and the extra line is pushed out of a box measured
+	// without it. The same in the other direction: a box measured 245.3 tall
+	// is given 245, and the last line's descender is clipped.
+	//
+	// So the rule is the widget's, not layout's: measure in whole pixels, and
+	// round up, so that rounding to nearest can never take anything away.
+	// Grid has followed it for a child sized to its content all along
+	// (ceilPx); this is the same rule where the text is.
+	return c.Constrain(wholePx(paintengine2d.Pt(w+2, f.Height()*float32(n)+2)))
 }
 
 // iconRoom is what the mark takes out of the text's width, or zero.
+// floorPx is the narrowest whole pixel width a box of this width may be
+// handed once layout has rounded its edges (widget.PixelRect).
+func floorPx(v float32) float32 { return float32(math.Floor(float64(v))) }
+
+// wholePx rounds a measured size up to whole pixels on both axes, so that
+// layout's round-to-nearest cannot hand the widget less than it measured.
+func wholePx(p paintengine2d.Point) paintengine2d.Point {
+	return paintengine2d.Pt(ceilPx(p.X), ceilPx(p.Y))
+}
+
 func (l *Label) iconRoom(f *style.Font) float32 {
 	if l.Icon == style.IconNone {
 		return 0

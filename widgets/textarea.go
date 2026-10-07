@@ -203,7 +203,10 @@ func (t *TextArea) Measure(c layout.Constraints) paintengine2d.Point {
 		}
 	}
 	h := float32(rows)*t.lineH() + t.fieldPad()*2
-	return c.Constrain(paintengine2d.Pt(w, h))
+	// Whole pixels, for the reason Label.Measure gives: layout rounds a box's
+	// edges to the nearest pixel, so a fractional measurement can come back
+	// smaller than it asked for and the last row goes behind the scroll bar.
+	return c.Constrain(wholePx(paintengine2d.Pt(w, h)))
 }
 
 // rowsFor is how many lines the text wraps to in a box this wide.
@@ -216,7 +219,12 @@ func (t *TextArea) Measure(c layout.Constraints) paintengine2d.Point {
 func (t *TextArea) rowsFor(boxW float32) int {
 	wrap := float32(1e6)
 	if t.Wrap {
-		if wrap = boxW - t.fieldPad()*2; wrap < 8 {
+		// The narrowest whole width this box may be handed, for the reason
+		// Label.Measure floors its own (widget.PixelRect rounds each edge, so
+		// a view offered 282.5 is handed 282 or 283). Measured at 282.5 a path
+		// is two lines; laid out at 282 it is three, and the third sits behind
+		// a scroll bar in a view measured for two.
+		if wrap = floorPx(boxW) - t.fieldPad()*2; wrap < 8 {
 			wrap = 8
 		}
 	}

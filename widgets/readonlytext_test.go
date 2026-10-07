@@ -147,9 +147,11 @@ func TestFitRowsStopsAtMaxRows(t *testing.T) {
 	v.SetLook(style.DarkLook())
 	v.SetHost(&host{})
 	got := v.Measure(layout.Loose(400, 4000)).Y
-	capped := float32(6)*v.lineH() + v.fieldPad()*2
+	// Whole pixels: a measured size is rounded up so layout's round-to-nearest
+	// cannot hand the view less than it asked for (see Label.Measure).
+	capped := ceilPx(float32(6)*v.lineH() + v.fieldPad()*2)
 	if got != capped {
-		t.Errorf("fitted to %.1f with MaxRows=6, want %.1f", got, capped)
+		t.Errorf("fitted to %.3f with MaxRows=6, want %.3f", got, capped)
 	}
 }
 
