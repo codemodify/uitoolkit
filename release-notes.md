@@ -7,6 +7,219 @@ about the problem it solved.
 
 ---
 
+## 0.23.5
+
+**Four applications' lists, emptied.** A video player joined the three that
+report against this toolkit, and of the twenty-nine changes here
+twenty-seven answer something one of them raised. What is left open across
+all four is one item the user has pinned (printing) — and nothing else.
+
+Five of them are defects in what 0.23.4 shipped *for* those reports, which
+is the part worth reading: the list API added for the music player had two
+bugs in it, the owned-window API one, and the clipboard hardening done for
+the vault two.
+
+The release also corrects a claim 0.23.4's own notes made. See **Known**.
+
+New: `TextField.ReadOnly`; `TextArea.FitRows` and `MaxRows`; `Label.Bold`;
+`FileDialogOptions.Multiple` with `OnPickMany` and `FileDialog.Paths`;
+`Window.OnActiveChange`; `Window.OnPaintDeviceChange`, `Window.PaintDevice`
+and `Window.UsesGPU`; `platform.WindowOptions.Hidden`;
+`platform.EventPaintDevice`; `style.RegisterIcon`, `style.IconDrawer` and
+`style.RegisteredIcon`; `Application.HideWindowMenuPinned`.
+`Application.SetHideWindowMenu` now pins the choice against the user's file.
+paintengine2d moves to v0.12.0, whose `ForeignTexture` is what the video
+work is built on.
+
+### A list acts on the row the pointer is on
+
+`ListView.RowAt` is new in 0.23.4 and it tested Y alone — so did the list's
+own pointer handling. A point level with a row but beside it was answered
+with that row: in the view frame, in the gutter a bar takes out of the
+content, or in the gap a skin's layout leaves between its rows and its
+groove. With the music player's geometry, `RowAt(0,30)`, `(135,30)` and
+`(151,30)` all said row 0 and none of them was in the rows slot.
+
+There is one hit test now, on both axes, and `RowAt`, `MousePress` and
+`MouseMove` all use it — so what an application is told is under the
+pointer is what the list acts on, which is the whole point of handing it
+out.
+
+The second half of that report: a double click is two clicks on the same
+row with nothing in between, and the list only ever checked the row and the
+clock. A click, an interruption, and one ordinary click a quarter of a
+second later activated the row — after the pointer left, after the focus
+went, after a wheel or programmatic scroll, after a press on the scroll
+bar, after a secondary press, after an arrow key, after type-ahead, after a
+Ctrl or Shift click, and after a press the list ignored because it was
+disabled. **`TableView` and `TreeView` had the same hole and nobody
+reported it**; a rule that holds in one of three widgets is not a rule.
+
+### The secret clipboard, audited
+
+The vault read 0.23.4's clipboard work through to the backends and found
+five things. Two were 0.23.4's own:
+
+- A paste that gave up waiting **kept what arrived after it**.
+  `handleSelNotify` never asked `pasteWaiting` — 0.23.4 added that flag for
+  the INCR path and wired it only there — and `pasteWant` was written and
+  never read. So a reply from a slow owner went into `pasteData` and only
+  the *next* paste cleared it, which in a manager that lives in the tray is
+  days; and a late answer about PRIMARY, or about another field's ordinary
+  text, could be served as the answer to a secret paste.
+- **A loss still on its way was pinned on the copy just made.** 0.23.4 made
+  a lost selection end the copy it was about rather than whatever is held —
+  but it named that copy when the news is *handled*, and the fresh
+  selection timestamp 0.23.4 also added is a round trip whose drain
+  dispatches a `SelectionClear` from another program's copy made
+  milliseconds earlier. Inside the new copy's own call. The password
+  manager said "cleared" the instant the user copied, with the passphrase
+  still on the clipboard. Nothing is held for the length of a copy now.
+And three older ones that every audit before this one missed:
+
+- **A copy the platform refused was taken for one that was made.**
+  `clipboardNativeSetSecret` returned nothing, so Windows noted the
+  clipboard sequence number and macOS the pasteboard changeCount either
+  way — and macOS threw away all three `setString:forType:` results, which
+  is the same defect as the drag types below. The seam reports on every
+  backend now and a refused copy comes back already cleared. "There is no
+  window system here" stays a *success*: the in-memory copy is the copy
+  then, which every displayless test depends on.
+- **A Wayland secret copy unset whoever held the primary selection.** It
+  called `set_selection(null)` whenever a primary device existed at all, and
+  that unsets whichever client's selection it is — so copying a password
+  threw away whatever the person had selected in another program, and the
+  middle click after it pasted nothing. The clear had been guarded against
+  exactly this since 0.23.3; the copy path never was.
+- **A secret's clear ran on its timer's goroutine**, against Wayland state
+  the event loop mutates without that lock: two destroys of one data source,
+  a cache zeroed while it was being written. It goes to the loop now —
+  `app.Run` lends the platform layer its `Post` for as long as it is
+  running, and only that long, because posted work nothing will ever drain
+  would be a passphrase left on the clipboard.
+
+### A picture the toolkit did not draw
+
+The video player's first report measured its own cost honestly: libmpv's
+**software** renderer into a C buffer, a copy into Go memory, a copy into a
+wrapped image, and a full `glTexImage2D` every frame. About 210 MB/s of
+upload at 1280x720 and 60 frames a second — which is why it caps its render
+size, and it says plainly that the cap is its own choice and not a limit
+here.
+
+`Blit` takes an `Image`, which is CPU memory by definition, so there was
+nowhere else for that content to go. paintengine2d v0.12.0 adds a foreign
+texture a device can blit: the caller renders into a texture and a
+framebuffer on the window's own GL context — `FBO` is what libmpv's
+`MPV_RENDER_PARAM_OPENGL_FBO` takes — and it is drawn as an **ordinary
+blit**, with the same transform, clip, tint and alpha as anything else. A
+frame composited by a route of its own would composite differently from the
+interface over it.
+
+`Window.PaintDevice`, `Window.UsesGPU` and `Window.OnPaintDeviceChange` are
+this side of it. The last one closes a hole that was there regardless: a
+window's paint device is closed and made again when the window changes
+visual, when a resize of it fails, and when the GPU is lost and painting
+falls back to the CPU — and **every one of those paths dropped it in
+silence**. An application holding a texture on it was left with a GL name
+that means nothing.
+
+No fences, deliberately: commands on one GL context are ordered and a
+device already pins itself to its creating thread, so a blit after the
+caller's draws sees them. A fence is only needed for a second context,
+which is the compositor case and not this one. No dmabuf import either —
+that is for frames that never touch the CPU, and nothing needs it yet.
+
+It is **GPU-only**, so `UsesGPU` is the question to ask once before
+building a renderer: a remote X session, `UITK_PAINT=cpu` or a GPU that was
+lost cannot take a foreign texture. This is a fast path beside an
+application's software one, not a replacement for it.
+
+### Measure answers, Arrange decides
+
+`ScrollView.Measure` kept what the child measured as the size it scrolls,
+and the range, the clamp and the thumb all read it. Two things measure
+after the layout as a matter of course — a splitter asking its panes'
+minimum widths, which probes at a quarter of the natural width, and a
+parent measuring unbounded — so a view was left scrolling the content as it
+would be at *that* width until the next `Arrange`. A mail client's tab,
+scrolled to the end, read a range of 573 px before such a probe and 2979
+after it: the thumb half-way down at the end of the content, and the wheel
+going on into nothing.
+
+It is a house rule now, and `TextArea.FitRows` was written to it.
+
+### The rest
+
+- **A wrapping label with a mark** was measured at the whole width and
+  painted at the width left over after the mark, so it wrapped to more
+  lines than its box was measured for and lost the first and the last to
+  the vertical centring. The other half was subtler: a wrapping label
+  measured 238.12 wide, layout rounds bounds to the *nearest* pixel, and
+  the longest line no longer fits — so a wrapping label's width is rounded
+  up, which is the rule `Grid` already followed.
+- **A re-made window keeps the windows it owns.** An X11 window
+  re-created on another visual is a new window with a new id, and the
+  `WM_TRANSIENT_FOR` of everything that belongs to it still named the one
+  that was destroyed.
+- **A tray icon's own raster** is no longer offered beside a generic theme
+  name, which the SNI specification has hosts *prefer* over the pixmap.
+- **A resized panel's artwork follows the scale its layout used.** The
+  whole-multiple rule for pixel art is a *control-face* policy; applied to
+  a panel's background it put a 38-pixel edge against a 66.5-pixel slot at
+  1.75x.
+- **The stock bars paint the skin's bound `bar` face.** All four called the
+  raw token drawing instead of going through the engine, so a valid part
+  was never asked for.
+- **Muting a face keeps its metrics**, so an 11-point field no longer shows
+  a 16-point placeholder.
+- **Every keyboard focus change in a menu scrolls the row into view.** Four
+  of them did not, and Return invoked an item the person could not see.
+- **A mixed skin plan keeps each sheet's sampling policy**; one pixelated
+  sheet used to set the default for the whole skin.
+- paintengine2d **v0.11.1** on the way past: a cached texture sampled the
+  way the *first* draw asked, because sampling is state on the texture
+  object in GLES2 and nothing re-applied it on a cache hit.
+
+### Known
+
+**0.23.4's notes were wrong about the macOS window move, and this is the
+correction.** They called it "Confirmed … Measured, not inferred". The
+measurement was real — on 2026-10-03 `TestAppKitGeometryRoundTrips` failed
+every run, at two commits in two directories, and the window was put back
+to its creation frame about 100 ms after every move. The *cause* was not:
+the next day it passed five times out of five, and **the published 0.23.4
+tree, byte for byte the code that failed, passes on the same Mac**. So it
+was a condition on that machine and not a defect in the backend. Nothing
+was changed to fix it, and nothing should be while it stays green; if it
+comes back, the thing to capture first is what else was true of the Mac.
+
+The claim had already propagated into another project's backlog as a
+high-severity item, which is the cost of writing "confirmed" about a cause
+rather than about a measurement.
+
+**0.23.4's other known item is fixed.** The suspected custom-MIME drag
+defect was real, and confirmed by measurement rather than by reading:
+`setData:forType:` answers NO for `application/x-uitoolkit-tab` and
+`-panel` and YES for a reverse-DNS name, because a MIME string is not a
+valid UTI. So tearing a tab or a dock panel out to another window could not
+work on macOS, and `text/html` was broken the same way. A MIME with no
+macOS equivalent now travels under a reversible encoded UTI, used by the
+write side, the read side and the pasteboard enumeration so all three
+agree, and `uitk_ak_drag_add` *reports whether the payload landed* — which
+is what made the defect invisible.
+
+Still open: a drag from *another process* carrying an application's own type
+needs that type registered before it arrives, and nothing plumbs
+`DropTypes` down to `registerForDraggedTypes:`. Same-process tear-off, the
+case the toolkit ships, works.
+
+**Not run on arm64 anywhere.** The Mac is an Intel i9-9980HK
+(`hw.optional.arm64: no`) and there is no Apple-silicon machine here, so
+every macOS claim in these notes is x86-64.
+
+---
+
 ## 0.23.4
 
 The rest of the three applications' reports, and **their lists are now

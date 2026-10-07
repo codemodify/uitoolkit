@@ -923,6 +923,19 @@ are independent look.json fields again; compound pack names migrate
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
 
+**0.23.5** — **Four applications' lists, emptied.** A video player joined the
+three that report against this toolkit; twenty-seven of the twenty-nine
+changes answer something one of them raised, and what is left open across all
+four is one pinned item. Six are defects in what 0.23.4 shipped *for* those
+reports — a list API with two bugs in it, clipboard hardening with three. A
+foreign GPU texture a window can blit, so a video frame stops costing three
+copies and a full upload every frame (`Window.PaintDevice`, `UsesGPU`,
+`OnPaintDeviceChange`; paintengine2d v0.12.0). `TextField.ReadOnly`,
+`TextArea.FitRows`, `Label.Bold`, `FileDialogOptions.Multiple`,
+`WindowOptions.Hidden`, `style.RegisterIcon`, `Window.OnActiveChange`. **It
+also corrects a claim 0.23.4's notes made** about a macOS window-move defect
+that turned out to be environmental.
+
 **0.23.4** — **Three applications' lists, emptied.** Everything the mail
 client, the password vault and the music player raised against this
 toolkit is now fixed, declined, or answered as a standing design
