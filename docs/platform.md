@@ -209,6 +209,48 @@ bug. If a window is fully transparent, set `UITK_PAINT=cpu` and/or
 `UITK_WAYLAND_PRESENT=shm` (opaque `XRGB8888`). GPU window configs still
 request `EGL_ALPHA_SIZE` 0.
 
+### A picture the toolkit did not draw
+
+An application that renders its own content on the GPU — a video frame from a
+decoder, a scene from another renderer — can hand the toolkit a texture instead
+of a pixmap. `Blit` takes a `paintengine2d.Image`, which is CPU memory by
+definition, so a video frame otherwise costs three copies and a full texture
+upload *every frame*: the decoder rasterizes into its own buffer, the
+application copies that into Go memory, the engine copies it into a texture. At
+1280×720 and 60 fps that is about 210 MB/s of upload, and it is why a player
+caps its render size.
+
+```go
+if !w.UsesGPU() {                      // decide once, before building a renderer
+    // the CPU path: a remote X session, UITK_PAINT=cpu, or a lost GPU
+}
+dev := w.PaintDevice()
+target, err := paintengine2d.NewForeignTarget(dev, w, h)
+// ... render into target.FBO with dev.(*paintengine2d.GPUDevice).MakeCurrent() ...
+ctx.DrawForeign(target, paintengine2d.Rect{}, box)   // false: fall back
+```
+
+`target.FBO` is what libmpv's `MPV_RENDER_PARAM_OPENGL_FBO` takes, so a
+decoder renders straight into it and nothing is copied. The draw is an
+**ordinary blit** — the same transform, clip, tint and global alpha as anything
+else — so a frame composites with the interface over it rather than beside it.
+`GPUDevice.ClearForeign` blanks one between videos; `AdoptTexture` wraps a
+texture the caller already made, and does not take ownership of it.
+
+Two rules, and both are the window's rather than the engine's:
+
+- **Render into it on the UI goroutine with the device's context current**
+  (`MakeCurrent`). Commands on one GL context are ordered, so a blit after the
+  caller's draws sees them — there is no fence and none is needed. A device
+  refuses calls from another OS thread anyway.
+- **It does not outlive the device.** `Window.OnPaintDeviceChange` fires when
+  the device is replaced or goes away — an X11 window that gains a shadow is
+  re-created on a 32-bit visual, a resize of the device fails, or the GPU is
+  lost and the window falls back to the CPU. Every one of those used to happen
+  in silence. Ask `Window.PaintDevice` again and build the target afresh;
+  `ForeignTexture.Valid` reports a handle whose device has gone, and blitting
+  one is refused rather than sampling whatever got its texture name next.
+
 ## Wayland notes (0.4.1 / 0.5.0)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,

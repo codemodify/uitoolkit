@@ -3,7 +3,7 @@ module github.com/codemodify/uitoolkit
 go 1.22.2
 
 require (
-	github.com/codemodify/paintengine2d v0.11.1
+	github.com/codemodify/paintengine2d v0.12.0
 	golang.org/x/image v0.18.0
 )
 

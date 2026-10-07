@@ -54,7 +54,10 @@ type Window struct {
 	onMove func(x, y int)
 	// onActive is called when the window takes or loses the keyboard focus
 	// (app/active.go).
-	onActive      func(active bool)
+	onActive func(active bool)
+	// onPaintDevice is called when the window's paint device is replaced or
+	// lost (app/paintdevice.go).
+	onPaintDevice func()
 	secureWanted  bool
 	secureGot     bool
 	secureHeld    bool
@@ -1134,6 +1137,16 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.laid = false
 			w.dropScene()
 			w.fullInvalidate()
+		}
+	case platform.EventPaintDevice:
+		// The device the window paints through was replaced or went away.
+		// Everything is repainted — the widgets draw against whatever it is
+		// now — and an application holding anything built on the old one is
+		// told, because nothing else can tell it (app/paintdevice.go).
+		w.dropScene()
+		w.fullInvalidate()
+		if w.onPaintDevice != nil {
+			w.onPaintDevice()
 		}
 	case platform.EventScale:
 		// The display scale changed with no resize behind it. Until
