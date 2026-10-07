@@ -34,6 +34,29 @@ func (s *x11Surface) tryBindGPU() {
 		return
 	}
 	s.gpu = dev
+	s.notePaintDevice()
+}
+
+// notePaintDevice queues [EventPaintDevice] when the window's paint device
+// really changed, so an application holding a texture on it hears before it
+// draws with a name that means nothing.
+//
+// Called from every path that can replace or drop the device. It is cheap and
+// it is idempotent — the notice only fires on a change — so a path that calls
+// it needlessly costs nothing, and one that forgets is the bug.
+func (s *x11Surface) notePaintDevice() {
+	if s == nil || s.conn == nil {
+		return
+	}
+	var dev paintengine2d.Device
+	if s.gpu != nil {
+		// Not `dev = s.gpu` unconditionally: a nil *GPUDevice in an interface
+		// is not a nil interface, and the notice compares identities.
+		dev = s.gpu
+	}
+	if ev := s.paintNotice.paintDeviceEvent(dev); len(ev) > 0 {
+		s.conn.queues[s.win] = append(s.conn.queues[s.win], ev...)
+	}
 }
 
 func (s *x11Surface) closeGPU() {
@@ -42,6 +65,7 @@ func (s *x11Surface) closeGPU() {
 	}
 	_ = s.gpu.Close()
 	s.gpu = nil
+	s.notePaintDevice()
 }
 
 func (s *x11Surface) resizeGPU(w, h int) {

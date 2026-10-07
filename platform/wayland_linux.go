@@ -1622,6 +1622,9 @@ type wlSurface struct {
 	dress wlDress
 	// gpuAlpha is whether the EGL config behind gpu has an alpha channel;
 	// a frame that starts or stops needing one rebinds the device.
+	// paintNotice reports a replaced or lost paint device (EventPaintDevice).
+	paintNotice paintDeviceNotice
+
 	gpuAlpha bool
 	// boundsW / boundsH are the latest configure_bounds (logical px; 0 when
 	// unknown): the largest size that fits the screen's work area, which

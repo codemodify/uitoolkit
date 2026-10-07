@@ -329,3 +329,54 @@ func TestAnOrdinaryX11WindowMapsOnItsFirstFrame(t *testing.T) {
 		t.Error("an ordinary window was not mapped by its first present")
 	}
 }
+
+// A window's paint device is not forever, and the window says when it changes.
+//
+// An X11 window that gains a translucent frame has to be re-created on a
+// 32-bit visual, which destroys its EGL device and makes another one. Every
+// path that does that used to drop the device in silence — so an application
+// holding a texture on it (a video frame it renders into) was left with a GL
+// name that means nothing and nothing to tell it so.
+func TestAWindowSaysWhenItsPaintDeviceChanges(t *testing.T) {
+	s := x11Window(t, WindowOptions{Title: "uitoolkit-device"})
+	if !SurfaceUsesGPU(s) {
+		t.Skip("this window is painting on the CPU; there is no device to lose")
+	}
+	was := SurfaceDevice(s)
+	if was == nil {
+		t.Fatal("a GPU window has no paint device")
+	}
+	// Whatever is queued from making the window is not what this is about.
+	s.Poll()
+
+	s.SetFrame(Frame{Alpha: true, Margin: FrameInsets{Top: 8, Right: 8, Bottom: 8, Left: 8}})
+	if SurfaceDevice(s) == was {
+		t.Skip("the window was not re-made (no compositing manager, or no 32-bit visual)")
+	}
+
+	saw := false
+	for _, ev := range s.Poll() {
+		if ev.Kind == EventPaintDevice {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Error("the paint device was replaced and the window said nothing")
+	}
+}
+
+// And a window whose device never changes never claims it did — including the
+// device it was born with, which the application already has.
+func TestAnUnchangedPaintDeviceIsNeverReported(t *testing.T) {
+	s := x11Window(t, WindowOptions{Title: "uitoolkit-device-quiet"})
+	for i := 0; i < 3; i++ {
+		if err := s.Present(nil); err != nil {
+			t.Fatalf("present: %v", err)
+		}
+		for _, ev := range s.Poll() {
+			if ev.Kind == EventPaintDevice {
+				t.Fatal("a window whose device never changed reported one")
+			}
+		}
+	}
+}

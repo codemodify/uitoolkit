@@ -293,6 +293,22 @@ const (
 	// it has. Watching XSETTINGS for Xft/DPI changing under a running
 	// session would make it send one; nothing has needed that yet.
 	EventScale
+	// EventPaintDevice: the window's paint device was replaced or went away
+	// ([SurfaceDevice], [SurfaceUsesGPU]).
+	//
+	// A window's device is not forever. It is closed and made again when the
+	// window changes visual (an X11 window gains a shadow and has to be
+	// re-created on a 32-bit visual), when a resize of it fails, and when the
+	// GPU is lost mid-run and the window falls back to painting on the CPU.
+	// Nothing used to say so: a GPU device simply became another one, or
+	// nothing.
+	//
+	// Anything an application holds *on* that device — a
+	// [paintengine2d.ForeignTexture] it renders video into, a texture it
+	// uploaded itself — is meaningless afterwards and must be made again
+	// against whatever [SurfaceDevice] now answers. A window that holds
+	// nothing can ignore this.
+	EventPaintDevice
 )
 
 // DropReceiver is implemented by surfaces that take drops from other

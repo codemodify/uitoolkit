@@ -1368,6 +1368,8 @@ type x11Surface struct {
 	askPos       bool
 	askLX, askLY int
 	askDX, askDY int
+	// paintNotice reports a replaced or lost paint device (EventPaintDevice).
+	paintNotice paintDeviceNotice
 	// owner is the window this one belongs to (WM_TRANSIENT_FOR), skipTask
 	// whether it asks to be left out of the task bar and the pager, and
 	// skipTaskAsked whether the *application* asked for that rather than its

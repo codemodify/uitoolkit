@@ -77,6 +77,7 @@ func (s *wlSurface) tryBindGPU() {
 	if egl, _, _ := dev.EGLHandles(); egl != 0 {
 		C.ui_wl_egl_no_vsync(C.uintptr_t(egl))
 	}
+	s.notePaintDevice()
 }
 
 // rebindGPUAlpha swaps the GPU device for one whose EGL config matches the
@@ -92,14 +93,34 @@ func (s *wlSurface) rebindGPUAlpha(alpha bool) {
 	s.gpu, s.eglWin = nil, nil
 	s.tryBindGPU()
 	if s.gpu == nil {
-		// Nothing better to fall back on: keep the device we had.
+		// Nothing better to fall back on: keep the device we had, and say
+		// nothing — from outside, nothing changed.
 		s.gpu, s.eglWin = old, oldWin
+		s.paintNotice.changed(old)
 		return
 	}
 	_ = old.Close()
 	if oldWin != nil {
 		C.ui_wl_egl_destroy((*C.struct_wl_egl_window)(oldWin))
 	}
+	// tryBindGPU has already said so; this is only the note that the device
+	// the application held is gone, which it is.
+	s.notePaintDevice()
+}
+
+// notePaintDevice queues [EventPaintDevice] when the window's paint device
+// really changed. See the X11 twin: one helper per backend, called from every
+// path that can replace or drop the device, idempotent so a needless call
+// costs nothing and a forgotten one is the bug.
+func (s *wlSurface) notePaintDevice() {
+	if s == nil {
+		return
+	}
+	var dev paintengine2d.Device
+	if s.gpu != nil {
+		dev = s.gpu
+	}
+	s.queue = append(s.queue, s.paintNotice.paintDeviceEvent(dev)...)
 }
 
 func (s *wlSurface) closeGPU() {
@@ -115,6 +136,7 @@ func (s *wlSurface) closeGPU() {
 		C.ui_wl_egl_destroy((*C.struct_wl_egl_window)(s.eglWin))
 		s.eglWin = nil
 	}
+	s.notePaintDevice()
 }
 
 func (s *wlSurface) resizeGPU(w, h int) {
