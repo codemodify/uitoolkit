@@ -1214,7 +1214,7 @@ func beBtnMargin(g rpGrid) int {
 
 // DrawButton is BButton. The default button's outline sits in the margin
 // every button keeps, so a row of buttons lines up whichever is default.
-func (e beosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e beosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := beColorsOf(l)
 	g := rpGridAt(ctx, b, rpU(l))
 	if g.w < 8 || g.h < 8 {
@@ -1235,7 +1235,8 @@ func (e beosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 	body := g.inset(m)
 	fg := c.button(ctx, body, st)
-	c.label(l, ctx, body.inset(1), l.body, label, body.at(3, 0, body.w-6, body.h), fg, AlignCenter, st.Focused() && !st.Disabled())
+	l.DrawButtonMark(ctx, body.at(3, 0, body.w-6, body.h), d, fg)
+	c.label(l, ctx, body.inset(1), l.body, d.Label, l.ButtonLabelBox(body.at(3, 0, body.w-6, body.h), d), fg, AlignCenter, st.Focused() && !st.Disabled())
 }
 
 // toggleLabel draws a check box, radio or switch caption six pixels after

@@ -1271,7 +1271,7 @@ func (nextEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b painteng
 
 // DrawButton is the NeXT push button; the default button shows the return
 // glyph at its right.
-func (e nextEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e nextEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := nxColors(l)
 	u := nxU(l)
 	b = nxSnap(b)
@@ -1290,7 +1290,8 @@ func (e nextEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painten
 			pad = 2
 		}
 	}
-	l.drawFittedText(ctx, l.body, label, lb, fg, AlignCenter, pad)
+	l.DrawButtonMark(ctx, lb, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, pad)
 	if st.Focused() && !st.Disabled() {
 		DottedRect(ctx, b.Inset(3*u), c.text)
 	}

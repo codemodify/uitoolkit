@@ -367,10 +367,11 @@ func (material3xEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b 
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e material3xEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e material3xEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	f := md3xFace(l, b)
 	fg, r := md3xButton(l, ctx, f, mdSnap(b), st)
-	l.drawFittedText(ctx, md3xColors(l).medium, label, f, fg, AlignCenter, l.S(16))
+	l.DrawButtonMark(ctx, f, d, fg)
+	l.drawFittedText(ctx, md3xColors(l).medium, d.Label, l.ButtonLabelBox(f, d), fg, AlignCenter, l.S(16))
 	if st.Focused() && !st.Disabled() {
 		md3xRing(l, ctx, f, b, r)
 	}

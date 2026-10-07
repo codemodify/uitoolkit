@@ -63,7 +63,7 @@ func (b *ColorButton) Paint(ctx *paintengine2d.Context) {
 	// The look draws the button and centres the hex label; the swatch sits
 	// just before it.
 	label := ColorHex(b.Color)
-	lk.DrawButton(ctx, r, st, label)
+	lk.DrawButton(ctx, r, st, style.ButtonDraw{Label: label})
 	f := style.ControlFontOf(lk, style.RoleButton)
 	side := f.Height() * 0.9
 	gap := style.Dip(lk, 6)

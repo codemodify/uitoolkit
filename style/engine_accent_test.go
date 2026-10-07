@@ -158,7 +158,7 @@ func accCells() []accCell {
 		st := st
 		sn := fmt.Sprintf("%#x", uint32(st))
 		add("button "+sn, 90, 30, func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
-			lk.DrawButton(ctx, b, st, "Button")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "Button"})
 		})
 		add("tool "+sn, 90, 34, func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 			lk.DrawToolButton(ctx, b, st, "Fetch", IconOpen)

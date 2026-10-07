@@ -54,21 +54,30 @@ stopped quitting.
 
 ### What `Button.Icon` costs, and why
 
-A button with `Icon` set is about **64 px wider at 1x** than the same
-button without. That is not an oversight, and it will break a row that
-only just fitted.
+A button with `Icon` set is **one strip wider** than the same button
+without — about 32 px at 1x, and each era answers for itself (Win95's
+strip is 20 where Adwaita's is 24).
 
-The reason is that a push button's label is drawn *by the engine*, and
-every engine centres it in the whole button and decorates it its own way
-— Clearlooks embosses it, others shadow it, grey it, underline a
-mnemonic. The widget cannot move the label without taking over drawing
-it, and taking over drawing it loses all of that. So it reserves a strip
-for the icon at **each** end, which keeps the label centred between them
-and leaves every era's treatment untouched. The mirrored strip is the
-cost of not touching the engine.
+It used to be *two* strips, about 64 px, and the reason is worth knowing
+because it shaped the fix. A push button's label is drawn **by the
+engine**, and every engine centres it in the box it is handed and
+decorates it its own way — Clearlooks embosses it, others shadow it, grey
+it. The widget could not move the label without taking over drawing it,
+and taking over drawing it loses all of that; so it reserved a strip at
+*each* end and let the centred label land between them. Half of that
+width was symmetry nobody asked for, and it broke rows that only just
+fitted.
 
-**So**: use `Button.Icon` for dialog buttons and anywhere with room.
-Where a row is tight, do one of these instead —
+What was actually missing was a seam. `DrawToolButton` had been handed the
+icon all along — which is why a tool button can be tight — and
+`DrawButton` had not. It is now (`style.ButtonDraw`), so the engine places
+the mark where its era wants it and centres the label in
+`style.ButtonLabelBox`, the button less the strip. Nothing about any era's
+label treatment changed, and a button with no mark is measured and drawn
+exactly as before.
+
+**So**: use `Button.Icon` freely. Where a row is still tight, do one of
+these instead —
 
 - `NewIconButton(style.IconTrash, "Delete", onDelete)` — the same push
   button face with the mark alone, square, and named for the screen

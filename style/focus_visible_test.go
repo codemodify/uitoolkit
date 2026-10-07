@@ -17,7 +17,7 @@ func TestFocusIsVisibleInEveryLook(t *testing.T) {
 	}
 	controls := []control{
 		{"button", 120, 32, func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, b, st, "Button")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "Button"})
 		}},
 		{"checkbox", 140, 28, func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 			lk.DrawCheckbox(ctx, b, st, true, "Check")

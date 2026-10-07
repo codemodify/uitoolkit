@@ -978,7 +978,7 @@ func (e kde2Engine) DrawSlider(l *Classic, ctx *paintengine2d.Context, b painten
 
 // DrawButton is the slab with the label centred on it; the default button
 // wears an extra outline, its corners cut like everything else.
-func (e kde2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e kde2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := kde2Colors(l)
 	u := kde3U(l)
 	r := kde3Snap(b)
@@ -993,7 +993,8 @@ func (e kde2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painten
 	if st.Pressed() && !st.Disabled() {
 		lb = lb.Translate(paintengine2d.Pt(u, u))
 	}
-	l.drawFittedText(ctx, l.body, label, lb, fg, AlignCenter, l.S(8))
+	l.DrawButtonMark(ctx, lb, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, l.S(8))
 	if st.Focused() && !st.Disabled() {
 		kde3Dotted(ctx, body.Inset(snap(l.S(4))), u, c.focus)
 	}

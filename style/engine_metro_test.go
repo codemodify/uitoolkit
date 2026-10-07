@@ -113,7 +113,7 @@ func TestMetroButtonsAreFlatAndSquare(t *testing.T) {
 		lk := winLook(t, n, 1)
 		c := metroColors(lk)
 		img := paintengine2d.NewImage(100, 40)
-		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(5, 5, 90, 30), StateNone, "")
+		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(5, 5, 90, 30), StateNone, ButtonDraw{Label: ""})
 		if !winNear(img, 5, 5, c.btn[0][1]) {
 			t.Errorf("%s: button corner is not its square border", n)
 		}

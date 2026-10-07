@@ -711,8 +711,8 @@ func (skinEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengin
 	underFor(l, "panel").DrawPanel(l, ctx, b, raised)
 }
 
-func (skinEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
-	underFor(l, "button").DrawButton(l, ctx, b, st, label)
+func (skinEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
+	underFor(l, "button").DrawButton(l, ctx, b, st, d)
 }
 
 func (skinEngine) DrawLabel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {

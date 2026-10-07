@@ -32,7 +32,7 @@ func TestLoadThemeEveryEmbeddedPack(t *testing.T) {
 		// Paint must not panic.
 		img := paintengine2d.NewImage(120, 48)
 		ctx := paintengine2d.NewContext(img)
-		look.DrawButton(ctx, paintengine2d.XYWH(4, 4, 80, 28), StateHovered, "OK")
+		look.DrawButton(ctx, paintengine2d.XYWH(4, 4, 80, 28), StateHovered, ButtonDraw{Label: "OK"})
 		look.DrawMenuItem(ctx, paintengine2d.XYWH(4, 8, 110, 24), StateHovered, MenuRow{Label: "Open"})
 	}
 	if _, ok := LoadTheme("classic95"); !ok {
@@ -105,7 +105,7 @@ func TestLunaHotTrackLanguage(t *testing.T) {
 	look := pack.Look()
 	img := paintengine2d.NewImage(100, 36)
 	ctx := paintengine2d.NewContext(img)
-	look.DrawButton(ctx, paintengine2d.XYWH(8, 4, 84, 28), StateHovered, "OK")
+	look.DrawButton(ctx, paintengine2d.XYWH(8, 4, 84, 28), StateHovered, ButtonDraw{Label: "OK"})
 	p := look.Palette()
 	if countNear(img, p.MenuHover) < 20 {
 		t.Fatalf("luna hot button lacks pale fill (near=%d)", countNear(img, p.MenuHover))
@@ -129,7 +129,7 @@ func TestClassic3DBevelLanguage(t *testing.T) {
 		img := paintengine2d.NewImage(100, 36)
 		ctx := paintengine2d.NewContext(img)
 		b := paintengine2d.XYWH(8, 4, 84, 28)
-		look.DrawButton(ctx, b, StateNone, "OK")
+		look.DrawButton(ctx, b, StateNone, ButtonDraw{Label: "OK"})
 		p := look.Palette()
 		top := countNearIn(img, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), 3), p.BevelLight)
 		bot := countNearIn(img, paintengine2d.XYWH(b.Min.X, b.Max.Y-3, b.Dx(), 3), p.BevelDark)
@@ -190,7 +190,7 @@ func TestBevelStylesDifferAcrossEras(t *testing.T) {
 func rasterButton(look LookAndFeel, st ControlState) []byte {
 	img := paintengine2d.NewImage(96, 36)
 	ctx := paintengine2d.NewContext(img)
-	look.DrawButton(ctx, paintengine2d.XYWH(4, 4, 88, 28), st, "OK")
+	look.DrawButton(ctx, paintengine2d.XYWH(4, 4, 88, 28), st, ButtonDraw{Label: "OK"})
 	return imgBytes(img)
 }
 

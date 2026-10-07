@@ -311,7 +311,7 @@ func retroWholePixels(t *testing.T, name string, maxColours int) {
 		r := func(x, y, w, h float32) paintengine2d.Rect { return paintengine2d.XYWH(x*sc, y*sc, w*sc, h*sc) }
 		for i, st := range []ControlState{StateNone, StatePressed | StateHovered, StatePrimary, StatePrimary | StateFocused, StateFocused} {
 			x := float32(4 + i*84)
-			lk.DrawButton(ctx, r(x, 4, 76, 28), st, "")
+			lk.DrawButton(ctx, r(x, 4, 76, 28), st, ButtonDraw{Label: ""})
 			lk.DrawCheckbox(ctx, r(x, 36, 24, 22), st, true, "")
 			lk.DrawRadio(ctx, r(x+30, 36, 24, 22), st, true, "")
 			lk.DrawComboBox(ctx, r(x, 62, 76, 26), st, "", false)

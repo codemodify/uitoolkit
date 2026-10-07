@@ -1273,7 +1273,7 @@ func (e amigaEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painten
 // system button; its applications drew a white outline and complemented it
 // when hit. The Amiga marked no default button. Focus is the dotted mark
 // inside the frame; a disabled button is ghosted.
-func (e amigaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e amigaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := amColors(l)
 	u := rpU(l)
 	g := rpGridAt(ctx, b, u)
@@ -1282,7 +1282,8 @@ func (e amigaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 	pressed := st.Pressed() && !st.Disabled()
 	fg := c.gadget(ctx, g, 0, 0, g.w, g.h, pressed)
-	amText(l, ctx, label, g.at(3, amRow, g.w-6, g.h-2*amRow), b, fg, AlignCenter)
+	l.DrawButtonMark(ctx, g.at(3, amRow, g.w-6, g.h-2*amRow), d, fg)
+	amText(l, ctx, d.Label, l.ButtonLabelBox(g.at(3, amRow, g.w-6, g.h-2*amRow), d), b, fg, AlignCenter)
 	if st.Focused() && !st.Disabled() {
 		amFocus(ctx, g, 3, amRow+1, g.w-6, g.h-2*amRow-2, c.focusOn(c.faceOf(pressed)))
 	}

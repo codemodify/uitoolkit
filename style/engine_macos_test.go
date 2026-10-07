@@ -261,7 +261,7 @@ func TestMacOSFocusHalo(t *testing.T) {
 		img := paintengine2d.NewImage(100, 30)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(b, paintengine2d.Fill(c.win))
-		lk.DrawButton(ctx, b, StateFocused, "")
+		lk.DrawButton(ctx, b, StateFocused, ButtonDraw{Label: ""})
 		want := Mix(c.win, c.focus, c.focus.A)
 		if !nxNear(img, 50, 1, want) && !nxNear(img, 50, 2, want) {
 			r, g, bl, _ := img.PremulAt(50, 1)

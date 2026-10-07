@@ -132,7 +132,10 @@ type Engine interface {
 	// ---- whole controls (same shape as LookAndFeel, plus the look) ------
 
 	DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool)
-	DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string)
+	// DrawButton paints a push button: its face, its words and its mark.
+	// The label goes in [ButtonLabelBox], not in b, and
+	// [Classic.DrawButtonMark] draws the mark in the label's ink.
+	DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw)
 	DrawLabel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align)
 	DrawCheckbox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string)
 	DrawSlider(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32)

@@ -188,7 +188,7 @@ func TestFlatLafFocusBorder(t *testing.T) {
 			img := paintengine2d.NewImage(108, 38)
 			ctx := paintengine2d.NewContext(img)
 			ctx.DrawRect(paintengine2d.XYWH(0, 0, 108, 38), paintengine2d.Fill(c.bg))
-			lk.DrawButton(ctx, b, st, "")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: ""})
 			return img
 		}
 		img := render(StateFocused)

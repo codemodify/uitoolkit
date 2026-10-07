@@ -116,7 +116,7 @@ func TestBreeze6ButtonCornersAndFocusBand(t *testing.T) {
 	lk := mustLook(t, "breeze6")
 	c := breezeColors(lk)
 	b := paintengine2d.XYWH(10, 10, 120, 36)
-	plain := b6Paint(lk, 140, 56, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateNone, "") })
+	plain := b6Paint(lk, 140, 56, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateNone, ButtonDraw{Label: ""}) })
 	// The face is 2px in (12,12); the pixels by its corner stay the window
 	// colour, where Plasma 5's 3px frame would have covered them.
 	if !winNear(plain, 12, 13, c.win) || !winNear(plain, 13, 12, c.win) {
@@ -125,7 +125,7 @@ func TestBreeze6ButtonCornersAndFocusBand(t *testing.T) {
 	if !winNear(plain, 70, 12, c.btnOutline) {
 		t.Errorf("the button's top edge is not its 0.2 outline: %v", pixelColor(plain, 70, 12))
 	}
-	focused := b6Paint(lk, 140, 56, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, "") })
+	focused := b6Paint(lk, 140, 56, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, ButtonDraw{Label: ""}) })
 	if want := webOver(c.win, c.hl.WithAlpha(0.3)); !winNear(focused, 70, 11, want) {
 		t.Errorf("no focus band in the margin: %v, want %s", pixelColor(focused, 70, 11), colorHexPadded(want))
 	}

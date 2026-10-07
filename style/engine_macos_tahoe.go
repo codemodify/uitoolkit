@@ -879,11 +879,12 @@ func (tahoeEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b painten
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e tahoeEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e tahoeEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := tahoeColors(l)
 	f := macFace(l, b)
 	fg := c.button(l, ctx, f, st, true)
-	l.drawFittedText(ctx, l.body, label, f, fg, AlignCenter, l.S(14))
+	l.DrawButtonMark(ctx, f, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(f, d), fg, AlignCenter, l.S(14))
 	if st.Focused() && !st.Disabled() {
 		c.halo(l, ctx, f, b, c.ctlR(l, f))
 	}

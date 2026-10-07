@@ -992,7 +992,7 @@ func (e system7Engine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paint
 }
 
 // DrawButton is the Mac push button: black and white on every screen.
-func (e system7Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e system7Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := s7colors(l)
 	u := rpU(l)
 	g, m, ring, r := s7btnGeom(l, ctx, b)
@@ -1035,7 +1035,8 @@ func (e system7Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pain
 		}
 		dots.fill(ctx, c.black)
 	}
-	c.label(l, ctx, l.BoldFont(), label, body.rect().Inset(u*3), fg, AlignCenter, st.Disabled(), faceCol)
+	l.DrawButtonMark(ctx, body.rect().Inset(u*3), d, fg)
+	c.label(l, ctx, l.BoldFont(), d.Label, l.ButtonLabelBox(body.rect().Inset(u*3), d), fg, AlignCenter, st.Disabled(), faceCol)
 }
 
 // toggleLabel draws a check box or radio caption (bold) with the dotted

@@ -112,7 +112,7 @@ func TestMaterial3xButtonShapesAndFocus(t *testing.T) {
 	c := mdColors(lk)
 	b := paintengine2d.XYWH(10, 10, 140, 50) // a 40px face 5px in
 	paint := func(st ControlState) *paintengine2d.Image {
-		return md3xPaint(lk, 160, 70, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, st|StatePrimary, "") })
+		return md3xPaint(lk, 160, 70, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, st|StatePrimary, ButtonDraw{Label: ""}) })
 	}
 	rest, held := paint(StateNone), paint(StatePressed|StateHovered)
 	// (18,17) lies outside the round end and inside an 8dp corner.

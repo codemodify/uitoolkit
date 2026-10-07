@@ -942,10 +942,11 @@ func (fluentEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b painteng
 
 // ---- controls ------------------------------------------------------------------------------------------
 
-func (e fluentEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e fluentEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := fluentColors(l)
 	fg := c.button(l, ctx, b, st)
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, 8)
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, 8)
 	if st.Focused() && !st.Disabled() {
 		c.focusVisual(l, ctx, b, l.rx(4))
 	}

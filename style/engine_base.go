@@ -281,8 +281,8 @@ func CaptionCloseRect(l *Classic, bar paintengine2d.Rect) paintengine2d.Rect {
 func (BaseEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
 	l.baseDrawPanel(ctx, b, raised)
 }
-func (BaseEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
-	l.baseDrawButton(ctx, b, st, label)
+func (BaseEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
+	l.baseDrawButton(ctx, b, st, d)
 }
 func (BaseEngine) DrawLabel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
 	l.baseDrawLabel(ctx, b, text, col, align)

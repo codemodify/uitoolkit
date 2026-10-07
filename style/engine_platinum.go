@@ -822,7 +822,7 @@ func (e platinumEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b pain
 	Edge(ctx, b.Inset(u), c.hi, c.lo)
 }
 
-func (e platinumEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e platinumEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := platColors(l)
 	u := platU(l)
 	body := b
@@ -851,7 +851,8 @@ func (e platinumEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pai
 	case pressed:
 		fg = c.pressTxt
 	}
-	l.drawFittedText(ctx, l.body, label, body, fg, AlignCenter, l.S(6))
+	l.DrawButtonMark(ctx, body, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(body, d), fg, AlignCenter, l.S(6))
 	if st.Focused() && !st.Disabled() {
 		c.ring(ctx, body.Inset(u), l.S(3), u)
 	}

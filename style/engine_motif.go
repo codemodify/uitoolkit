@@ -1171,7 +1171,7 @@ func (motifEngine) StyleHint(l *Classic, h StyleHint) int {
 // the face fills with the arm colour; the label stays put. The default
 // button carries the sunken default-button shadow ring
 // (XmNdefaultButtonShadowThickness) between highlight and button.
-func (e motifEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e motifEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := motifColors(l)
 	t := c.px(l)
 	r := mSnap(b)
@@ -1195,9 +1195,10 @@ func (e motifEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painte
 	} else {
 		c.raise(ctx, face, &c.win, t)
 	}
-	if label != "" {
+	if d.Label != "" {
 		lb := paintengine2d.XYWH(face.Min.X+t, r.Min.Y, face.Dx()-2*t, r.Dy())
-		l.drawFittedText(ctx, l.body, label, lb, c.win.fgFor(st), AlignCenter, l.S(6))
+		l.DrawButtonMark(ctx, lb, d, c.win.fgFor(st))
+		l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), c.win.fgFor(st), AlignCenter, l.S(6))
 	}
 	e.highlight(l, ctx, r, st)
 }

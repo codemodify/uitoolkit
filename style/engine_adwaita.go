@@ -1107,13 +1107,14 @@ func adwButtonFont(l *Classic, c *adwSet) *Font {
 	return l.BoldFont()
 }
 
-func (e adwaitaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e adwaitaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := adwColors(l)
 	fg := c.button(l, ctx, b, st, false)
+	l.DrawButtonMark(ctx, b, d, fg)
 	if c.gtk3 {
-		c.g3.label(l, ctx, b, label, fg, st)
+		c.g3.label(l, ctx, l.ButtonLabelBox(b, d), d.Label, fg, st)
 	} else {
-		l.drawFittedText(ctx, adwButtonFont(l, c), label, b, fg, AlignCenter, l.S(16))
+		l.drawFittedText(ctx, adwButtonFont(l, c), d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, l.S(16))
 	}
 	if st.Focused() && !st.Disabled() {
 		l.Engine().DrawFocusRing(l, ctx, b)

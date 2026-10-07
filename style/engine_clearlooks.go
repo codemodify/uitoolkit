@@ -1549,7 +1549,7 @@ func (e clearlooksEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, 
 
 // ---- controls ------------------------------------------------------------------------------
 
-func (e clearlooksEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e clearlooksEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := clColors(l)
 	fg := l.Engine().Face(l, ctx, b, RoleButton, st)
 	lb := b
@@ -1557,7 +1557,8 @@ func (e clearlooksEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b p
 		lw := clPx(l)
 		lb = lb.Translate(paintengine2d.Pt(lw, lw)) // child-displacement 1, 1
 	}
-	clEmboss(l, ctx, l.body, label, lb, fg, AlignCenter, l.S(12), st.Disabled())
+	l.DrawButtonMark(ctx, lb, d, fg)
+	clEmboss(l, ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, l.S(12), st.Disabled())
 	if st.Focused() && !st.Disabled() {
 		in := snap(l.S(4))
 		if c.flavour == clCleanlooks {

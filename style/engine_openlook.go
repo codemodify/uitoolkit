@@ -924,7 +924,7 @@ func (e openlookEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b pain
 
 // DrawButton is the obround OPEN LOOK button; the default button has a
 // second ring inside its border.
-func (e openlookEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e openlookEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := olColors(l)
 	u := rpU(l)
 	g := rpGridAt(ctx, b, u)
@@ -945,14 +945,15 @@ func (e openlookEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pai
 		k.fill(ctx, c.bg3)
 	}
 	lb := g.at(x+3, y, w-6, h)
-	l.drawFittedText(ctx, l.body, label, lb, c.text, AlignCenter, l.S(6))
+	l.DrawButtonMark(ctx, lb, d, c.text)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), c.text, AlignCenter, l.S(6))
 	if st.Focused() && !st.Disabled() && y > 0 {
 		// Keyboard focus: a dotted obround in the cell of air round it.
 		var d rpInk
 		rpShape{w: w, h: h + 2, r: s.r + 1, rx: s.rx}.frameDots(&d, g, x, y-1)
 		d.fill(ctx, c.black)
 	} else if st.Focused() && !st.Disabled() {
-		e.DrawFocusRing(l, ctx, rpTextBox(l.body, label, lb, AlignCenter).Inset(-l.S(2)).Intersect(lb))
+		e.DrawFocusRing(l, ctx, rpTextBox(l.body, d.Label, l.ButtonLabelBox(lb, d), AlignCenter).Inset(-l.S(2)).Intersect(lb))
 	}
 	if st.Disabled() {
 		c.inactive(l, ctx, g.rect())

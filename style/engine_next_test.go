@@ -245,7 +245,7 @@ func TestNextLitStates(t *testing.T) {
 	img := paintengine2d.NewImage(100, 40)
 	ctx := paintengine2d.NewContext(img)
 	b := paintengine2d.XYWH(4, 4, 88, 28)
-	lk.DrawButton(ctx, b, StatePressed|StateHovered, "")
+	lk.DrawButton(ctx, b, StatePressed|StateHovered, ButtonDraw{Label: ""})
 	if !nxNear(img, 40, 18, c.lit) || !nxNear(img, 4, 18, Hex("#000000")) {
 		t.Fatal("pressed NeXT button: white face, black top-left edge")
 	}

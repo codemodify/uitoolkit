@@ -1110,7 +1110,7 @@ func (keramikEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b pa
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e keramikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e keramikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := keramikColors(l)
 	u := kde3U(l)
 	b = kde3Snap(b)
@@ -1123,7 +1123,8 @@ func (e keramikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pain
 	if st.Pressed() && !st.Disabled() {
 		lb = lb.Translate(paintengine2d.Pt(u, u))
 	}
-	l.drawFittedText(ctx, l.body, label, lb, fg, AlignCenter, l.S(8))
+	l.DrawButtonMark(ctx, lb, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, l.S(8))
 	if st.Focused() && !st.Disabled() {
 		kde3Dotted(ctx, body.Inset(snap(l.S(4))), u, c.focus)
 	}

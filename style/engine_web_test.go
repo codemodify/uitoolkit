@@ -232,7 +232,7 @@ func TestWebSourceGitControls(t *testing.T) {
 	}
 
 	// 3px buttons: the corner pixel is the window, two pixels in the face.
-	btn := webPaint(lk, 140, 48, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateNone, "") })
+	btn := webPaint(lk, 140, 48, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateNone, ButtonDraw{Label: ""}) })
 	if !winNear(btn, 10, 10, c.window) || !winNear(btn, 13, 13, c.btn) || !winNear(btn, 60, 10, c.btnBorder) {
 		t.Errorf("a button is not a 3px-rounded flat face in Border2")
 	}
@@ -273,7 +273,7 @@ func TestWebSourceGitControls(t *testing.T) {
 	}
 
 	// The dotted focus adorner on a focused button.
-	foc := webPaint(lk, 140, 48, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, "") })
+	foc := webPaint(lk, 140, 48, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, ButtonDraw{Label: ""}) })
 	// Dots of one pixel every three along the edge (Avalonia's 1,2 dash).
 	if !winNear(foc, 10, 19, c.text) || !winNear(foc, 10, 22, c.text) || winNear(foc, 10, 20, c.text) {
 		t.Errorf("no dotted focus adorner on the button's edge")
@@ -322,7 +322,7 @@ func TestWebParamsChangeShapes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	b := paintengine2d.XYWH(10, 10, 120, 30)
 	paint := func(lk *Classic, st ControlState) *paintengine2d.Image {
-		return webPaint(lk, 140, 50, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, st, "") })
+		return webPaint(lk, 140, 50, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, st, ButtonDraw{Label: ""}) })
 	}
 	r3, r8 := webLookWith(t, "sourcegit", 1, map[string]float32{"radius": 3}), webLookWith(t, "sourcegit", 1, map[string]float32{"radius": 8})
 	a, z := paint(r3, StateNone), paint(r8, StateNone)

@@ -99,7 +99,7 @@ func TestLunaSchemeTables(t *testing.T) {
 func lunaCalls(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
 	e := lk.Engine()
 	lines := []TextLine{{Text: "A text area", Start: 0, End: 11}, {Text: "two", Start: 12, End: 15}}
-	lk.DrawButton(ctx, r, st, "Button")
+	lk.DrawButton(ctx, r, st, ButtonDraw{Label: "Button"})
 	lk.DrawToolButton(ctx, r, st, "", IconSave)
 	lk.DrawToolButton(ctx, r, st, "Fetch", IconOpen)
 	lk.DrawCheckbox(ctx, r, st, true, "Checked")
@@ -258,7 +258,7 @@ func TestLunaPaintsInsideRect(t *testing.T) {
 	}
 	calls := []call{
 		{"button", 90, 30, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, r, st, "Button")
+			lk.DrawButton(ctx, r, st, ButtonDraw{Label: "Button"})
 		}},
 		{"tool", 90, 34, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
 			lk.DrawToolButton(ctx, r, st, "Fetch", IconOpen)

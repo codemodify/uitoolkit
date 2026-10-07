@@ -153,7 +153,7 @@ func TestMotifButtonShadowsAndStates(t *testing.T) {
 		w, h := int(90*scale), int(32*scale)
 		paint := func(st ControlState) *paintengine2d.Image {
 			img := paintengine2d.NewImage(w, h)
-			lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, float32(w), float32(h)), st, "")
+			lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, float32(w), float32(h)), st, ButtonDraw{})
 			return img
 		}
 		name := func(s string) string { return fmt.Sprintf("%s @%gx", s, scale) }

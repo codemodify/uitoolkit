@@ -354,7 +354,7 @@ func (l *Classic) baseDrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect
 	l.paintBezel(ctx, b, fill, p.Border, rolePanel, st)
 }
 
-func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	if st.Pressed() && !st.Disabled() && l.tokensOr().Bevel == BevelClassic3D {
 		b = b.Translate(paintengine2d.Pt(0, 1))
 	}
@@ -368,7 +368,10 @@ func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	} else if nearColor(col, l.palette.TextOnAccent) {
 		face = l.onAcc
 	}
-	l.drawFittedText(ctx, face, label, b, col, AlignCenter, 8)
+	// The mark in the label's own ink, and the words in what is left: the box
+	// is the button when there is no mark, so this is the plain case too.
+	l.DrawButtonMark(ctx, b, d, col)
+	l.drawFittedText(ctx, face, d.Label, l.ButtonLabelBox(b, d), col, AlignCenter, 8)
 }
 
 func (l *Classic) baseDrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
@@ -996,6 +999,25 @@ func ToolButtonChrome(h float32) (pad, iconSide, iconGap float32) {
 
 // ToolButtonChromeFor is ToolButtonChrome using the look's iconSize
 // (small 16 / medium 24 / large 32), scaled on HiDPI.
+// ButtonLabelBox is [ButtonLabelBox] for this look.
+func (l *Classic) ButtonLabelBox(b paintengine2d.Rect, d ButtonDraw) paintengine2d.Rect {
+	return ButtonLabelBox(l, b, d)
+}
+
+// DrawButtonMark draws a push button's leading mark in col, the ink the label
+// is drawn in, and does nothing when the button has no mark.
+//
+// An engine calls it with the box it is drawing the label in sympathy with —
+// the one it translated for a pressed button, say — so the mark sinks with the
+// words rather than staying put.
+func (l *Classic) DrawButtonMark(ctx *paintengine2d.Context, b paintengine2d.Rect, d ButtonDraw, col paintengine2d.Color) {
+	ib := ButtonIconBox(l, b, d)
+	if ib.Empty() {
+		return
+	}
+	l.drawToolIcon(ctx, ib, d.Icon, col)
+}
+
 func ToolButtonChromeFor(lk LookAndFeel, h float32) (pad, iconSide, iconGap float32) {
 	pad = 10
 	iconGap = 8
@@ -1804,8 +1826,8 @@ func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, ra
 	l.eng().DrawPanel(l, ctx, b, raised)
 }
 
-func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
-	l.eng().DrawButton(l, ctx, b, st, label)
+func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
+	l.eng().DrawButton(l, ctx, b, st, d)
 	// A pack whose engine ignores Primary gets a ring, so that every
 	// pack says which button Enter presses. A pack that paints its own
 	// default face is left alone — the measurement is what decides, not

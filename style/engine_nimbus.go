@@ -1046,7 +1046,7 @@ func (nimbusEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b painte
 
 // ---- controls -----------------------------------------------------------------
 
-func (e nimbusEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e nimbusEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := nbColors(l)
 	body := c.body(b)
 	r := l.rx(5)
@@ -1055,7 +1055,8 @@ func (e nimbusEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paint
 	if st.Disabled() {
 		fg = c.dis
 	}
-	l.drawFittedText(ctx, l.body, label, body, fg, AlignCenter, l.S(12))
+	l.DrawButtonMark(ctx, body, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(body, d), fg, AlignCenter, l.S(12))
 	if st.Focused() && !st.Disabled() {
 		c.ring(ctx, body, r)
 	}

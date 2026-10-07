@@ -1342,7 +1342,7 @@ func (e oxygenEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painte
 	c.hole(l, ctx, b, paintengine2d.Color{}, true)
 }
 
-func (e oxygenEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e oxygenEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := oxygenColors(l)
 	c.button(l, ctx, b, st, st.Primary())
 	fg := c.btnText
@@ -1351,7 +1351,8 @@ func (e oxygenEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paint
 	}
 	lb := b
 	lb.Max.Y -= oxK(l) * 0.8
-	l.drawFittedText(ctx, l.body, label, lb, fg, AlignCenter, l.S(12))
+	l.DrawButtonMark(ctx, lb, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, l.S(12))
 }
 
 func (e oxygenEngine) toggleLabel(l *Classic, ctx *paintengine2d.Context, b, box paintengine2d.Rect, st ControlState, label string) {

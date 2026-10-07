@@ -471,13 +471,14 @@ func (win95Engine) StyleHint(l *Classic, h StyleHint) int {
 
 // ---- controls ---------------------------------------------------------------
 
-func (e win95Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e win95Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	fg := e.Face(l, ctx, b, RoleButton, st)
 	lb := b
 	if st.Pressed() && !st.Disabled() {
 		lb = lb.Translate(paintengine2d.Pt(1, 1))
 	}
-	e.label(l, ctx, lb, label, fg, st.Disabled())
+	l.DrawButtonMark(ctx, lb, d, fg)
+	e.label(l, ctx, l.ButtonLabelBox(lb, d), d.Label, fg, st.Disabled())
 	if st.Focused() && !st.Disabled() {
 		in := l.S(4)
 		if st.Primary() {

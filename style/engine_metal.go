@@ -1186,7 +1186,7 @@ func (c *mtl) labelFocus(ctx *paintengine2d.Context, f *Font, label string, lb, 
 	c.focusRect(ctx, r.Intersect(clip), c.focus)
 }
 
-func (e metalEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e metalEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := mtlColors(l)
 	fg := c.face(ctx, b, st, false)
 	f := c.ctl()
@@ -1194,10 +1194,11 @@ func (e metalEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painte
 	if !c.ocean {
 		lb = paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx()-c.u, b.Dy()-c.u)
 	}
-	l.drawFittedText(ctx, f, label, lb, fg, AlignCenter, l.S(8))
+	l.DrawButtonMark(ctx, lb, d, fg)
+	l.drawFittedText(ctx, f, d.Label, l.ButtonLabelBox(lb, d), fg, AlignCenter, l.S(8))
 	if st.Focused() && !st.Disabled() {
 		in := mtlSnap(b).Inset(3 * c.u)
-		c.labelFocus(ctx, f, label, lb, in)
+		c.labelFocus(ctx, f, d.Label, l.ButtonLabelBox(lb, d), in)
 	}
 }
 

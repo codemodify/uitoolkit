@@ -1337,11 +1337,12 @@ func (macosEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b painten
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e macosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e macosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := macColors(l)
 	fg := e.Face(l, ctx, b, RoleButton, st)
 	f := macFace(l, b)
-	l.drawFittedText(ctx, l.body, label, f, fg, AlignCenter, l.S(12))
+	l.DrawButtonMark(ctx, f, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(f, d), fg, AlignCenter, l.S(12))
 	if st.Focused() && !st.Disabled() {
 		c.halo(l, ctx, f, b, c.radius(l, f))
 	}

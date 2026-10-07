@@ -155,7 +155,12 @@ type LookAndFeel interface {
 	MonoFont() *Font
 
 	DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool)
-	DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string)
+	// DrawButton paints a push button: its face, its words and its mark.
+	//
+	// The label goes in [ButtonLabelBox], not in b — that is what lets a
+	// button with a mark be one strip wider than one without instead of two.
+	// [Classic.DrawButtonMark] draws the mark in the label's ink.
+	DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw)
 	DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align)
 	DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string)
 	DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32)

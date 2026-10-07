@@ -108,7 +108,7 @@ func TestKeramikDefaultButtonRing(t *testing.T) {
 	lk := mustLook(t, "keramik")
 	img := paintengine2d.NewImage(120, 44)
 	ctx := paintengine2d.NewContext(img)
-	lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, 110, 32), StatePrimary, "OK")
+	lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, 110, 32), StatePrimary, ButtonDraw{Label: "OK"})
 	lum := func(x, y int) int {
 		r, g, b, _ := img.PremulAt(x, y)
 		return int(r) + int(g) + int(b)

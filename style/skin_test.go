@@ -606,7 +606,7 @@ func TestSkinFallsBackToItsBasePack(t *testing.T) {
 		return img
 	}
 	button := func(ctx *paintengine2d.Context, l *Classic) {
-		l.DrawButton(ctx, paintengine2d.XYWH(5, 5, 110, 30), StateNone, "Ok")
+		l.DrawButton(ctx, paintengine2d.XYWH(5, 5, 110, 30), StateNone, ButtonDraw{Label: "Ok"})
 	}
 	if diffPixels(render(lk, button), render(baseLook, button)) < 200 {
 		t.Error("a skinned button looks like its base pack's: the art is not reaching Face")
@@ -641,7 +641,7 @@ func TestSkinThatDescribesNothingIsItsBasePack(t *testing.T) {
 		draw func(*paintengine2d.Context, *Classic)
 	}{
 		{"button", func(c *paintengine2d.Context, l *Classic) {
-			l.DrawButton(c, paintengine2d.XYWH(5, 5, 110, 30), StateHovered, "Ok")
+			l.DrawButton(c, paintengine2d.XYWH(5, 5, 110, 30), StateHovered, ButtonDraw{Label: "Ok"})
 		}},
 		{"checkbox", func(c *paintengine2d.Context, l *Classic) {
 			l.DrawCheckbox(c, paintengine2d.XYWH(5, 5, 110, 30), StateNone, true, "On")

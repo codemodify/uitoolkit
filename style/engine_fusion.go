@@ -996,7 +996,7 @@ func (e fusionEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 }
 
-func (e fusionEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e fusionEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := fusionColors(l)
 	b = fuSnap(b)
 	c.button(l, ctx, b, st, st.Primary() && !st.Disabled())
@@ -1004,8 +1004,9 @@ func (e fusionEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paint
 	if st.Disabled() {
 		fg = c.dis
 	}
-	// Fusion never shifts the label of a pressed button.
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, l.S(8))
+	// Fusion never shifts the d.Label of a pressed button.
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, l.S(8))
 }
 
 // fuToggleLabel draws a check box / radio caption and, with keyboard

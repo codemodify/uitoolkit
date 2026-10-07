@@ -124,7 +124,7 @@ func TestFluentElevationBorder(t *testing.T) {
 		img := paintengine2d.NewImage(100, 44)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(paintengine2d.XYWH(0, 0, 100, 44), paintengine2d.Fill(c.bg))
-		lk.DrawButton(ctx, paintengine2d.XYWH(5, 5, 90, 32), StateNone, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(5, 5, 90, 32), StateNone, ButtonDraw{Label: ""})
 		top, _, _, _ := img.PremulAt(50, 5)
 		side, _, _, _ := img.PremulAt(5, 20)
 		bot, _, _, _ := img.PremulAt(50, 36)
@@ -180,7 +180,7 @@ func TestFluentFocusVisual(t *testing.T) {
 		img := paintengine2d.NewImage(100, 44)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(paintengine2d.XYWH(0, 0, 100, 44), paintengine2d.Fill(c.bg))
-		lk.DrawButton(ctx, paintengine2d.XYWH(5, 5, 90, 32), StateFocused, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(5, 5, 90, 32), StateFocused, ButtonDraw{Label: ""})
 		outer, inner := c.over(c.focusOuter), Mix(c.over(c.ctl[0]), c.focusInner, c.focusInner.A)
 		if !winNear(img, 50, 5, outer) || !winNear(img, 50, 6, outer) || !winNear(img, 50, 7, inner) {
 			t.Errorf("%s: focus visual not a 2px %s line over a 1px %s one", n, colorHexPadded(outer), colorHexPadded(inner))

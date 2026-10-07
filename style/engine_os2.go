@@ -1025,7 +1025,7 @@ func (e os2Engine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengi
 
 // DrawButton is Warp 4's push button (see pushButton); the pressed label
 // moves a pixel, a disabled one is halftoned.
-func (e os2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e os2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := o2colors(l)
 	u := rpU(l)
 	g := rpGridAt(ctx, b, u)
@@ -1037,7 +1037,8 @@ func (e os2Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painteng
 	if pressed {
 		lb = lb.Translate(paintengine2d.Pt(u, u))
 	}
-	c.label(l, ctx, l.body, label, -1, lb, c.text, AlignCenter, st.Disabled(), c.face)
+	l.DrawButtonMark(ctx, lb, d, c.text)
+	c.label(l, ctx, l.body, d.Label, -1, l.ButtonLabelBox(lb, d), c.text, AlignCenter, st.Disabled(), c.face)
 }
 
 // toggleLabel draws a check box or radio caption (black; halftoned when

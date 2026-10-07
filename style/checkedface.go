@@ -94,7 +94,7 @@ func measureCheckedFace(l LookAndFeel) bool {
 		img := paintengine2d.NewImage(w, h)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(l.Palette().Background))
-		c.eng().DrawButton(c, ctx, paintengine2d.XYWH(2, 2, w-4, h-4), st, "OK")
+		c.eng().DrawButton(c, ctx, paintengine2d.XYWH(2, 2, w-4, h-4), st, ButtonDraw{Label: "OK"})
 		img.Touch()
 		return img
 	}

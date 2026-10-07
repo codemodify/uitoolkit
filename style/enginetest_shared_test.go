@@ -70,7 +70,9 @@ func exerciseEngine(t *testing.T, name string, lk *Classic) {
 	for _, st := range states {
 		st := st
 		sn := fmt.Sprintf("%#x", uint32(st))
-		add("button "+sn, 76, 28, func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawButton(ctx, b, st, "Button") })
+		add("button "+sn, 76, 28, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "Button"})
+		})
 		add("tool "+sn, 40, 34, func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawToolButton(ctx, b, st, "", IconSave) })
 		add("tool label "+sn, 90, 34, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 			lk.DrawToolButton(ctx, b, st, "Fetch", IconOpen)

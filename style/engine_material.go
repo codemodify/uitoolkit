@@ -843,12 +843,13 @@ func (materialEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b pain
 
 // ---- controls ---------------------------------------------------------------------------------
 
-func (e materialEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e materialEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := mdColors(l)
 	fg := c.button(l, ctx, b, st)
 	f := c.face(l, b)
 	room := f.Dx() - l.S(8)
-	l.drawFittedText(ctx, c.label, c.labelText(c.label, label, room), f, fg, AlignCenter, l.S(8))
+	l.DrawButtonMark(ctx, f, d, fg)
+	l.drawFittedText(ctx, c.label, c.labelText(c.label, d.Label, room), l.ButtonLabelBox(f, d), fg, AlignCenter, l.S(8))
 }
 
 func (e materialEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {

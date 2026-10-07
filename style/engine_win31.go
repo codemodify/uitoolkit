@@ -770,7 +770,7 @@ func (e win31Engine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painten
 }
 
 // DrawButton is the 3.1 push button.
-func (e win31Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e win31Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := w31colors(l)
 	u := rpU(l)
 	g := rpGridAt(ctx, b, u)
@@ -784,11 +784,12 @@ func (e win31Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painte
 		lb = lb.Translate(paintengine2d.Pt(u, u))
 	}
 	f := l.BoldFont()
-	c.label(l, ctx, f, label, lb, c.btnText, AlignCenter, st.Disabled(), c.face)
+	l.DrawButtonMark(ctx, lb, d, c.btnText)
+	c.label(l, ctx, f, d.Label, l.ButtonLabelBox(lb, d), c.btnText, AlignCenter, st.Disabled(), c.face)
 	if st.Focused() && !st.Disabled() {
-		// The dotted rectangle round the label, a couple of pixels clear.
-		tb := rpTextBox(f, label, lb, AlignCenter).Inset(-2 * u).Intersect(g.inset(3).rect().Translate(paintengine2d.Pt(0, 0)))
-		if label == "" {
+		// The dotted rectangle round the d.Label, a couple of pixels clear.
+		tb := rpTextBox(f, d.Label, l.ButtonLabelBox(lb, d), AlignCenter).Inset(-2 * u).Intersect(g.inset(3).rect().Translate(paintengine2d.Pt(0, 0)))
+		if d.Label == "" {
 			tb = g.inset(4).rect()
 		}
 		fg := rpGridAt(ctx, tb, u)

@@ -1070,7 +1070,7 @@ func (plastikEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b pa
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e plastikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e plastikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := plastikColors(l)
 	b = kde3Snap(b)
 	body := c.button(l, ctx, b, st)
@@ -1078,8 +1078,9 @@ func (e plastikEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pain
 	if st.Disabled() {
 		fg = c.dis
 	}
-	// Plastik keeps the label still when the button is pressed.
-	l.drawFittedText(ctx, l.body, label, body, fg, AlignCenter, l.S(8))
+	// Plastik keeps the d.Label still when the button is pressed.
+	l.DrawButtonMark(ctx, body, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(body, d), fg, AlignCenter, l.S(8))
 	if st.Focused() && !st.Disabled() {
 		c.focusRect(l, ctx, body.Inset(snap(l.S(3))), c.focus)
 	}

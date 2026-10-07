@@ -169,7 +169,7 @@ func TestBeOSFocusIsBlue(t *testing.T) {
 		min  int
 	}{
 		{"button", func(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, b, st, "Button")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "Button"})
 		}, 20},
 		{"check box", func(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 			lk.DrawCheckbox(ctx, b, st, false, "Check")

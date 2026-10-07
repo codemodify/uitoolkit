@@ -98,7 +98,7 @@ func TestAdwaita48Radii(t *testing.T) {
 		img := paintengine2d.NewImage(100, 50)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(paintengine2d.XYWH(0, 0, 100, 50), paintengine2d.Fill(adwColors(lk).win))
-		lk.DrawButton(ctx, paintengine2d.XYWH(10, 8, 80, 34), StateNone, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(10, 8, 80, 34), StateNone, ButtonDraw{Label: ""})
 		return img
 	}
 	if winNear(paint(old), 11, 10, adwColors(old).win) || !winNear(paint(now), 11, 10, adwColors(now).win) {

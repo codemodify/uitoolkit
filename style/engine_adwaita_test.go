@@ -130,11 +130,11 @@ func TestAdwaitaButtonWashes(t *testing.T) {
 		img := paintengine2d.NewImage(120, 40)
 		ctx := paintengine2d.NewContext(img)
 		ctx.DrawRect(paintengine2d.XYWH(0, 0, 120, 40), paintengine2d.Fill(adwColors(lk).win))
-		lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), StateNone, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), StateNone, ButtonDraw{Label: ""})
 		if px := clPixel(img, 20, 20); !hexNear(px, want, 2) {
 			t.Errorf("%s: button face %s, want %s", n, colorHexPadded(px), want)
 		}
-		lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), StatePrimary, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), StatePrimary, ButtonDraw{Label: ""})
 		if px := clPixel(img, 20, 20); !hexNear(px, "#3584e4", 2) {
 			t.Errorf("%s: suggested button %s, want the accent #3584e4", n, colorHexPadded(px))
 		}
@@ -155,7 +155,7 @@ func TestAdwaitaFocusRingInside(t *testing.T) {
 			img := paintengine2d.NewImage(120, 40)
 			ctx := paintengine2d.NewContext(img)
 			ctx.DrawRect(paintengine2d.XYWH(0, 0, 120, 40), paintengine2d.Fill(c.win))
-			lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), st, "")
+			lk.DrawButton(ctx, paintengine2d.XYWH(4, 3, 110, 34), st, ButtonDraw{Label: ""})
 			return img
 		}
 		focused := render(StateFocused)

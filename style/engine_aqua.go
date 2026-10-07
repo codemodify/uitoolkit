@@ -1322,7 +1322,7 @@ func (e aquaEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painteng
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X+u, b.Min.Y+u, b.Dx()-u*2, u), paintengine2d.Fill(paintengine2d.RGBA(1, 1, 1, 0.45)))
 }
 
-func (e aquaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e aquaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := aquaColors(l)
 	u := aquaU(l)
 	pill := aquaPillRect(l, b)
@@ -1333,7 +1333,8 @@ func (e aquaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painten
 	if st.Focused() && !st.Disabled() {
 		aquaGlow(ctx, pill, r, u, c.focus, false, b)
 	}
-	l.drawFittedText(ctx, l.body, label, pill.Translate(paintengine2d.Pt(0, -u*0.5)), g.fg, AlignCenter, r)
+	l.DrawButtonMark(ctx, pill.Translate(paintengine2d.Pt(0, -u*0.5)), d, g.fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(pill.Translate(paintengine2d.Pt(0, -u*0.5)), d), g.fg, AlignCenter, r)
 }
 
 // DrawComboBox is the Aqua popup button: a white gel with a blue gel cap

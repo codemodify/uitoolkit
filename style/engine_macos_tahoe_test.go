@@ -158,7 +158,7 @@ func TestTahoeButtons(t *testing.T) {
 	lk := macLook(t, "tahoe", 1)
 	c := tahoeColors(lk)
 	medium := paintengine2d.XYWH(10, 10, 120, 34) // a 28px face
-	img := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, medium, StateNone, "") })
+	img := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, medium, StateNone, ButtonDraw{Label: ""}) })
 	face := c.flat(c.btn)
 	if !winNear(img, 70, 30, face) {
 		t.Errorf("the button face is %v, want the grey %s", pixelColor(img, 70, 30), colorHexPadded(face))
@@ -167,17 +167,17 @@ func TestTahoeButtons(t *testing.T) {
 		t.Errorf("the medium button is not a 7px-rounded rectangle")
 	}
 	large := paintengine2d.XYWH(10, 10, 120, 42) // a 36px face: a capsule
-	cap := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, large, StateNone, "") })
+	cap := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, large, StateNone, ButtonDraw{Label: ""}) })
 	if !winNear(cap, 17, 16, c.win) || !winNear(cap, 31, 31, face) {
 		t.Errorf("the large button is not a capsule")
 	}
-	def := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, medium, StatePrimary, "") })
+	def := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, medium, StatePrimary, ButtonDraw{Label: ""}) })
 	if !winNear(def, 70, 27, c.accent) {
 		t.Errorf("the default button is not the accent: %v", pixelColor(def, 70, 27))
 	}
 	// Plain again in an inactive window.
 	if back := tahoePaint(lk, 140, 60, func(ctx *paintengine2d.Context) {
-		lk.DrawButton(ctx, medium, StatePrimary|StateBackdrop, "")
+		lk.DrawButton(ctx, medium, StatePrimary|StateBackdrop, ButtonDraw{Label: ""})
 	}); !winNear(back, 70, 27, face) {
 		t.Errorf("the default button keeps the accent in an inactive window")
 	}

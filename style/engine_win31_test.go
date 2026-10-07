@@ -61,7 +61,7 @@ func TestWin31ButtonShape(t *testing.T) {
 	black, white, grey := Hex("#000000"), Hex("#ffffff"), Hex("#808080")
 	paint := func(st ControlState) *paintengine2d.Image {
 		img := paintengine2d.NewImage(100, 40)
-		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, 80, 28), st, "")
+		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, 80, 28), st, ButtonDraw{Label: ""})
 		return img
 	}
 	img := paint(StateNone)

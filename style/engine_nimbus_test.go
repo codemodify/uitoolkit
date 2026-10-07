@@ -181,7 +181,7 @@ func TestNimbusFocusRing(t *testing.T) {
 	}
 	for name, draw := range map[string]func(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState){
 		"button": func(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, b, st, "OK")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "OK"})
 		},
 		"field": func(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 			lk.DrawTextField(ctx, b, st, "text", "", 0, 0, 0, false, 0, nil)

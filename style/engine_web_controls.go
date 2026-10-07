@@ -11,13 +11,14 @@ import (
 // Controls of the web engine: buttons, toggles, ranges, fields, combos and
 // spin boxes (see engine_web.go).
 
-func (e webEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e webEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := webColors(l)
 	f := c.face(l, b)
 	r := min(c.rad(l, c.radius), f.Dy()*0.5)
 	c.restShadowUnder(l, ctx, winSnap(b), f, r, st)
 	fg := c.button(l, ctx, f, st)
-	l.drawFittedText(ctx, c.btnFace, label, c.pressed(f, st), fg, AlignCenter, l.S(16))
+	l.DrawButtonMark(ctx, c.pressed(f, st), d, fg)
+	l.drawFittedText(ctx, c.btnFace, d.Label, l.ButtonLabelBox(c.pressed(f, st), d), fg, AlignCenter, l.S(16))
 	if st.Focused() && !st.Disabled() {
 		c.focusRing(l, ctx, b, f, r)
 		if st.Primary() && c.focusStyle == webFocusInside {

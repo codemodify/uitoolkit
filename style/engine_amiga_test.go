@@ -44,7 +44,7 @@ func TestAmigaSurvivesTinyRects(t *testing.T) {
 		draw paint
 	}{
 		{"button", func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, b, st, "OK")
+			lk.DrawButton(ctx, b, st, ButtonDraw{Label: "OK"})
 		}},
 		{"checkbox", func(lk *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 			lk.DrawCheckbox(ctx, b, st, true, "C")
@@ -261,7 +261,7 @@ func TestAmigaBevelCorners(t *testing.T) {
 	c := amColors(lk)
 	img := paintengine2d.NewImage(100, 40)
 	b := paintengine2d.XYWH(0, 0, 80, 28)
-	lk.DrawButton(paintengine2d.NewContext(img), b, StateNone, "")
+	lk.DrawButton(paintengine2d.NewContext(img), b, StateNone, ButtonDraw{Label: ""})
 	for _, p := range []struct {
 		x, y int
 		want paintengine2d.Color
@@ -279,7 +279,7 @@ func TestAmigaBevelCorners(t *testing.T) {
 	}
 	// Pressed: recessed and FILLPEN blue.
 	img = paintengine2d.NewImage(100, 40)
-	lk.DrawButton(paintengine2d.NewContext(img), b, StatePressed|StateHovered, "")
+	lk.DrawButton(paintengine2d.NewContext(img), b, StatePressed|StateHovered, ButtonDraw{Label: ""})
 	if !retroNear(img, 0, 0, c.shadow) || !retroNear(img, 79, 14, c.shine) || !retroNear(img, 40, 14, c.fill) {
 		t.Error("a pressed button does not recess into FILLPEN")
 	}
@@ -295,12 +295,12 @@ func TestAmiga13HighlightsByComplement(t *testing.T) {
 		t.Fatal("the complement does not exclusive-or the pen numbers with 3")
 	}
 	img := paintengine2d.NewImage(100, 40)
-	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StateNone, "")
+	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StateNone, ButtonDraw{Label: ""})
 	if !retroNear(img, 0, 14, white) || !retroNear(img, 40, 14, blue) {
 		t.Fatal("a 1.3 button is not a white outline round blue")
 	}
 	img = paintengine2d.NewImage(100, 40)
-	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StatePressed|StateHovered, "")
+	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StatePressed|StateHovered, ButtonDraw{Label: ""})
 	if !retroNear(img, 0, 14, black) || !retroNear(img, 40, 14, orange) {
 		t.Fatal("a pressed 1.3 button is not complemented")
 	}
@@ -318,7 +318,7 @@ func TestAmigaGhostsDisabledGadgets(t *testing.T) {
 	lk := retroLook(t, "amiga31", 1)
 	c := amColors(lk)
 	img := paintengine2d.NewImage(100, 40)
-	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StateDisabled, "")
+	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 80, 28), StateDisabled, ButtonDraw{Label: ""})
 	dots := 0
 	for y := 4; y < 24; y++ {
 		for x := 4; x < 76; x++ {

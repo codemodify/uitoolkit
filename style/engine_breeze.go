@@ -600,7 +600,7 @@ func (e breezeEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painte
 	c.frame(l, ctx, b, c.base, c.outline)
 }
 
-func (e breezeEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e breezeEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := breezeColors(l)
 	b = fuSnap(b)
 	c.button(l, ctx, b, st, st.Primary())
@@ -608,7 +608,8 @@ func (e breezeEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paint
 	if st.Disabled() {
 		fg = c.dis
 	}
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, l.S(12))
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, l.S(12))
 }
 
 func (e breezeEngine) toggleLabel(l *Classic, ctx *paintengine2d.Context, b, box paintengine2d.Rect, st ControlState, label string) {

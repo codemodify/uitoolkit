@@ -109,7 +109,7 @@ func TestOS2DefaultBorderFollowsFocus(t *testing.T) {
 	b := paintengine2d.XYWH(2, 2, 76, 28)
 	paint := func(st ControlState) *paintengine2d.Image {
 		img := paintengine2d.NewImage(80, 32)
-		lk.DrawButton(paintengine2d.NewContext(img), b, st, "")
+		lk.DrawButton(paintengine2d.NewContext(img), b, st, ButtonDraw{Label: ""})
 		return img
 	}
 	normal := paint(StateNone)

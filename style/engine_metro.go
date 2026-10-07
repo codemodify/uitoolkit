@@ -945,10 +945,11 @@ func (metroEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengi
 
 // ---- controls ---------------------------------------------------------------------------------------
 
-func (e metroEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e metroEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := metroColors(l)
 	fg := c.pushButton(l, ctx, b, st)
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, 8)
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, 8)
 	if st.Focused() && !st.Disabled() && !c.win10 {
 		lw := winPx(l)
 		winDots(ctx, winSnap(b).Inset(3*lw), c.text, lw)

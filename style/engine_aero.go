@@ -1082,10 +1082,11 @@ func (aeroEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengin
 
 // ---- controls ------------------------------------------------------------------------------
 
-func (e aeroEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e aeroEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := aeroColors(l)
 	fg := e.Face(l, ctx, b, RoleButton, st)
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, 8)
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, 8)
 	if st.Focused() && !st.Disabled() {
 		lw := winPx(l)
 		winDots(ctx, winSnap(b).Inset(3*lw), c.text, lw)

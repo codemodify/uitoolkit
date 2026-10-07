@@ -114,7 +114,7 @@ func TestAeroButtonIsTwoToneGlass(t *testing.T) {
 	lk := winLook(t, "aero", 1)
 	paint := func(st ControlState) *paintengine2d.Image {
 		img := paintengine2d.NewImage(100, 40)
-		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(5, 5, 90, 30), st, "")
+		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(5, 5, 90, 30), st, ButtonDraw{Label: ""})
 		return img
 	}
 	img := paint(StateNone)
@@ -247,7 +247,7 @@ var winStates = []ControlState{
 func winCalls(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
 	e := lk.Engine()
 	lines := []TextLine{{Text: "A text area", Start: 0, End: 11}, {Text: "two", Start: 12, End: 15}}
-	lk.DrawButton(ctx, r, st, "Button")
+	lk.DrawButton(ctx, r, st, ButtonDraw{Label: "Button"})
 	lk.DrawToolButton(ctx, r, st, "", IconSave)
 	lk.DrawToolButton(ctx, r, st, "Fetch", IconOpen)
 	lk.DrawCheckbox(ctx, r, st, true, "Checked")
@@ -423,7 +423,7 @@ func winPaintsInsideRect(t *testing.T, names []string) {
 	}
 	calls := []call{
 		{"button", 90, 30, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
-			lk.DrawButton(ctx, r, st, "Button")
+			lk.DrawButton(ctx, r, st, ButtonDraw{Label: "Button"})
 		}},
 		{"tool", 90, 34, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
 			lk.DrawToolButton(ctx, r, st, "Fetch", IconOpen)

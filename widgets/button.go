@@ -64,23 +64,27 @@ type Button struct {
 	// than a character because the interface face has no such glyph and
 	// typing one is a box on most machines (docs/contracts.md).
 	//
-	// The engine centres a button's label in the whole button, and the
-	// engine is what draws it, so the icon does not push the text along:
-	// the button reserves a strip for the icon at each end instead, which
-	// keeps the label centred between them and leaves every era's own
-	// label treatment — its emboss, its shadow, its disabled colour —
-	// exactly as it was. The cost is a button one icon wider than a
-	// leading-icon button strictly needs.
+	// The look draws the mark, with the words and in the same ink
+	// ([style.ButtonDraw]), because only the era knows where its mark
+	// belongs: Win95 sinks it with the button on a press, Aqua wants it
+	// inside the pill. Every era's own label treatment — its emboss, its
+	// shadow, its disabled colour — is untouched; the label is simply
+	// centred in [style.ButtonLabelBox], the button less the strip the
+	// mark takes, rather than in the whole button.
 	//
-	// **A button with an icon is about 64 px wider at 1x than the same
-	// button without**, and that will break a row that only just
-	// fitted. Where a row is tight, use [ToolIconBtn] for an icon-only
-	// button, [NewToolButton] for a tight icon-and-label one, or let the
-	// row fold with [NewWrap]. docs/recipes.md has the table.
+	// **A button with an icon is one strip wider than the same button
+	// without** — about 32 px at 1x, and each era answers for itself
+	// (Win95's strip is 20 where Adwaita's is 24). It used to be a strip
+	// at *each* end, about 64 px, because the widget drew the mark itself
+	// and a centred label had to clear it; half of that was symmetry
+	// nobody asked for, and it broke rows that only just fitted. Where a
+	// row is still tight, use [ToolIconBtn] for an icon-only button,
+	// [NewToolButton] for a tight icon-and-label one, or let the row fold
+	// with [NewWrap]. docs/recipes.md has the table.
 	//
-	// For an icon-only button, which this is not — an icon with no text
-	// here is a button with a centred empty label and a mark off to one
-	// side — the answer depends on whether it has to look like a button:
+	// For an icon-only button the mark is centred, not left in a strip
+	// with an empty label beside it; whether to use one here depends on
+	// whether it has to look like a button:
 	// [NewIconButton] is a push button that is only a mark, square and
 	// framed, and [ToolIconBtn] is a tool bar's item, flat until the
 	// pointer is over it. docs/recipes.md has the table.
@@ -164,10 +168,13 @@ func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 	w := style.ControlFontOf(lk, style.RoleButton).Advance(b.Text) + m.Pad*2 + style.Dip(lk, 16)
 	h := m.ControlH
 	if b.Icon != style.IconNone {
-		// A strip at each end: the label stays centred between them, so
-		// the engine goes on drawing it exactly where it always did.
-		_, side, gap := style.ToolButtonChromeFor(lk, h)
-		w += (side + gap) * 2
+		// One strip, for the mark, and the label is centred in what is left
+		// (style.ButtonLabelBox) rather than in the whole button. It used to
+		// be a strip at *each* end so that a label centred in the button
+		// cleared the mark — about 64 device pixels, half of it symmetry
+		// nobody asked for, and rows that fitted a narrow window stopped
+		// fitting as soon as their buttons got marks.
+		w += style.ButtonIconWidth(lk, h)
 	}
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
@@ -207,16 +214,13 @@ func (b *Button) Paint(ctx *paintengine2d.Context) {
 // face is the look's button with the app's mark on it, which is one state
 // of it: a cross-fade draws the pair and the mark travels with its face.
 func (b *Button) face(ctx *paintengine2d.Context, lk style.LookAndFeel, r paintengine2d.Rect, st style.ControlState) {
-	lk.DrawButton(ctx, r, st, b.Text)
-	if ib := b.iconRect(lk, r); !ib.Empty() {
-		// After the face, so it sits on it, and in the label's own colour
-		// so it goes grey with the text on a disabled button.
-		col := lk.Palette().Text
-		if st.Disabled() {
-			col = lk.Palette().TextMuted
-		}
-		style.DrawToolIcon(ctx, ib, b.Icon, col, style.IconSetOf(lk))
-	}
+	// The mark goes to the look with the words, because only the era knows
+	// where it belongs and in what ink: Win95 sinks it with the button on a
+	// press, Aqua wants it inside the pill. The widget used to draw it here,
+	// after the face, and reserve a strip at *each* end so the engine's
+	// centred label landed between them — which cost about 64 device pixels a
+	// button and bought nothing with half of it.
+	lk.DrawButton(ctx, r, st, style.ButtonDraw{Label: b.Text, Icon: b.Icon})
 	if b.Content != nil {
 		b.Content(ctx, r, st)
 	}

@@ -1511,10 +1511,11 @@ var (
 
 // ---- controls ---------------------------------------------------------------------
 
-func (e lunaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e lunaEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := lunaColors(l)
 	fg := e.Face(l, ctx, b, RoleButton, st)
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, 8)
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, 8)
 	if st.Focused() && !st.Disabled() {
 		// Just inside the 1px border and 2px glow (ContentMargins 3).
 		DottedRect(ctx, lunaSnap(b).Inset(3*lunaPx(l)), c.text)

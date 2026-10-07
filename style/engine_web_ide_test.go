@@ -72,7 +72,7 @@ func TestVSCodeEditorTabs(t *testing.T) {
 	lk := winLook(t, "vscode", 1)
 	c := webColors(lk)
 	b := paintengine2d.XYWH(10, 10, 120, 26)
-	foc := webPaint(lk, 140, 46, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, "") })
+	foc := webPaint(lk, 140, 46, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, ButtonDraw{Label: ""}) })
 	if !winNear(foc, 60, 10, c.focus) || winNear(foc, 60, 11, c.focus) || !winNear(foc, 60, 9, c.window) {
 		t.Errorf("vscode: a focused button has no 1px focus border inside its edge")
 	}
@@ -197,7 +197,7 @@ func TestIslandsFrames(t *testing.T) {
 	}
 	// Focus: a 2px ring beyond a 1px gap round the face.
 	b := paintengine2d.XYWH(10, 10, 120, 34)
-	foc := webPaint(lk, 140, 54, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, "") })
+	foc := webPaint(lk, 140, 54, func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, b, StateFocused, ButtonDraw{Label: ""}) })
 	if !winNear(foc, 60, 10, c.focus) || !winNear(foc, 60, 11, c.focus) || !winNear(foc, 60, 12, c.window) || !winNear(foc, 60, 13, c.btnBorder) {
 		t.Errorf("islands: a focused button has no 2px ring a pixel clear of its face")
 	}

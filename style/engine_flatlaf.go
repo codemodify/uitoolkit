@@ -906,14 +906,15 @@ func (flatlafEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paint
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e flatlafEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e flatlafEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := flatColors(l)
 	fg := c.button(l, ctx, b, st)
 	f := l.body
 	if st.Primary() && c.bold && !st.Disabled() {
 		f = c.boldFace
 	}
-	l.drawFittedText(ctx, f, label, c.face(l, b), fg, AlignCenter, l.S(12))
+	l.DrawButtonMark(ctx, c.face(l, b), d, fg)
+	l.drawFittedText(ctx, f, d.Label, l.ButtonLabelBox(c.face(l, b), d), fg, AlignCenter, l.S(12))
 }
 
 func (e flatlafEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {

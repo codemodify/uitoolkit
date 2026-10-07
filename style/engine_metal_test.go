@@ -134,7 +134,7 @@ func TestMetalFlushBorder(t *testing.T) {
 		if primary {
 			st = StatePrimary
 		}
-		lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, w, h), st, "")
+		lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, w, h), st, ButtonDraw{Label: ""})
 		px := func(x, y int, want paintengine2d.Color, what string) {
 			t.Helper()
 			if !nxNear(img, 4+x, 4+y, want) {
@@ -161,7 +161,7 @@ func TestMetalFlushBorder(t *testing.T) {
 	}
 	// Pressed: secondary 2 without the inner highlight.
 	img := paintengine2d.NewImage(w+8, h+8)
-	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, w, h), StatePressed|StateHovered, "")
+	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, w, h), StatePressed|StateHovered, ButtonDraw{Label: ""})
 	if !nxNear(img, 4+w/2, 4+h/2, c.s2) || !nxNear(img, 4+1, 4+h/2, c.s2) {
 		t.Fatal("a pressed Metal button is secondary 2 up to its dark ring")
 	}
@@ -214,7 +214,7 @@ func TestMetalOceanWash(t *testing.T) {
 	}
 	const h = 40
 	img := paintengine2d.NewImage(40, h+4)
-	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 2, 40, h), StateNone, "")
+	lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(0, 2, 40, h), StateNone, ButtonDraw{Label: ""})
 	at := func(y int) paintengine2d.Color {
 		r, g, b, _ := img.PremulAt(20, 2+y)
 		return paintengine2d.RGB(float32(r)/255, float32(g)/255, float32(b)/255)
@@ -320,7 +320,7 @@ func TestMetalFocusRectangle(t *testing.T) {
 		lk := mustLook(t, n)
 		c := mtlColors(lk)
 		img := paintengine2d.NewImage(140, 40)
-		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, 120, 28), StateFocused, "Save")
+		lk.DrawButton(paintengine2d.NewContext(img), paintengine2d.XYWH(4, 4, 120, 28), StateFocused, ButtonDraw{Label: "Save"})
 		found := 0
 		for y := 0; y < 40; y++ {
 			for x := 0; x < 140; x++ {

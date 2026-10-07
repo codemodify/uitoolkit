@@ -99,7 +99,7 @@ func (s *sheet) buttons(x, y float32) {
 	for i, c := range cells {
 		cx := x + float32(i)*82
 		s.caption(cx, y+22, c.name)
-		s.lk.DrawButton(s.ctx, s.r(cx, y+42, 76, 28), c.st, "Button")
+		s.lk.DrawButton(s.ctx, s.r(cx, y+42, 76, 28), c.st, style.ButtonDraw{Label: "Button"})
 	}
 	s.caption(x, y+76, "tool: normal / hover / pressed / toggle / toggle on / on+hover / disabled")
 	tools := []style.ControlState{stN, stH, stP, style.StateToggle, style.StateToggle | style.StateChecked, style.StateToggle | style.StateChecked | stH, stD}
@@ -352,7 +352,7 @@ func (s *sheet) bars(x, y float32) {
 	s.lk.DrawToolButton(s.ctx, s.r(x+138, y+65, 80, 34), style.StateToggle|style.StateChecked, "Snap", style.IconNone)
 	s.lk.DrawStatusBar(s.ctx, s.r(x, y+108, 570, 26), []string{"Ready.", "Ln 1, Col 1", "v1.0"})
 	s.caption(x, y+144, "overlay dimmer")
-	s.lk.DrawButton(s.ctx, s.r(x, y+162, 120, 30), stN, "Behind")
+	s.lk.DrawButton(s.ctx, s.r(x, y+162, 120, 30), stN, style.ButtonDraw{Label: "Behind"})
 	s.lk.DrawOverlay(s.ctx, s.r(x, y+160, 180, 40))
 	// Ink, not the declared colour: a word drawn on the window background
 	// has nothing behind it to carry the contrast, and most packs' status
@@ -382,8 +382,8 @@ func (s *sheet) frames(x, y float32) {
 		if f != nil {
 			f.Draw(s.ctx, "Save changes?", paintengine2d.Pt(in.Min.X+s.u(12), in.Min.Y+s.u(12)), s.p.Text)
 		}
-		s.lk.DrawButton(s.ctx, paintengine2d.XYWH(in.Max.X-s.u(170), in.Max.Y-s.u(40), s.u(76), s.u(28)), stDef|stF, "Save")
-		s.lk.DrawButton(s.ctx, paintengine2d.XYWH(in.Max.X-s.u(88), in.Max.Y-s.u(40), s.u(76), s.u(28)), stN, "Cancel")
+		s.lk.DrawButton(s.ctx, paintengine2d.XYWH(in.Max.X-s.u(170), in.Max.Y-s.u(40), s.u(76), s.u(28)), stDef|stF, style.ButtonDraw{Label: "Save"})
+		s.lk.DrawButton(s.ctx, paintengine2d.XYWH(in.Max.X-s.u(88), in.Max.Y-s.u(40), s.u(76), s.u(28)), stN, style.ButtonDraw{Label: "Cancel"})
 	}
 	s.lk.DrawPanel(s.ctx, s.r(x, y+190, 260, 60), true)
 	s.caption(x+8, y+196, "raised panel")

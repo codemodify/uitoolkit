@@ -274,7 +274,7 @@ func (breeze6Engine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b pai
 
 // ---- controls -----------------------------------------------------------------------------------
 
-func (e breeze6Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (e breeze6Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, d ButtonDraw) {
 	c := breezeColors(l)
 	b = fuSnap(b)
 	c.button6(l, ctx, b, st, st.Primary())
@@ -282,7 +282,8 @@ func (e breeze6Engine) DrawButton(l *Classic, ctx *paintengine2d.Context, b pain
 	if st.Disabled() {
 		fg = c.dis
 	}
-	l.drawFittedText(ctx, l.body, label, b, fg, AlignCenter, l.S(14))
+	l.DrawButtonMark(ctx, b, d, fg)
+	l.drawFittedText(ctx, l.body, d.Label, l.ButtonLabelBox(b, d), fg, AlignCenter, l.S(14))
 }
 
 func (e breeze6Engine) DrawCheckbox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {

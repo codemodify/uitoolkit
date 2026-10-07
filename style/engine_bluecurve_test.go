@@ -70,7 +70,7 @@ func TestBluecurveShapes(t *testing.T) {
 	c := blColors(lk)
 	img := paintengine2d.NewImage(100, 40)
 	ctx := paintengine2d.NewContext(img)
-	lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, 90, 30), StateNone, "")
+	lk.DrawButton(ctx, paintengine2d.XYWH(4, 4, 90, 30), StateNone, ButtonDraw{Label: ""})
 	if !nxNear(img, 4, 4, c.g[6]) || !nxNear(img, 93, 33, c.g[6]) {
 		t.Fatal("Bluecurve buttons are square in a grey-6 outline")
 	}

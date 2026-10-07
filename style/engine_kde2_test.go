@@ -81,7 +81,7 @@ func TestKDE2ButtonIsASlab(t *testing.T) {
 	ctx := paintengine2d.NewContext(img)
 	ctx.DrawRect(paintengine2d.XYWH(0, 0, 140, 48), paintengine2d.Fill(lk.Palette().Background))
 	b := paintengine2d.XYWH(10, 8, 110, 30)
-	lk.DrawButton(ctx, b, StateNone, "")
+	lk.DrawButton(ctx, b, StateNone, ButtonDraw{Label: ""})
 	at := func(x, y int) paintengine2d.Color {
 		r, g, bl, a := img.PremulAt(x, y)
 		return paintengine2d.RGBA(float32(r)/255, float32(g)/255, float32(bl)/255, float32(a)/255)

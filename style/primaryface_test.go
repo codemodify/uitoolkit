@@ -24,7 +24,7 @@ func TestEveryPackMarksTheDefaultButton(t *testing.T) {
 			img := paintengine2d.NewImage(w, h)
 			ctx := paintengine2d.NewContext(img)
 			ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(lk.Palette().Background))
-			lk.DrawButton(ctx, paintengine2d.XYWH(2, 2, w-4, h-4), st, "OK")
+			lk.DrawButton(ctx, paintengine2d.XYWH(2, 2, w-4, h-4), st, ButtonDraw{Label: "OK"})
 			img.Touch()
 			return img
 		}
