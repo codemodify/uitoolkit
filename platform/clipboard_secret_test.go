@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bytes"
+	"os"
 	"testing"
 	"time"
 )
@@ -190,6 +191,15 @@ func TestARefusedCopyComesBackCleared(t *testing.T) {
 // that every displayless test depends on, and the one a careless reading of
 // "report whether it took" would break.
 func TestACopyWithNoWindowSystemIsStillHeld(t *testing.T) {
+	// Its premise is in its name, so it checks it rather than assuming it.
+	// Under tools/test-display.sh there *is* a window system: the copy takes a
+	// real selection, the compositor cancels the source of a client with no
+	// window and no focus within milliseconds, and the held copy ends — which
+	// is correct behaviour and nothing to do with what this test is about.
+	// The displayless suite, which is the default one, is where it belongs.
+	if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
+		t.Skip("a window system is present; this is the case where there is none")
+	}
 	t.Cleanup(ClipboardClear)
 	c := ClipboardSetSecret([]byte("hunter2"), -1)
 	if c.Cleared() {
