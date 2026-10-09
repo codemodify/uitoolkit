@@ -625,6 +625,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	var rows []widget.Component
 	if win != nil {
 		win.SetTitleBar(head)
+		win.SetCaptionStyle(style.CaptionMerged)
 		win.SetTitle(WindowTitle(places[place].Label + " — Files"))
 	} else {
 		rows = append(rows, head)

@@ -279,6 +279,10 @@ func (t *tourState) content(open []int) widget.Component {
 	}
 	t.syncCloseButtons()
 	t.win.SetTitleBar(t.strip)
+	// The strip is the caption itself, not a row under one: without this a
+	// pack that draws a stacked frame (metal-ocean) keeps its own title
+	// strip above the strip and the window grows a second title bar.
+	t.win.SetCaptionStyle(style.CaptionMerged)
 	t.installCloseHook()
 	// A change of appearance made anywhere — a page of this window, a page
 	// of another tour window, Settings through look.json — is restated by
