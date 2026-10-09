@@ -1,6 +1,7 @@
 package uitoolkit_test
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -89,4 +90,110 @@ func TestSamplesUseOnlyThePublicAPI(t *testing.T) {
 	}
 	msg.WriteString("A sample must build on the published API. If it needs something that is not there, make that thing public.")
 	t.Error(msg.String())
+}
+
+// A sample's window carries the toolkit's name, because a desktop with
+// several of them open has to say which toolkit they belong to — and
+// because the title is what the panel, the task switcher and the window
+// list call the window, which is the one place the look's own caption
+// cannot stand in for it.
+//
+// Five of the look-alike samples set the title to their own binary name,
+// so an Alt-Tab across a desktop of samples read
+// "uitoolkit-sample-look-like-chromium". They were the five that draw
+// their own caption, which is exactly why nobody noticed: the title
+// never appears in the window, only outside it. The convention lived in
+// a copied helper in twelve separate main packages and nothing held it,
+// so this test holds it instead.
+func TestEverySampleWindowIsNamedForTheToolkit(t *testing.T) {
+	const prefix = "uitoolkit - "
+	var bad []string
+	err := filepath.WalkDir("examples", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		// A test may open a window called anything; it is not what a
+		// reader copies and no desktop shows it.
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.CompositeLit)
+			if !ok || !isWindowOptions(lit.Type) {
+				return true
+			}
+			for _, el := range lit.Elts {
+				kv, ok := el.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				if key, ok := kv.Key.(*ast.Ident); !ok || key.Name != "Title" {
+					continue
+				}
+				if titleIsNamedForTheToolkit(kv.Value, prefix) {
+					continue
+				}
+				pos := fset.Position(kv.Pos())
+				bad = append(bad, pos.Filename+":"+strconv.Itoa(pos.Line))
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bad) == 0 {
+		return
+	}
+	sort.Strings(bad)
+	var msg strings.Builder
+	msg.WriteString("these sample windows are not named for the toolkit:\n")
+	for _, b := range bad {
+		msg.WriteString("\t" + b + "\n")
+	}
+	msg.WriteString("A window title goes through the sample's windowTitle/WindowTitle helper, " +
+		"which puts it under " + strconv.Quote(prefix) + ". The title is what the panel and the " +
+		"task switcher show, so a sample that draws its own caption needs it too.")
+	t.Error(msg.String())
+}
+
+// isWindowOptions reports whether t is the platform.WindowOptions type —
+// the only struct here whose Title names a window. The samples' other
+// Title fields are columns, tabs, wizard pages, tray items and
+// notifications, which are named for what they are.
+func isWindowOptions(t ast.Expr) bool {
+	sel, ok := t.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "WindowOptions" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "platform"
+}
+
+// titleIsNamedForTheToolkit accepts the prefix spelled out, or any call
+// to the samples' helper — windowTitle in a main package, WindowTitle
+// where an app package exports it. The helper is where the prefix is
+// written once, so a title computed while the app runs carries it too;
+// that is why a call is accepted without reading what it returns, and
+// why anything else (a bare string, a variable) is not.
+func titleIsNamedForTheToolkit(v ast.Expr, prefix string) bool {
+	switch e := v.(type) {
+	case *ast.BasicLit:
+		s, err := strconv.Unquote(e.Value)
+		return err == nil && strings.HasPrefix(s, prefix)
+	case *ast.CallExpr:
+		switch fn := e.Fun.(type) {
+		case *ast.Ident:
+			return fn.Name == "windowTitle" || fn.Name == "WindowTitle"
+		case *ast.SelectorExpr:
+			return fn.Sel.Name == "WindowTitle"
+		}
+	}
+	return false
 }

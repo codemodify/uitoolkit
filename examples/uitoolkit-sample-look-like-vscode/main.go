@@ -68,7 +68,7 @@ func main() {
 		Theme: uitoolkit.ThemeOverride{Pack: themePack},
 	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit-sample-look-like-vscode", Width: 1100, Height: 700,
+		Title: windowTitle("Looks like VS Code"), Width: 1100, Height: 700,
 		MinWidth: 640, MinHeight: 420, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {
@@ -234,3 +234,14 @@ func statusBar() widget.Component {
 	row.AddFlex(gap, 1)
 	return row
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+//
+// This sample draws its own caption, so the title never appears in the
+// window — it is what the panel, the task switcher and the window list
+// call it, which is the only place a bare binary name would show.
+func windowTitle(name string) string { return "uitoolkit - " + name }
