@@ -73,17 +73,32 @@ func TestAppFollowsDesktopScheme(t *testing.T) {
 
 // The desktop's reduced-motion setting stops animations in every app,
 // whatever its theme.
+// The desktop's reduced-motion setting is kept current, and is obeyed
+// only by an application that asked to follow it: the toolkit decides its
+// own motion (style.Animations). A Plasma session with its animations
+// switched off used to silence every animation in every uitoolkit app
+// with nothing able to say otherwise.
 func TestDesktopReducedMotion(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(style.AnimationsEnv, "")
 	defer style.SetDesktopReduceMotion(false)
+	defer style.SetFollowDesktopMotion(false)
 	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1})
 	if !style.Animations() {
 		t.Fatal("animations should start on")
 	}
+
 	a.desktopPrefsChanged(platform.DesktopPrefs{ReducedMotion: true})
+	if !style.DesktopReducesMotion() {
+		t.Fatal("the desktop's reduced-motion setting was not recorded")
+	}
+	if !style.Animations() {
+		t.Fatal("the desktop's setting was obeyed by an app that never asked to follow it")
+	}
+
+	style.SetFollowDesktopMotion(true)
 	if style.Animations() {
-		t.Fatal("the desktop asked for reduced motion")
+		t.Fatal("an app that follows the desktop kept animating through reduced motion")
 	}
 	a.desktopPrefsChanged(platform.DesktopPrefs{})
 	if !style.Animations() {

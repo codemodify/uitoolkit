@@ -2,23 +2,67 @@ package style
 
 import (
 	"os"
+	"strings"
 	"sync/atomic"
 )
 
-// AnimationsEnv set to "0" makes every state change instant (reproducible
-// screenshots, tests), whatever the saved preference says.
+// AnimationsEnv decides motion for the process, over every preference,
+// and is read live so a test may set it:
+//
+//	"0"     every state change is instant — reproducible screenshots, tests
+//	"1"     animate, whatever anything else says
+//	unset   the application decides (the default)
 const AnimationsEnv = "UITK_ANIMATIONS"
 
-var reduceMotion, desktopReduce atomic.Bool
+var reduceMotion, desktopReduce, followDesktopMotion atomic.Bool
 
 // Animations reports whether controls animate: hover fades, the default
-// button's pulse, busy bars, transient scroll bars fading out. Off with
-// UITK_ANIMATIONS=0, the user's "reduce motion" preference (look.json), or
-// the desktop's reduced-motion setting (GNOME's and Plasma's animations
-// switch, which GTK's gtk-enable-animations follows too).
+// button's pulse, busy bars, transient scroll bars fading out, a
+// two-sided panel turning over.
+//
+// **The toolkit decides this for itself.** It is on unless the
+// application turned it off ([SetReduceMotion], which is what an app's
+// own settings page writes through look.json) or whoever started the
+// program said otherwise (UITK_ANIMATIONS).
+//
+// The desktop's reduced-motion setting is read and kept current
+// ([DesktopReducesMotion]) but is *not* obeyed unless the application
+// asks for it with [SetFollowDesktopMotion]. It used to be obeyed always,
+// and the cost was plain: a Plasma session with AnimationDurationFactor=0
+// — a common thing to set, and reported through the portal as
+// reduced-motion — silently turned off every animation in every uitoolkit
+// app, with no way for an application to say otherwise even when the
+// animation was the thing it existed to show. A toolkit that carries its
+// own widgets so it looks the same everywhere should not take its
+// behaviour from the session it happens to be started in.
+//
+// That makes honouring reduced motion the application's call rather than
+// the toolkit's. It is a real accessibility setting — it is there for
+// people whom movement makes ill — so an application that has no reason
+// to do otherwise should pass the desktop's wish on, either with
+// SetFollowDesktopMotion(true) or by offering the preference in its own
+// settings.
 func Animations() bool {
-	return os.Getenv(AnimationsEnv) != "0" && !reduceMotion.Load() && !desktopReduce.Load()
+	switch strings.TrimSpace(os.Getenv(AnimationsEnv)) {
+	case "0":
+		return false
+	case "1":
+		return true
+	}
+	if reduceMotion.Load() {
+		return false
+	}
+	return !(followDesktopMotion.Load() && desktopReduce.Load())
 }
+
+// SetFollowDesktopMotion makes the desktop's reduced-motion setting apply
+// to this process, for an application that would rather take the
+// session's word for it than decide. Off by default: see [Animations].
+func SetFollowDesktopMotion(v bool) { followDesktopMotion.Store(v) }
+
+// FollowsDesktopMotion reports whether the desktop's reduced-motion
+// setting applies to this process.
+func FollowsDesktopMotion() bool { return followDesktopMotion.Load() }
 
 // SetReduceMotion applies the "reduce motion" preference for the process.
 func SetReduceMotion(v bool) { reduceMotion.Store(v) }

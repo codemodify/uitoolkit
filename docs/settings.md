@@ -991,10 +991,28 @@ shows exactly that pack and does not follow. Headless and offscreen apps
 
 The desktop's **reduced-motion** setting (GNOME's *Animations* switch,
 Plasma's animation speed at *Instant*, published as the portal's
-`reduced-motion`) turns every uitoolkit animation off in every app,
-whatever `reduceMotion` says; Settings shows a note under its Animations
-switch while it does. Apps read the portal once at start (in the
-background, alongside the font index) and follow it live.
+`reduced-motion`) is read at start and kept current, and is readable with
+`style.DesktopReducesMotion` — but **it is not obeyed unless the
+application asks for it** with `style.SetFollowDesktopMotion(true)`. The
+toolkit decides its own motion.
+
+It used to be obeyed always, and the cost was plain: a Plasma session with
+its animation speed at *Instant* — a common thing to set — silently turned
+off every animation in every uitoolkit app, with no way for an application
+to say otherwise even when the animation was the thing it existed to show.
+A toolkit that carries its own widgets so that it looks the same
+everywhere should not take its behaviour from the session it happens to be
+started in.
+
+That makes honouring reduced motion the application's call. It is a real
+accessibility setting — it is there for people whom movement makes ill —
+so an application with no reason to do otherwise should pass the desktop's
+wish on, either with `SetFollowDesktopMotion(true)` or by offering the
+preference in its own settings (`style.SetReduceMotion`, which the
+`reduceMotion` field saves and which is always obeyed).
+
+`UITK_ANIMATIONS` settles it for the process either way: `0` makes every
+state change instant, `1` animates over every preference.
 
 Mode `0600`. Missing or invalid files yield the default theme,
 `metal-ocean` (Metal, Ocean theme), in its own corners (`theme`), with
