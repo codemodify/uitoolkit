@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/platform"
@@ -31,40 +32,96 @@ func main() {
 	back := flag.Bool("back", false, "open showing the settings side")
 	persp := flag.Float64("perspective", 0, "camera distance in half-widths (0 takes the default)")
 	strips := flag.Int("strips", 0, "columns the face is cut into (0 takes the default)")
+	motion := flag.Bool("motion", false, "animate even where the desktop asks for reduced motion")
+	whole := flag.Bool("window", false, "turn the whole window over, not a card inside it")
 	flag.Parse()
 
+	// A desktop with its animations switched off (Plasma's
+	// AnimationDurationFactor=0, which the portal reports as
+	// reduced-motion) turns off every animation in every uitoolkit app —
+	// correctly, and including the turn this sample exists to show. The
+	// variable is the documented way to say otherwise, and it belongs to
+	// whoever starts the program, which here is this flag.
+	if *motion {
+		os.Setenv(style.AnimationsEnv, "1")
+	}
+
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
-	win, err := a.NewWindow(platform.WindowOptions{
-		Title: windowTitle("Flip"), Width: 520, Height: 360, MinWidth: 420, MinHeight: 300,
-	})
+	// The window says which projection it is running, so several of these
+	// open at once can be told apart in the panel and compared turning
+	// side by side.
+	name := "Flip"
+	switch {
+	case *persp > 0 && *strips > 0:
+		name = fmt.Sprintf("Flip (camera %.2g, %d strips)", *persp, *strips)
+	case *persp > 0:
+		name = fmt.Sprintf("Flip (camera %.2g)", *persp)
+	case *strips > 0:
+		name = fmt.Sprintf("Flip (%d strips)", *strips)
+	}
+	opts := platform.WindowOptions{
+		Title: windowTitle(name), Width: 520, Height: 360, MinWidth: 420, MinHeight: 300,
+	}
+	if *whole {
+		// No frame from anybody: a window that turns over draws its own,
+		// on the faces, so that the frame turns with them. The desktop's
+		// frame cannot turn (the toolkit does not draw it) and the
+		// toolkit's own sits outside the content, so either would be the
+		// one part that stayed still — and under DecorationsClient the
+		// first version of this wore two captions, the window's and the
+		// face's. DecorationsNone is the mode for exactly this: "no
+		// frame at all; the app draws whatever it wants".
+		opts.Decorations = platform.DecorationsNone
+	}
+	win, err := a.NewWindow(opts)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	card := &card{}
-	card.build()
+	card := &card{volume: 65, quality: 2}
+	if *whole {
+		// The whole application turns over: the two faces are the
+		// window's content, and the window takes the card's silhouette
+		// while it moves, so what rotates is the window itself. There is
+		// no status line here — a bar outside the card would be a strip
+		// that did not turn with the window it belongs to.
+		//
+		// The frame has to go *on the faces*. A window wears its frame
+		// outside its content, so a frame left to the window would be
+		// the one part that stayed still while everything inside it
+		// turned; and dropping the frame without putting one back is how
+		// the first version of this came out with no border at all. Each
+		// face is an in-app window instead — the look's own frame,
+		// caption and close button, drawn by the era in its own style —
+		// so the border turns with the card that wears it.
+		card.chrome, card.onClose = true, a.Quit
+		card.adopt(win.SetFlipFaces(card.front(), card.settings()))
+	} else {
+		// A card inside an ordinary window: the window does not move, and
+		// the status line sits outside the card saying what it is doing.
+		card.adopt(widgets.NewFlipPanel(nil, nil))
+		card.panel.SetFront(card.front())
+		card.panel.SetBack(card.settings())
+		status := widgets.NewStatusBar("", "")
+		show := func(onBack bool) {
+			side := "Front — Settings turns the card over"
+			if onBack {
+				side = "Settings — Done turns it back"
+			}
+			status.SetParts(side, card.summary())
+		}
+		card.onFlip = show
+		show(false)
+		pad := widgets.NewPad(12, card.panel)
+		body := widgets.NewColumn(pad, status).WithGap(0)
+		body.AddFlex(pad, 1)
+		win.SetContent(body)
+	}
 	card.panel.Perspective = float32(*persp)
 	card.panel.Strips = *strips
 	if *back {
 		card.panel.ShowBack()
 	}
-	// The status line is outside the card, so it says what the card is
-	// doing from somewhere that does not turn with it.
-	status := widgets.NewStatusBar("", "")
-	showSide := func(onBack bool) {
-		side := "Front — Settings turns the card over"
-		if onBack {
-			side = "Settings — Done turns it back"
-		}
-		status.SetParts(side, card.summary())
-	}
-	card.panel.OnFlip = showSide
-	showSide(card.panel.Showing())
-
-	pad := widgets.NewPad(12, card.panel)
-	body := widgets.NewColumn(pad, status).WithGap(0)
-	body.AddFlex(pad, 1)
-	win.SetContent(body)
 
 	if *headless {
 		if err := win.WritePNG("flip.png"); err != nil {
@@ -93,21 +150,20 @@ type card struct {
 	title  *widgets.Label
 	detail *widgets.Label
 	play   *widgets.Button
+	// onFlip is what the window around the card wants to hear, where
+	// there is anything outside the card to tell.
+	onFlip func(back bool)
+	// chrome puts the look's window frame on each face, for the mode
+	// where the faces are the window; onClose is what its close button
+	// does.
+	chrome  bool
+	onClose func()
 }
 
 var (
 	qualities = []string{"Low", "Normal", "High", "Lossless"}
 	tracks    = []string{"Weightless", "An Ending (Ascent)", "Avril 14th", "Music for Airports"}
 )
-
-func (c *card) build() {
-	c.volume, c.quality = 65, 2
-	// The panel first, empty: both faces carry a control that turns the
-	// card over, so they need the panel that will hold them.
-	c.panel = widgets.NewFlipPanel(nil, nil)
-	c.panel.SetFront(c.front())
-	c.panel.SetBack(c.settings())
-}
 
 // front is the face the application shows: a track, and the gear that
 // turns the card over.
@@ -143,7 +199,20 @@ func (c *card) front() widget.Component {
 	).WithGap(10)
 	col.AddFlex(fill, 1)
 	c.refresh()
-	return face(col)
+	return c.face(windowTitle("Flip"), col)
+}
+
+// adopt points the card at the panel that will hold its faces — the one
+// the window built, or one of its own — so the Settings and Done buttons
+// turn that one.
+func (c *card) adopt(p *widgets.FlipPanel) {
+	c.panel = p
+	p.OnFlip = func(onBack bool) {
+		c.refresh()
+		if c.onFlip != nil {
+			c.onFlip(onBack)
+		}
+	}
 }
 
 // step moves through the tracks, and playPause starts and stops. Neither
@@ -188,7 +257,7 @@ func (c *card) settings() widget.Component {
 		foot,
 	).WithGap(10)
 	col.AddFlex(fill, 1)
-	return face(col)
+	return c.face(windowTitle("Flip — settings"), col)
 }
 
 // face is one side of the card: a panel for the border and the look's
@@ -196,9 +265,17 @@ func (c *card) settings() widget.Component {
 // panel holds its child at the child's own height unless the child is
 // given the flex, and a half-filled card would turn over to show where
 // the content stopped.
-func face(content widget.Component) widget.Component {
+func (c *card) face(title string, content widget.Component) widget.Component {
 	pad := widgets.NewPad(14, content)
 	panel := widgets.NewPanel("")
+	if c.chrome {
+		// The look's own window frame: Windows 95's navy caption, Aqua's
+		// traffic lights, Adwaita's rounded header — whatever the era
+		// gives a window, drawn here on the face so that it turns.
+		panel.Window = true
+		panel.Title = title
+		panel.OnClose = c.onClose
+	}
 	panel.Add(pad)
 	panel.Content().AddFlex(pad, 1)
 	return panel
