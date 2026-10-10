@@ -6,7 +6,7 @@
 //
 //	popups                       # a 360x150 window: open File, Recent ▸, the list
 //	popups -scale 1.75           # at a fractional scale
-//	popups -theme macos-tahoe    # a glass look: real blur behind every menu
+//	popups -theme tahoe          # a glass look: real blur behind every menu
 //	UITK_POPUPS=layer popups     # the same menus drawn inside the window, for comparison
 //	popups -shot out.png         # paint one frame offscreen (menus inside), write, exit
 //
