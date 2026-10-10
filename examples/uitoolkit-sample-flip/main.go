@@ -52,7 +52,7 @@ func main() {
 	// doing from somewhere that does not turn with it.
 	status := widgets.NewStatusBar("", "")
 	showSide := func(onBack bool) {
-		side := "Front — the gear turns the card over"
+		side := "Front — Settings turns the card over"
 		if onBack {
 			side = "Settings — Done turns it back"
 		}
@@ -87,12 +87,18 @@ type card struct {
 	shuffle bool
 	volume  float32
 	quality int
+	track   int
+	playing bool
 
 	title  *widgets.Label
 	detail *widgets.Label
+	play   *widgets.Button
 }
 
-var qualities = []string{"Low", "Normal", "High", "Lossless"}
+var (
+	qualities = []string{"Low", "Normal", "High", "Lossless"}
+	tracks    = []string{"Weightless", "An Ending (Ascent)", "Avril 14th", "Music for Airports"}
+)
 
 func (c *card) build() {
 	c.volume, c.quality = 65, 2
@@ -106,29 +112,51 @@ func (c *card) build() {
 // front is the face the application shows: a track, and the gear that
 // turns the card over.
 func (c *card) front() widget.Component {
-	c.title = widgets.NewTitle("Weightless")
+	c.title = widgets.NewTitle("")
 	c.detail = widgets.NewLabel("")
 	c.detail.Wrap = true
-	gear := widgets.NewIconButton(style.IconSettings, "Settings", func() { c.panel.ShowBack() })
+
+	// A button that says what it does, not a bare mark in the corner:
+	// the first person to run this sample pressed Play and reported that
+	// nothing happened, which is exactly right — the control that turns
+	// the card over was an unlabelled icon and the big obvious buttons
+	// were dead.
+	gear := widgets.NewButton("Settings", func() { c.panel.ShowBack() })
+	gear.Icon = style.IconSettings
+	gear.Tip = "Turn the card over"
 
 	headGap := widgets.NewSpacer()
 	head := widgets.NewRow(c.title, headGap, gear)
 	head.AddFlex(headGap, 1)
 	fill := widgets.NewSpacer()
+	c.play = widgets.NewButton("", c.playPause)
 	col := widgets.NewColumn(
 		head,
 		widgets.NewSeparator(),
 		c.detail,
 		fill,
 		widgets.NewRow(
-			widgets.NewButton("Previous", nil),
-			widgets.NewButton("Play", nil),
-			widgets.NewButton("Next", nil),
+			widgets.NewButton("Previous", func() { c.step(-1) }),
+			c.play,
+			widgets.NewButton("Next", func() { c.step(1) }),
 		),
 	).WithGap(10)
 	col.AddFlex(fill, 1)
 	c.refresh()
 	return face(col)
+}
+
+// step moves through the tracks, and playPause starts and stops. Neither
+// plays anything — there is no audio here — but a demo with buttons that
+// do nothing teaches the reader that the toolkit's buttons do nothing.
+func (c *card) step(by int) {
+	c.track = (c.track + by + len(tracks)) % len(tracks)
+	c.refresh()
+}
+
+func (c *card) playPause() {
+	c.playing = !c.playing
+	c.refresh()
 }
 
 // settings is the face on the back: the same state, as controls.
@@ -183,8 +211,17 @@ func (c *card) refresh() {
 	if c.detail == nil {
 		return
 	}
+	c.title.Text = tracks[c.track]
+	c.title.Invalidate()
 	c.detail.Text = c.summary()
 	c.detail.Invalidate()
+	if c.play != nil {
+		c.play.Text = "Play"
+		if c.playing {
+			c.play.Text = "Pause"
+		}
+		c.play.Invalidate()
+	}
 }
 
 func (c *card) summary() string {
@@ -192,7 +229,11 @@ func (c *card) summary() string {
 	if c.shuffle {
 		shuffle = "shuffled"
 	}
-	return fmt.Sprintf("%s · volume %.0f · %s", qualities[c.quality], c.volume, shuffle)
+	state := "stopped"
+	if c.playing {
+		state = "playing"
+	}
+	return fmt.Sprintf("%s · %s · volume %.0f · %s", state, qualities[c.quality], c.volume, shuffle)
 }
 
 // windowTitle is what a window of this sample is called on the desktop:
