@@ -522,6 +522,7 @@ is checked by a test.
 | [`uitoolkit-sample-shapes`](examples/uitoolkit-sample-shapes) | a round window with a hole you can click through |
 | [`uitoolkit-sample-skinshape`](examples/uitoolkit-sample-skinshape) | a skinned, shaped window from a sheet of art |
 | [`uitoolkit-sample-popups`](examples/uitoolkit-sample-popups) | popups on surfaces of their own, and the fallback when there are none |
+| [`uitoolkit-sample-flip`](examples/uitoolkit-sample-flip) | a card that turns over in perspective to put the settings on its back |
 
 And two applications that grew up here and moved out:
 [comms-mail](https://github.com/codemodify/comms-mail) and
