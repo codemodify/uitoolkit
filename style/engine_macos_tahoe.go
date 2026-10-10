@@ -284,7 +284,7 @@ func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b painteng
 	px := macPx(l)
 	macRing(ctx, b, r, px, paintengine2d.Fill(edge))
 	in := b.Inset(px)
-	macRing(ctx, in, max(r-px, 0), px, VGradient(in, Stop(0, c.glassRim), Stop(1, c.glassRim2)))
+	macRing(ctx, in, max(r-px, 0), px, GlassRimPaint(ctx, in, c.glassRim, c.glassRim2))
 }
 
 // tahoeShadowAround paints DropShadow of the round rect b outside b only: a

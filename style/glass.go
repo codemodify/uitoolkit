@@ -1,6 +1,7 @@
 package style
 
 import (
+	"math"
 	"sync/atomic"
 
 	"github.com/codemodify/paintengine2d"
@@ -164,4 +165,95 @@ func LayerMaterial(tint, bg paintengine2d.Color) (paintengine2d.Color, bool) {
 		return FlattenOver(tint, bg), false
 	}
 	return tint, true
+}
+
+// The light on a piece of glass: where its specular rim is brightest.
+//
+// Apple's Liquid Glass moves its highlight as the surface moves under the
+// light — on a phone with the device's tilt, on a desktop with the
+// pointer, which is the only thing a window knows of that moves. A rim
+// that never moves reads as a painted edge; one that does reads as a
+// surface with a shape.
+//
+// The position is in **device pixels**, which is the space an engine can
+// reach from its context's matrix and the only one it can: a look is
+// handed a rect in some component's local coordinates and has no idea
+// where that sits in the window. Unset — the default, and where no
+// pointer is in the window — means the light is straight above, which is
+// the fixed top-lit rim glass has always had. That is deliberate: a
+// headless render has no pointer, so screenshots stay what they were.
+var (
+	glassLightOn atomic.Bool
+	glassLightX  atomic.Uint32 // float32 bits
+	glassLightY  atomic.Uint32
+)
+
+// SetGlassLight records where the light on glass falls, in device pixels.
+// The app package calls it as the pointer moves in a window whose look
+// wants glass.
+func SetGlassLight(p paintengine2d.Point) {
+	glassLightX.Store(math.Float32bits(p.X))
+	glassLightY.Store(math.Float32bits(p.Y))
+	glassLightOn.Store(true)
+}
+
+// ClearGlassLight puts the light back overhead: no pointer, no tracking.
+func ClearGlassLight() { glassLightOn.Store(false) }
+
+// GlassLight is where the light falls, in device pixels, and whether
+// anything has said.
+func GlassLight() (paintengine2d.Point, bool) {
+	if !glassLightOn.Load() {
+		return paintengine2d.Point{}, false
+	}
+	return paintengine2d.Pt(
+		math.Float32frombits(glassLightX.Load()),
+		math.Float32frombits(glassLightY.Load()),
+	), true
+}
+
+// GlassRimPaint is the paint for the specular rim inside a piece of glass
+// over b: a gradient from lit, on the side the light falls on, to unlit
+// opposite.
+//
+// With no light set it is the top-lit vertical gradient a rim has always
+// been, to the pixel — so a look that calls this renders exactly as it
+// did until something starts tracking a pointer.
+//
+// The light is in device pixels and b is in the context's own space, so
+// the light is brought back through the context's matrix rather than b
+// being pushed out through it: an engine is handed a rect in whatever
+// local space its caller was painting in, and only the matrix knows where
+// that is.
+func GlassRimPaint(ctx *paintengine2d.Context, b paintengine2d.Rect, lit, unlit paintengine2d.Color) paintengine2d.Paint {
+	top := VGradient(b, Stop(0, lit), Stop(1, unlit))
+	if ctx == nil || b.Empty() {
+		return top
+	}
+	p, ok := GlassLight()
+	if !ok {
+		return top
+	}
+	inv, ok := ctx.Matrix().Invert()
+	if !ok {
+		return top
+	}
+	l := inv.Transform(p)
+	c := b.Center()
+	dx, dy := c.X-l.X, c.Y-l.Y
+	n := float32(math.Hypot(float64(dx), float64(dy)))
+	if n < 1e-3 {
+		// The light is on the middle of the glass: no side is lit more
+		// than another, and a direction from a zero vector is noise.
+		return top
+	}
+	// The gradient runs across the glass along the light's direction, far
+	// enough to cover it whichever way it points.
+	reach := (b.Dx() + b.Dy()) / 4
+	ux, uy := dx/n*reach, dy/n*reach
+	return paintengine2d.Linear(paintengine2d.LinearGradient{
+		Start: paintengine2d.Pt(c.X-ux, c.Y-uy),
+		End:   paintengine2d.Pt(c.X+ux, c.Y+uy),
+		Stops: []paintengine2d.GradientStop{Stop(0, lit), Stop(1, unlit)},
+	})
 }

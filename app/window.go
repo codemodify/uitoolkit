@@ -100,6 +100,9 @@ type Window struct {
 	// flip is the window's two-sided content, where it has any, and
 	// flipShapes / flipShaped whether the window takes the turning
 	// card's silhouette and whether it is wearing one now (app/flip.go).
+	// litAt is where the pointer last moved the light on glass, in
+	// logical window pixels (app/glasslight.go).
+	litAt      paintengine2d.Point
 	flip       *widgets.FlipPanel
 	flipShapes bool
 	flipShaped bool
@@ -1723,6 +1726,7 @@ func (w *Window) rehover(pos paintengine2d.Point, mods platform.Modifiers) {
 // pointerLeft clears hover and pending tooltips when the pointer leaves the
 // window. A drag in progress keeps its capture: the release still comes.
 func (w *Window) pointerLeft() {
+	w.glassLightLeft()
 	if w.capture != nil {
 		return
 	}
@@ -1737,6 +1741,7 @@ func (w *Window) pointerLeft() {
 }
 
 func (w *Window) mouseMove(ev platform.Event) {
+	w.trackGlassLight(ev.Pos)
 	if w.frameMouseMove(ev) {
 		return
 	}

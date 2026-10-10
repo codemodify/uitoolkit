@@ -1291,6 +1291,38 @@ a frame, so a large one is better flipped where `Window.UsesGPU` reports
 true. `examples/uitoolkit-sample-flip` is a small player with its settings
 on the back.
 
+## Glass, and the light on it
+
+A look that asks for glass gets the desktop blurred behind the window
+where the compositor can do it (`ext_background_effect_v1` on Wayland,
+`_KDE_NET_WM_BLUR_BEHIND_REGION` on X11) and paints its own approximation
+where it cannot; `style.GlassBehind` is the single switch, so a look never
+blurs twice on one machine and not at all on another. `win.SetGlass(true)`
+asks, `win.SetGlassTint(c)` says how much of the desktop shows through,
+and `win.GlassAvailable()` reports whether this desktop can at all — it
+changes while the window is up, because KWin drops it when desktop effects
+go off.
+
+**The specular rim follows the light.** Apple's Liquid Glass moves its
+highlight as the surface moves under the light — with the device's tilt on
+a phone, and on a desktop with the pointer, which is the only thing a
+window knows of that moves. `style.GlassRimPaint(ctx, b, lit, unlit)` is
+what a look draws its rim with: a gradient from the lit side to the unlit
+one, computed from `style.GlassLight`, which the window sets as the
+pointer moves through a look that wants glass. With no light set it is the
+top-lit vertical gradient a rim has always been, to the pixel — so a
+headless render, which has no pointer, is exactly what it was.
+
+The light is in **device pixels**, and the engine brings it back through
+its context's matrix rather than pushing the rect out through it: a look is
+handed a rect in whatever local space its caller was painting in, and only
+the matrix knows where that is on screen.
+
+Moving the light repaints every piece of glass in the window, so the
+window only tracks it for a look that asks for glass, and only once the
+pointer has travelled eight logical pixels — under the width of the rim
+itself, so the highlight slides rather than steps.
+
 ## Wizards
 
 `widgets.NewWizard(title, pages...)` walks through `WizardPage`s with
