@@ -1250,6 +1250,14 @@ toolkit's own decorations (`platform.DecorationsClient`) or none.
 turns only what is inside it, which is the honest choice for a window
 wearing the desktop's frame.
 
+Since the frame has to turn with the card, it has to be *on* the card:
+ask for `platform.DecorationsNone` and make each face a `Panel` with
+`Window` set, which wears the look's own frame, caption and close button.
+A caption drawn that way is paint until it is told what a caption does —
+`panel.OnCaptionPress = win.StartMove` hands the press to the desktop for
+an interactive move, and `panel.OnClose` closes. Without the first, the
+window has a title bar that cannot move it.
+
 ### It is a real perspective turn, not a squeeze
 
 The near edge is drawn taller than the far one and the top and bottom

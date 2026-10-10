@@ -25,7 +25,21 @@ type Panel struct {
 	// caption with Title, and a close button when OnClose is set.
 	Window  bool
 	OnClose func()
-	body    *FlexBox
+	// OnCaptionPress is called for a left press on the caption, away
+	// from its buttons, and reports whether it took the press.
+	//
+	// It is what makes the caption of a panel that *is* a window do what
+	// a caption does. An application whose toplevel is borderless
+	// ([platform.DecorationsNone]) and draws its chrome with one of these
+	// — a window that turns over, a skinned player — hands the press to
+	// the desktop for an interactive move through it:
+	//
+	//	panel.OnCaptionPress = win.StartMove
+	//
+	// Without it such a caption is paint, and the window has a title bar
+	// that cannot move it.
+	OnCaptionPress func() bool
+	body           *FlexBox
 
 	closeHot, closeDown bool
 }
@@ -177,6 +191,23 @@ func (p *Panel) closeRect() paintengine2d.Rect {
 	return w.WindowCloseRect(p.LocalBounds())
 }
 
+// captionRect is the look's caption band on an in-app window panel,
+// empty where the panel is not one. The band is the frame's top inset:
+// the caption and the border above it, which is the strip the look draws
+// the title in.
+func (p *Panel) captionRect() paintengine2d.Rect {
+	w, ok := p.windowLook()
+	if !ok {
+		return paintengine2d.Rect{}
+	}
+	b := p.LocalBounds()
+	in := w.WindowFrameInsets()
+	if b.Empty() || in.Top <= 0 {
+		return paintengine2d.Rect{}
+	}
+	return paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), in.Top)
+}
+
 func (p *Panel) MouseMove(e widget.MouseEvent) bool {
 	cr := p.closeRect()
 	hot := !cr.Empty() && cr.Contains(e.Pos)
@@ -196,14 +227,24 @@ func (p *Panel) MouseExit() {
 }
 
 func (p *Panel) MousePress(e widget.MouseEvent) bool {
-	cr := p.closeRect()
-	if e.Button != platform.ButtonLeft || cr.Empty() || !cr.Contains(e.Pos) {
+	if e.Button != platform.ButtonLeft {
 		return false
 	}
-	p.closeDown = true
-	p.closeHot = true
-	p.InvalidateRect(cr.Inset(-2))
-	return true
+	cr := p.closeRect()
+	if !cr.Empty() && cr.Contains(e.Pos) {
+		p.closeDown = true
+		p.closeHot = true
+		p.InvalidateRect(cr.Inset(-2))
+		return true
+	}
+	// The caption, away from its buttons: the close button is tested
+	// first so that pressing it never moves the window instead.
+	if p.OnCaptionPress != nil {
+		if bar := p.captionRect(); !bar.Empty() && bar.Contains(e.Pos) {
+			return p.OnCaptionPress()
+		}
+	}
+	return false
 }
 
 func (p *Panel) MouseRelease(e widget.MouseEvent) bool {

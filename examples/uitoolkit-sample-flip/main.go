@@ -94,7 +94,10 @@ func main() {
 		// face is an in-app window instead — the look's own frame,
 		// caption and close button, drawn by the era in its own style —
 		// so the border turns with the card that wears it.
-		card.chrome, card.onClose = true, a.Quit
+		// The faces carry the chrome, so they carry what the chrome does:
+		// the caption hands the press to the desktop for a move, or the
+		// window has a title bar that cannot move it.
+		card.chrome, card.onClose, card.onMove = true, a.Quit, win.StartMove
 		card.adopt(win.SetFlipFaces(card.front(), card.settings()))
 	} else {
 		// A card inside an ordinary window: the window does not move, and
@@ -154,10 +157,11 @@ type card struct {
 	// there is anything outside the card to tell.
 	onFlip func(back bool)
 	// chrome puts the look's window frame on each face, for the mode
-	// where the faces are the window; onClose is what its close button
-	// does.
+	// where the faces are the window; onClose and onMove are what its
+	// close button and its caption do.
 	chrome  bool
 	onClose func()
+	onMove  func() bool
 }
 
 var (
@@ -275,6 +279,7 @@ func (c *card) face(title string, content widget.Component) widget.Component {
 		panel.Window = true
 		panel.Title = title
 		panel.OnClose = c.onClose
+		panel.OnCaptionPress = c.onMove
 	}
 	panel.Add(pad)
 	panel.Content().AddFlex(pad, 1)
