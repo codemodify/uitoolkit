@@ -195,3 +195,71 @@ func TestTheRimIsBrighterOnTheLitSide(t *testing.T) {
 		t.Errorf("the highlight swung by %d, against the %d it is lit by overhead", swing, unlitTop-unlitBottom)
 	}
 }
+
+// **A pane of Tahoe's glass bends what is behind it.** Over striped
+// content, the stripes inside the pane line up with the ones outside
+// through its flat middle and stop lining up inside its bevel, which is
+// what a lens does and what no amount of tint can imitate.
+//
+// It is on the tool bar groups and the sidebar rather than the menus. The
+// menus were the first guess and were wrong: their backdrop is blurred at
+// sigma 14, and a backdrop blurred that hard is a flat colour, so bending
+// it gives the same flat colour back — measured, the pane's interior had
+// a spread of zero. These panes are clear instead, an eighth of an alpha
+// over the window's own content, so there is something sharp to bend.
+func TestTahoesGlassBendsTheContentBehindIt(t *testing.T) {
+	pack, ok := LoadTheme("tahoe-night")
+	if !ok {
+		t.Skipf("the %q pack is not in this build", "tahoe-night")
+	}
+	was := GlassAvailable()
+	SetGlassAvailable(true)
+	t.Cleanup(func() { SetGlassAvailable(was) })
+	lk := pack.Look()
+	const w, h = 260, 110
+	const period, bar = 14, 7
+
+	img := paintengine2d.NewImage(w, h)
+	ctx := paintengine2d.NewContext(img)
+	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(Hex("#13214a")))
+	for x := 0; x < w; x += period {
+		ctx.DrawRect(paintengine2d.XYWH(float32(x), 0, bar, h), paintengine2d.Fill(Hex("#b9c9f5")))
+	}
+	pane := paintengine2d.XYWH(30, 32, w-60, h-64)
+	DrawToolGroupOf(lk, ctx, pane, 3)
+	img.Touch()
+
+	// A stripe is where the backdrop was painted light; "lit" is where
+	// the pixel reads light now. Through the flat middle the two agree,
+	// because a clear tint shifts every pixel the same way.
+	y := h / 2
+	lit := func(x int) bool {
+		i := (y*img.Width + x) * 4
+		return int(img.Pix[i])+int(img.Pix[i+1])+int(img.Pix[i+2]) > 420
+	}
+	striped := func(x int) bool { return x%period < bar }
+	count := func(x0, x1 int) (agree, total int) {
+		for x := x0; x < x1; x++ {
+			total++
+			if lit(x) == striped(x) {
+				agree++
+			}
+		}
+		return agree, total
+	}
+
+	// The middle of the pane: the stripes still line up.
+	midA, midN := count(int(pane.Min.X)+40, int(pane.Max.X)-40)
+	if midN < 20 || midA*10 < midN*8 {
+		t.Fatalf("through the pane's middle only %d of %d pixels line up with the backdrop; the tint is not clear enough for this test to mean anything", midA, midN)
+	}
+	// Its bevel: they stop lining up, because the content is displaced.
+	bevA, bevN := count(int(pane.Min.X)+2, int(pane.Min.X)+14)
+	if bevN < 8 {
+		t.Fatal("the bevel band is too narrow to measure")
+	}
+	if bevA*10 >= bevN*8 {
+		t.Errorf("inside the bevel %d of %d pixels still line up with the backdrop (the middle: %d of %d) — the pane is not bending anything",
+			bevA, bevN, midA, midN)
+	}
+}

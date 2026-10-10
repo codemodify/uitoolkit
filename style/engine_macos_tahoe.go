@@ -264,27 +264,61 @@ func tahoeRad(l *Classic, v float32, b paintengine2d.Rect) float32 {
 // the flat window has nothing to blur), the tint, the hairline edge that
 // keeps it off a light ground and the specular rim inside it, bright along
 // the top and faint at the bottom.
-func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, tint, edge paintengine2d.Color, blur bool) {
+// layer says the pane is a floating surface of its own (a menu, a
+// popover) rather than a piece of chrome over the window's own content (a
+// tool bar group, the sidebar, a knob). The two have different things
+// behind them, and so get different materials.
+func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, tint, edge paintengine2d.Color, layer bool) {
 	if b.Dx() < 4 || b.Dy() < 4 {
 		return
 	}
 	r = min(r, b.Dx()*0.5, b.Dy()*0.5)
-	if blur {
+	vibrant := l.P("vibrancy", 1) != 0
+	if layer {
 		// A menu on a surface of its own has none of the window's content
 		// under it: the compositor's glass, or nothing to blur at all.
-		tint, blur = LayerMaterial(tint, l.Palette().Background)
-	}
-	if blur && tint.A < 1 && l.P("vibrancy", 1) != 0 {
-		ctx.Save()
-		ctx.ClipRoundRect(b, r, r)
-		ctx.BackdropBlur(b, l.S(14))
-		ctx.Restore()
+		var window bool
+		tint, window = LayerMaterial(tint, l.Palette().Background)
+		if window && tint.A < 1 && vibrant {
+			ctx.Save()
+			ctx.ClipRoundRect(b, r, r)
+			ctx.BackdropBlur(b, l.S(14))
+			ctx.Restore()
+		}
+	} else if tint.A < 1 && vibrant {
+		// **Glass has thickness.** A pane bends what is behind it where
+		// it curves away at the edge and leaves the middle alone, which
+		// is the whole difference between glass and frosting, and no
+		// amount of tinting produces it.
+		//
+		// It goes here and not on the menus, which was the first guess
+		// and was wrong: a menu's backdrop is blurred at sigma 14, and a
+		// backdrop blurred that hard is a flat colour — bending a flat
+		// colour gives a flat colour back, measurably to zero. These
+		// panes are the ones with something to bend. They are clear
+		// rather than frosted (an eighth of an alpha over the window's
+		// own content, no blur at all), so the content behind them is
+		// sharp and the bevel reads.
+		ctx.BackdropRefract(b, r, tahoeBevel(l, b, r))
 	}
 	macFill(ctx, b, r, paintengine2d.Fill(tint))
 	px := macPx(l)
 	macRing(ctx, b, r, px, paintengine2d.Fill(edge))
 	in := b.Inset(px)
 	macRing(ctx, in, max(r-px, 0), px, GlassRimPaint(ctx, in, c.glassRim, c.glassRim2))
+}
+
+// tahoeBevel is how far in from a pane's edge its thickness bends what is
+// behind it, in user units.
+//
+// It follows the corner radius, because that is what says how sharply the
+// pane turns away, and is held to a third of the smaller side so that a
+// small control is a piece of glass rather than a bead: past about a
+// quarter there is no flat middle left and the whole thing reads as a
+// bubble.
+func tahoeBevel(l *Classic, b paintengine2d.Rect, r float32) float32 {
+	d := max(r*0.75, l.S(6))
+	return min(d, b.Dx()/3, b.Dy()/3)
 }
 
 // tahoeShadowAround paints DropShadow of the round rect b outside b only: a

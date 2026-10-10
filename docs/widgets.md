@@ -1318,6 +1318,26 @@ its context's matrix rather than pushing the rect out through it: a look is
 handed a rect in whatever local space its caller was painting in, and only
 the matrix knows where that is on screen.
 
+**A pane bends what is behind it.** Glass has thickness, so content is
+displaced where the pane curves away at its edge and left alone through
+the middle — the difference between glass and frosting, and the one thing
+no amount of tinting imitates.
+`paintengine2d.Context.BackdropRefract(r, corner, depth)` does it, on the
+CPU and on the GPU, and Tahoe's tool bar groups and sidebar use it.
+
+Not its menus, which was the first guess and was wrong: a menu's backdrop
+is blurred at sigma 14, and a backdrop blurred that hard is a flat colour
+— bending a flat colour gives the same flat colour, measurably to zero
+spread. Refraction needs something sharp behind it, which is what the
+clear chrome panes have: an eighth of an alpha over the window's own
+content, no blur at all.
+
+It can only ever apply to glass over the application's **own** content.
+For glass over the *desktop* the compositor does the blurring and the
+client never sees the result, so there is nothing to bend — on Wayland no
+toolkit can refract a window's background, whatever it looks like on a
+system whose compositor and toolkit are one codebase.
+
 Moving the light repaints every piece of glass in the window, so the
 window only tracks it for a look that asks for glass, and only once the
 pointer has travelled eight logical pixels — under the width of the rim
