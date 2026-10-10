@@ -444,3 +444,77 @@ func TestAPanelWithOneFaceStillTurns(t *testing.T) {
 		t.Error("the panel did not turn back to its front")
 	}
 }
+
+// runTurn paints a turn out frame by frame, recording the card's outline
+// at each one.
+func runTurn(f *FlipPanel, h *timerHost) []paintengine2d.Rect {
+	var out []paintengine2d.Rect
+	for i := 0; i < 60 && f.Turning(); i++ {
+		paintPanel(f, flipW, flipH)
+		if !f.Turning() {
+			break
+		}
+		if o := f.CardOutline(); o != nil {
+			out = append(out, o.Bounds())
+		}
+		h.advance(flipFrame)
+	}
+	return out
+}
+
+// **A card comes back the way it went.** Turning to the back and turning
+// to the front are opposite rotations, so the second is the mirror image
+// of the first frame for frame — the near edge on the other side, every
+// column travelling the other way. Without a direction the card turned
+// the same way twice, which reads as it spinning on through a second
+// half-turn rather than being put back.
+func TestACardTurnsBackTheWayItCame(t *testing.T) {
+	t.Setenv(style.AnimationsEnv, "1")
+	style.SetReduceMotion(false)
+	f, _, _, h := flipFaces(t)
+	useFlipClock(t, h)
+
+	f.Flip() // to the back
+	there := runTurn(f, h)
+	if f.Turning() || !f.Showing() {
+		t.Fatalf("the first turn did not finish on the back (turning=%v showing=%v)", f.Turning(), f.Showing())
+	}
+	f.Flip() // and back to the front
+	back := runTurn(f, h)
+	if f.Turning() || f.Showing() {
+		t.Fatalf("the second turn did not finish on the front (turning=%v showing=%v)", f.Turning(), f.Showing())
+	}
+
+	if len(there) < 4 || len(back) < 4 {
+		t.Fatalf("the turns drew %d and %d frames", len(there), len(back))
+	}
+	if len(there) != len(back) {
+		t.Fatalf("the turns drew %d frames and %d; they are not the same turn", len(there), len(back))
+	}
+
+	// The card has to be off-centre at some point, or "mirrored" would be
+	// satisfied by a turn that is symmetric and says nothing.
+	off := false
+	for _, r := range there {
+		if absF(r.Min.X-(flipW-r.Max.X)) > 5 {
+			off = true
+			break
+		}
+	}
+	if !off {
+		t.Fatal("the card is centred at every frame, so a mirror image proves nothing")
+	}
+
+	for i := range there {
+		a, b := there[i], back[i]
+		// Mirrored about the middle of the box: a's left edge is as far
+		// from the left as b's right edge is from the right.
+		if d := absF(a.Min.X - (flipW - b.Max.X)); d > 1 {
+			t.Errorf("frame %d: there spans %.1f..%.1f, back spans %.1f..%.1f — not a mirror image (%.2f out)",
+				i, a.Min.X, a.Max.X, b.Min.X, b.Max.X, d)
+		}
+		if d := absF(a.Dx() - b.Dx()); d > 1 {
+			t.Errorf("frame %d: there is %.1f wide and back is %.1f", i, a.Dx(), b.Dx())
+		}
+	}
+}

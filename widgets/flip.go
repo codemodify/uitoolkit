@@ -70,6 +70,10 @@ type FlipPanel struct {
 	// OnFlip is called when a turn finishes, or at once for a turn that
 	// was skipped, with the face now up.
 	OnFlip func(back bool)
+	// OnFrame is called after every frame of a turn, and once when the
+	// turn ends. A window that turns over with its content follows the
+	// card with its own shape through this ([CardOutline]).
+	OnFrame func()
 
 	// Perspective is the camera distance in half-widths; 0 takes the
 	// default. Smaller is a nearer camera and a deeper foreshortening.
@@ -91,10 +95,29 @@ type flipTurn struct {
 	box paintengine2d.Point
 	// pending is a scheduled repaint.
 	pending bool
+	// dir is which way round the card turns: +1 going to the back, -1
+	// coming back to the front, so a card returns the way it came
+	// instead of turning the same way twice. It is the sign of the
+	// angle, which puts the near edge on the other side and reverses
+	// every column's travel with it.
+	dir float32
 	// hadFocus records that the keyboard was inside the face going away,
 	// so it can be handed to the one coming up (see end).
 	hadFocus bool
+	// geom is the projection the last frame was drawn with, kept so
+	// CardOutline describes the card on screen rather than one
+	// recomputed from a clock that has moved on since.
+	geom     flipGeom
+	haveGeom bool
 }
+
+// flipOutlineSegments is how many straight pieces CardOutline draws each
+// curved edge of the card as. The painter uses far more columns, but an
+// outline is handed to a compositor as a region and is rebuilt every
+// frame of the turn, so it is cut much more coarsely: at a 400-pixel card
+// these are 12 pixels apart and the bow of the edge between two of them
+// is a fraction of a pixel.
+const flipOutlineSegments = 32
 
 // NewFlipPanel builds a panel showing front, with back on its other side.
 // Either may be nil; a nil face is a blank side.
@@ -171,7 +194,14 @@ func (f *FlipPanel) show(back bool) {
 	// need the rasterised faces swapped and the clock run backwards, and
 	// a card that snaps back to flat and turns again is honest about
 	// having been asked twice.
-	f.turn = flipTurn{running: true, start: flipNow(), hadFocus: f.focusInside()}
+	// Turning to the back goes one way and coming back to the front goes
+	// the other, so the card retraces its turn rather than spinning on
+	// through a second half-turn in the same direction.
+	dir := float32(1)
+	if !back {
+		dir = -1
+	}
+	f.turn = flipTurn{running: true, start: flipNow(), dir: dir, hadFocus: f.focusInside()}
 	if f.turn.hadFocus {
 		// The face about to go face down is where the keyboard is, and it
 		// is about to become a picture. Park the focus; end hands it to
@@ -294,6 +324,9 @@ func (f *FlipPanel) Paint(ctx *paintengine2d.Context) {
 		return
 	}
 	f.paintTurn(ctx, t)
+	if f.OnFrame != nil {
+		f.OnFrame()
+	}
 	f.schedule()
 }
 
@@ -377,8 +410,9 @@ func (f *FlipPanel) faceImage(ctx *paintengine2d.Context, face widget.Component,
 // paintTurn draws the card at eased progress t.
 func (f *FlipPanel) paintTurn(ctx *paintengine2d.Context, t float32) {
 	box := f.LocalBounds()
-	angle := t * float32(math.Pi)
+	angle := f.turn.dir * t * float32(math.Pi)
 	g := flipGeomAt(box.Dx(), box.Dy(), f.Perspective, angle)
+	f.turn.geom, f.turn.haveGeom = g, !g.edgeOn()
 	if g.edgeOn() {
 		return
 	}
@@ -436,6 +470,53 @@ func (f *FlipPanel) paintTurn(ctx *paintengine2d.Context, t float32) {
 	}
 }
 
+// CardOutline is the silhouette of the card as it was last drawn: a
+// closed path in panel-local pixels, the curved top and bottom edges
+// included. It is the panel's whole box at rest, and nil when the card is
+// edge on and there is nothing on screen to describe.
+//
+// It is what makes a *window* turn over rather than a card inside one.
+// Given to the window as its shape each frame, the desktop shows through
+// everywhere the card is not, so what rotates is the window itself
+// ([app.Window.SetFlipFaces]).
+func (f *FlipPanel) CardOutline() *paintengine2d.Path {
+	box := f.LocalBounds()
+	if box.Empty() {
+		return nil
+	}
+	if !f.turn.running {
+		p := paintengine2d.NewPath()
+		p.MoveTo(box.Min.X, box.Min.Y)
+		p.LineTo(box.Max.X, box.Min.Y)
+		p.LineTo(box.Max.X, box.Max.Y)
+		p.LineTo(box.Min.X, box.Max.Y)
+		p.Close()
+		return p
+	}
+	if !f.turn.haveGeom {
+		return nil
+	}
+	g := f.turn.geom
+	midY := box.Dy() / 2
+	at := func(i int) (x, half float32) {
+		u := 2*float32(i)/flipOutlineSegments - 1
+		return g.xAt(u), g.halfHAt(u)
+	}
+	p := paintengine2d.NewPath()
+	x, half := at(0)
+	p.MoveTo(x, midY-half)
+	for i := 1; i <= flipOutlineSegments; i++ {
+		x, half = at(i)
+		p.LineTo(x, midY-half)
+	}
+	for i := flipOutlineSegments; i >= 0; i-- {
+		x, half = at(i)
+		p.LineTo(x, midY+half)
+	}
+	p.Close()
+	return p
+}
+
 // schedule asks for the next frame, once.
 func (f *FlipPanel) schedule() {
 	if f.turn.pending {
@@ -458,6 +539,11 @@ func (f *FlipPanel) end() {
 	had := f.turn.hadFocus
 	f.turn = flipTurn{}
 	f.syncFaces()
+	// The card is its box again: a window following it puts its own shape
+	// back before anything else happens.
+	if f.OnFrame != nil {
+		f.OnFrame()
+	}
 	if had {
 		// The keyboard was in the face that went down; give it to the one
 		// that came up rather than leaving the window with no focus.

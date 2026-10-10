@@ -1222,9 +1222,33 @@ typing in.
 
 Both faces are measured together and given the same box, so a card is one
 size whichever way up it is and a flip never moves the layout around it.
-The turn is skipped — the faces simply swap — when the look says not to
-animate (`UITK_ANIMATIONS=0`, reduce motion) or when none of the panel is
-on screen.
+A card comes back the way it went: turning to the back and turning to the
+front are opposite rotations, so the second retraces the first rather than
+spinning on through another half-turn the same way. The turn is skipped —
+the faces simply swap — when motion is off (`UITK_ANIMATIONS=0`,
+`style.SetReduceMotion`) or when none of the panel is on screen.
+
+### Turning the whole window over
+
+`win.SetFlipFaces(front, back)` turns the *application* instead of a card
+inside it: the two faces become the window's whole content, and
+`win.Flip()`, `win.ShowingBack()` and `win.FlipPanel()` drive it.
+
+**A toplevel window cannot be rotated by the program that owns it.**
+Neither X11 nor Wayland has a way to hand the display server a transform
+for a window, and on Wayland the compositor owns the geometry outright —
+KWin can turn a window over as an effect of its own, but not because a
+client asked. So what turns is everything the toolkit draws, and the
+window is made to follow it: while the card turns, the window's shape is
+set to its silhouette every frame, so the desktop shows through wherever
+the card is not and what the eye is given is a window rotating in place.
+
+That has one consequence to know before reaching for it: the desktop's own
+frame cannot turn, because the toolkit does not draw it. Use the
+toolkit's own decorations (`platform.DecorationsClient`) or none.
+`win.SetFlipShapesWindow(false)` leaves the window a plain rectangle and
+turns only what is inside it, which is the honest choice for a window
+wearing the desktop's frame.
 
 ### It is a real perspective turn, not a squeeze
 

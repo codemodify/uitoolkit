@@ -97,8 +97,14 @@ type Window struct {
 	clock        func() time.Time
 	lastTip      string
 	animPeriod   time.Duration
-	layers       *widget.SceneCache
-	scene        *paintengine2d.Scene
+	// flip is the window's two-sided content, where it has any, and
+	// flipShapes / flipShaped whether the window takes the turning
+	// card's silhouette and whether it is wearing one now (app/flip.go).
+	flip       *widgets.FlipPanel
+	flipShapes bool
+	flipShaped bool
+	layers     *widget.SceneCache
+	scene      *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not
 	// clone every path it records each frame.
 	paths *paintengine2d.PathCache
