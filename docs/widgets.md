@@ -148,6 +148,7 @@ names) is in [compare.md](compare.md).
 | Dockable panels | `dock.Host` + `dock.Panel` (four areas, tabs, float, saved layout) | `QMainWindow::addDockWidget` + `QDockWidget` | — (`GtkPaned` / `AdwToolbarView` ≈) | `Dock.Avalonia` (third party) ≈ | — | `DockPanel` (docking only, no float / tab) ≈ | `DockPanel` ≈ | — | — | — |
 | Windows that snap together | `rack.Desk` + `rack.Rack` (separate toplevels that snap flush and travel as one; X11 only) | — | — | — | — | — | — | — | — | [players](players.md) |
 | Windows inside a window | `MDIArea` / `MDIWindow` (frames of the look, cascade, tile, tabbed view) | `QMdiArea` / `QMdiSubWindow` | — | — | `container.MultipleWindows` ≈ | `IsMdiContainer` + `MdiParent` | — | — | — | [sheet](screenshots/breadth/mdi-1x.webp) |
+| Two-sided card | `FlipPanel` (turns about its vertical axis in perspective; both faces live at rest) | `Flipable` (Quick) / — (Widgets) | `GskTransform` perspective ≈ | `Rotate3DTransform` ≈ | — | — | `Viewport3D` ≈ | `CATransform3D` rotation.y | `rotation3DEffect` | — |
 | Overlay | `Overlay` / `DialogCard` | `QDialog` ≈ | `GtkOverlay` | `Overlay` / `Popup` | dialog overlay ≈ | — | `Popup` | `NSPanel` ≈ | `overlay` / `sheet` | [gallery](screenshots/gallery-dialog.png) |
 | Expander | `Expander` | `QToolBox` page ≈ | `GtkExpander` | `Expander` | accordion item ≈ | — | `Expander` | `NSDisclosureTriangle` ≈ | `DisclosureGroup` | [thumb](screenshots/compare/accordion.png) |
 | Accordion | `Accordion` | `QToolBox` ≈ | `GtkExpander` stack ≈ | `Expander` stack ≈ | `widget.Accordion` | — | `Expander` stack ≈ | — | `DisclosureGroup` stack ≈ | [thumb](screenshots/compare/accordion.png) · [gallery](screenshots/gallery-accordion.png) |
@@ -1196,6 +1197,67 @@ bar that follows the windows as they open and close.
 view. Assistive technology reads the area as a desktop pane and each window
 as an internal frame (AT-SPI's roles for a multiple-document interface)
 with its caption buttons. `examples/uitoolkit-sample-mdi` is a multiple-document editor.
+
+## Settings on the back of the card
+
+`widgets.NewFlipPanel(front, back)` shows one of two faces and turns about
+its vertical axis to show the other — the gesture Dashboard's widgets
+used, where the ⓘ in the corner turned the thing you were using into the
+thing that configured it. `Flip`, `ShowFront` and `ShowBack` turn it,
+`Showing` says which face is up, `Turning` whether it is moving, and
+`OnFlip` is called with the face now up when it settles.
+
+**At rest the face that is up is an ordinary live subtree.** It lays out,
+paints, takes the pointer, holds focus and reaches assistive technology
+exactly as it would without the panel, because that is what it is. Only
+for the length of the turn is either face a picture, so the settings on
+the back are real controls and not a screenshot of some. The face that is
+down is hidden, and `widget.Walk` stops at a hidden component, so one flag
+takes its whole subtree out of painting, hit-testing and the tab order
+together: nothing on the back of the card can be tabbed into or read out
+while it is face down. The keyboard is handed across at the end of a turn,
+but only if it was inside the card to begin with — a card turning in the
+corner of a window does not take the focus from the field someone is
+typing in.
+
+Both faces are measured together and given the same box, so a card is one
+size whichever way up it is and a flip never moves the layout around it.
+The turn is skipped — the faces simply swap — when the look says not to
+animate (`UITK_ANIMATIONS=0`, reduce motion) or when none of the panel is
+on screen.
+
+### It is a real perspective turn, not a squeeze
+
+The near edge is drawn taller than the far one and the top and bottom
+edges converge, which an affine transform cannot do: it maps parallel
+lines to parallel lines, so scaling a face horizontally gives a vertical
+blind slat closing rather than a page turning.
+
+Rotation about the *vertical* axis is the one case a 2D engine can draw
+exactly. For a point at (u, v) from the centre, turning by θ and dividing
+by the depth gives `s(u) = d/(d + u·sinθ)`, `x = u·cosθ·s(u)` and
+`y = v·s(u)` — and the only term in y that varies with u is `s(u)`. So
+every source *column* lands on a vertical line, scaled about the centre by
+a factor that depends on the column alone: no rotation, no shear, no
+per-pixel divide. The panel cuts the face into columns (`Strips`, 128 by
+default) and draws each as an axis-aligned rectangle, which is exact in y
+and exact in x at every column edge; the residual is the square of a
+column's width and lands far inside a pixel. `Perspective` is the camera
+distance in half-widths (2.5 by default, clamped above 1): smaller is a
+nearer camera and a deeper foreshortening.
+
+The card is scaled each frame so that it always lands inside the box it
+was given — the panel clips to its own bounds, so an un-normalised
+projection would be drawn cut off instead of smaller. That is why the
+card appears to recede slightly as it comes edge-on, the way Dashboard's
+widgets pulled back through their flip.
+
+Each face is painted into a picture **once** per turn rather than once per
+frame, so a turn costs the columns and not the trees behind them. On the
+GPU that is free; on the CPU device a full-window card is a few megapixels
+a frame, so a large one is better flipped where `Window.UsesGPU` reports
+true. `examples/uitoolkit-sample-flip` is a small player with its settings
+on the back.
 
 ## Wizards
 
