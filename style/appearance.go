@@ -19,7 +19,21 @@ const (
 	CornersTheme  CornerStyle = "theme"
 	CornersRound  CornerStyle = "round"
 	CornersSquare CornerStyle = "square"
+	// CornersSoft is square with the corner just taken off: radii
+	// clamped to [SoftRadius] rather than zeroed.
+	//
+	// Square and round were the only two, and both are a position: a
+	// pack is either all pill or all box. The shape most interfaces
+	// actually want is neither — a 3px break on a rectangle, enough that
+	// nothing has a needle point and far short of a capsule. It is a
+	// clamp rather than a fixed radius so a pack that is already tighter
+	// than the hint keeps its own shape.
+	CornersSoft CornerStyle = "soft"
 )
+
+// SoftRadius is how much corner [CornersSoft] leaves, as a 1x design
+// length: a hint, not a curve.
+const SoftRadius = 3
 
 // IconSetName selects chrome ToolIcons, and it now names one of three
 // kinds of thing:
@@ -307,6 +321,8 @@ func ParseCorners(s string) CornerStyle {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "square", "rect", "sharp-corners":
 		return CornersSquare
+	case "soft", "soft-corners", "hint":
+		return CornersSoft
 	case "round", "rounded":
 		return CornersRound
 	default:
@@ -440,6 +456,9 @@ func ApplyCorners(m Metrics, c CornerStyle) Metrics {
 	case CornersSquare:
 		m.Radius = 0
 		m.RadiusSmall = 0
+	case CornersSoft:
+		m.Radius = softened(m.Radius, m.FontSize)
+		m.RadiusSmall = softened(m.RadiusSmall, m.FontSize)
 	default:
 		if m.Radius <= 0 && m.RadiusSmall <= 0 {
 			def := DefaultMetrics()
@@ -691,4 +710,23 @@ func classicOf(look LookAndFeel) (*Classic, bool) {
 	}
 	c, ok := look.(*Classic)
 	return c, ok
+}
+
+// softened is a radius with the corner only hinted at: SoftRadius scaled
+// to the metrics' font size, or the radius itself where it is already
+// tighter than that. A zero radius stays zero — a pack that is square on
+// purpose is not made round by asking for soft corners, it is asking for
+// the roundest things to come down to a hint.
+func softened(r, fontSize float32) float32 {
+	if r <= 0 {
+		return 0
+	}
+	hint := float32(SoftRadius)
+	if def := DefaultMetrics(); def.FontSize > 0 && fontSize > 0 {
+		hint *= fontSize / def.FontSize
+	}
+	if r < hint {
+		return r
+	}
+	return hint
 }

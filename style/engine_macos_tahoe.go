@@ -259,6 +259,24 @@ func tahoeRad(l *Classic, v float32, b paintengine2d.Rect) float32 {
 	return min(l.rx(v), min(b.Dx(), b.Dy())*0.5)
 }
 
+// tahoePaneR is how round a pane of glass is: a capsule, which is what
+// Tahoe's tool bar groups are, or the look's own chrome radius where the
+// shape says otherwise.
+//
+// A capsule is a position, and not everyone holds it — [CornersSoft] is
+// the shape that is square with the corner only taken off, and a pack
+// drawn in it should not have one part of itself still a pill.
+func tahoePaneR(l *Classic, b paintengine2d.Rect) float32 {
+	pill := min(b.Dx(), b.Dy()) * 0.5
+	switch l.Corners() {
+	case CornersSquare:
+		return 0
+	case CornersSoft:
+		return min(l.rx(SoftRadius), pill)
+	}
+	return pill
+}
+
 // paintGlass paints a piece of Liquid Glass into b (corner r): the backdrop
 // blurred when blur (menus over content; a sidebar or a tool bar group over
 // the flat window has nothing to blur), the tint, the hairline edge that
@@ -282,10 +300,26 @@ func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b painteng
 		if window && tint.A < 1 && vibrant {
 			ctx.Save()
 			ctx.ClipRoundRect(b, r, r)
-			ctx.BackdropBlur(b, l.S(14))
+			ctx.BackdropBlur(b, l.S(l.P("menuBlur", 14)))
 			ctx.Restore()
 		}
 	} else if tint.A < 1 && vibrant {
+		// A pane of chrome may frost what is behind it as well as bend
+		// it. Tahoe's does not — macOS 26's tool bar glass is clear, and
+		// this pack is a reproduction of it — so the param is 0 here and
+		// the branch costs nothing. A pack that wants a *material*
+		// rather than a clear pane sets it: the two are not opposed, and
+		// reading them as opposed is what made the first version of this
+		// an outline you could see straight through. What kills a bend
+		// is blurring so hard that nothing is left to bend (the menus,
+		// at 14); a few pixels leaves the structure and gains the
+		// legibility chrome over content needs.
+		if d := l.P("glassBlur", 0); d > 0 {
+			ctx.Save()
+			ctx.ClipRoundRect(b, r, r)
+			ctx.BackdropBlur(b, l.S(d))
+			ctx.Restore()
+		}
 		// **Glass has thickness.** A pane bends what is behind it where
 		// it curves away at the edge and leaves the middle alone, which
 		// is the whole difference between glass and frosting, and no
@@ -1010,10 +1044,7 @@ func (tahoeEngine) DrawToolGroup(l *Classic, ctx *paintengine2d.Context, b paint
 	if b.Dx() < 8 || b.Dy() < 8 {
 		return
 	}
-	r := b.Dy() * 0.5
-	if l.square() {
-		r = 0
-	}
+	r := tahoePaneR(l, b)
 	c.glassShadow(l, ctx, b, r, snap(l.S(3)))
 	c.paintGlass(l, ctx, b, r, c.glass, c.glassEdge, false)
 }

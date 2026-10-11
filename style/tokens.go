@@ -390,6 +390,15 @@ func ApplyThemeCorners(m Metrics, c CornerStyle, themeRadius, themeRadiusSmall f
 	case CornersSquare:
 		m.Radius = 0
 		m.RadiusSmall = 0
+	case CornersSoft:
+		if themeRadius > 0 {
+			m.Radius = themeRadius
+		}
+		if themeRadiusSmall > 0 {
+			m.RadiusSmall = themeRadiusSmall
+		}
+		m.Radius = softened(m.Radius, m.FontSize)
+		m.RadiusSmall = softened(m.RadiusSmall, m.FontSize)
 	default:
 		if themeRadius > 0 || themeRadiusSmall > 0 {
 			if themeRadius > 0 {

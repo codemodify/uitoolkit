@@ -1027,6 +1027,13 @@ Compound v0.11–v0.12.1 theme ids migrate on load:
 | `light-square-sharp` / `light-square-classic` / `light-square` | `theme: light`, `corners: square` |
 | `dark` / `light` (already palette-only) | same name; corners from the `corners` field or `round` |
 
+`corners` takes `theme` (the pack's own, the default), `round`, `square`
+and `soft`. **Soft is square with the corner only taken off**: radii are
+clamped to a 3px hint rather than zeroed, which is the shape most
+interfaces actually want and which two positions — all pill or all box —
+had no way to say. It is a clamp, so a pack already tighter than the hint
+keeps its own shape and one that is square on purpose stays square.
+
 An explicit `"corners"` field wins over corners parsed from a compound
 name. `"icons"` is always the chrome set (never inferred from
 `-classic` / `-sharp` suffixes).

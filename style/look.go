@@ -67,9 +67,13 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 	corners = ParseCorners(string(corners))
 	icons = ParseIconSet(string(icons))
 	iconSize = ParseIconSize(string(iconSize))
-	if corners == CornersSquare {
+	switch corners {
+	case CornersSquare:
 		m.Radius = 0
 		m.RadiusSmall = 0
+	case CornersSoft:
+		m.Radius = softened(m.Radius, m.FontSize)
+		m.RadiusSmall = softened(m.RadiusSmall, m.FontSize)
 	}
 	m = ApplyIconSize(m, iconSize)
 	// Lock-in: Classic always ships Titillium Web + JetBrains Mono.

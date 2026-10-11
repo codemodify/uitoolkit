@@ -77,6 +77,13 @@ type ThemePack struct {
 	Lineage string
 	// Summary is a one-line description for the theme browser.
 	Summary string
+	// Corners is the shape the pack is drawn in where the user has not
+	// said otherwise; empty means [CornersTheme], the pack's own.
+	//
+	// It is here so that two packs can differ in shape alone — the same
+	// material, once all pill and once with the corner only hinted at —
+	// without one of them having to be a second engine.
+	Corners CornerStyle
 }
 
 type themeFileJSON struct {
@@ -190,10 +197,14 @@ func (p ThemePack) Appearance() Appearance {
 	if p.Tokens.Family != "" {
 		fam = p.Tokens.Family
 	}
+	corners := p.Corners
+	if corners == "" {
+		corners = CornersTheme
+	}
 	return Appearance{
 		Name:    p.Name,
 		Theme:   ParseTheme(string(fam)),
-		Corners: CornersTheme,
+		Corners: corners,
 		Icons:   IconSetClassic,
 	}.Normalize()
 }
