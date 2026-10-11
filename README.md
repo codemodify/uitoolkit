@@ -523,6 +523,7 @@ is checked by a test.
 | [`uitoolkit-sample-skinshape`](examples/uitoolkit-sample-skinshape) | a skinned, shaped window from a sheet of art |
 | [`uitoolkit-sample-popups`](examples/uitoolkit-sample-popups) | popups on surfaces of their own, and the fallback when there are none |
 | [`uitoolkit-sample-flip`](examples/uitoolkit-sample-flip) | a card that turns over in perspective to put the settings on its back |
+| [`uitoolkit-sample-glass`](examples/uitoolkit-sample-glass) | a list that scrolls under floating glass chrome, which bends it at the edges |
 
 And two applications that grew up here and moved out:
 [comms-mail](https://github.com/codemodify/comms-mail) and
