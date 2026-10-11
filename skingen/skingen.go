@@ -82,6 +82,7 @@ import (
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // SkinManifestName is the manifest's file name, kept here so the generator
@@ -142,7 +143,20 @@ type Plan struct {
 	Colors  map[string]string
 	Metrics map[string]float32
 	Params  map[string]float32
-	Window  *WindowSpec
+	// Fonts are the typefaces the skin asks for, most wanted first: the
+	// manifest's "fonts" block ([style.FontPrefs]). A skin is a picture
+	// of an era and the era had a typeface — the format has read this
+	// since skins existed, and a generated skin could not say it, so an
+	// application that wanted its playlist in the face its art was drawn
+	// around had to open the manifest the generator had just written and
+	// put the block in itself.
+	//
+	// Names, not files: each list is walked until something installed is
+	// found, and what is not found falls through to the era's own names
+	// and then to the bundled faces, so a skin is never left without a
+	// typeface on a machine that has none of its own.
+	Fonts  *style.FontPrefs
+	Window *WindowSpec
 	// Layouts are the fixed panels the skin states: named slots an app
 	// binds its controls to.
 	Layouts []LayoutSpec
@@ -217,9 +231,9 @@ type WindowSpec struct {
 	Border        [4]int
 	ContentBorder [4]int
 	Caption       int
-	Layout  string
-	Radius  [4]int
-	Shape   []ShapeRect
+	Layout        string
+	Radius        [4]int
+	Shape         []ShapeRect
 	// TitleStart and TitleInset set the title from the band's start, on
 	// its plate: a tab.
 	TitleStart bool
@@ -477,6 +491,16 @@ func Manifest(p *Plan) ([]byte, error) {
 			layouts[lay.Name] = obj
 		}
 		put("layouts", layouts)
+	}
+	if p.Fonts != nil && !p.Fonts.Empty() {
+		fonts := map[string]any{}
+		if len(p.Fonts.UI) > 0 {
+			fonts["ui"] = p.Fonts.UI
+		}
+		if len(p.Fonts.Mono) > 0 {
+			fonts["mono"] = p.Fonts.Mono
+		}
+		put("fonts", fonts)
 	}
 	if len(p.Colors) > 0 {
 		put("colors", p.Colors)

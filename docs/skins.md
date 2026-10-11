@@ -808,6 +808,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/skingen"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 func main() {
@@ -844,6 +845,11 @@ func main() {
 			Text: "button",
 		}},
 		Text: []skingen.TextRole{{Name: "button", Color: "#e8eef2"}},
+		// The typefaces the art was drawn around, most wanted first.
+		// Names, not files: each list is walked until something installed
+		// turns up, and what is not found falls through to the era's own
+		// names and then to the bundled faces.
+		Fonts: &style.FontPrefs{UI: []string{"Inter", "Noto Sans"}},
 	}
 
 	home, _ := os.UserHomeDir()
@@ -867,7 +873,8 @@ func main() {
     …
   },
   "parts": { "button": { "states": { "normal": "button.normal", … }, "text": "button" } },
-  "text": { "button": { "color": "#e8eef2" } }
+  "text": { "button": { "color": "#e8eef2" } },
+  "fonts": { "ui": ["Inter", "Noto Sans"] }
 }
 ```
 
