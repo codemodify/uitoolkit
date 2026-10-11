@@ -178,6 +178,12 @@ cards	layout-grid	squares-four	layout-grid	squares-2x2	grid_view
 print	printer	printer	printer	printer	print
 sun	sun	sun	sun	sun	light_mode
 moon	moon	moon	moon	moon	dark_mode
+key	key	key	key	key	key
+password	rectangle-ellipsis	password	password	ellipsis-horizontal-circle	password
+terminal	terminal	terminal-window	terminal-2	command-line	terminal
+drive	hard-drive	hard-drive	server	server	hard_drive
+safe	vault	vault	vault	archive-box	security
+dice	dice-5	dice-five	dice-5	cube	casino
 MAP
 
 python3 - "$ROOT" "$MAPFILE" "$LUCIDE_DIR" "$PHOS_DIR" "$TABLER_DIR" "$HERO_DIR" "$MAT_DIR" \

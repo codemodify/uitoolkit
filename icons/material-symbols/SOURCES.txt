@@ -18,6 +18,7 @@ preferences     tune
 quit            logout
 close           close
 more            more_horiz
+menu            menu
 chevron-up      keyboard_arrow_up
 chevron-down    keyboard_arrow_down
 chevron-left    chevron_left
@@ -79,8 +80,13 @@ columns         view_column
 rows            table_rows
 table           table_chart
 cards           grid_view
+print           print
 sun             light_mode
 moon            dark_mode
+key             key
+password        password
+terminal        terminal
+drive           hard_drive
+safe            security
+dice            casino
 no-icon         placeholder (missing stem)
-print           print
-menu            menu

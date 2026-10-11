@@ -615,6 +615,63 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 			paintengine2d.StrokePaint(col, 1.5))
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.4, b.Max.Y-6.6, w-10.8, 4.4),
 			paintengine2d.StrokePaint(col, 1.5))
+	case IconLockOpen:
+		// The padlock with its shackle swung open: it leaves the body and
+		// stands clear of it instead of coming down the other side.
+		body := paintengine2d.XYWH(cx-w*0.24, cy-h*0.04, w*0.48, h*0.32)
+		ctx.DrawRoundRect(body, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		sh := paintengine2d.NewPath()
+		sh.MoveTo(cx-w*0.14, cy-h*0.04)
+		sh.LineTo(cx-w*0.14, cy-h*0.20)
+		sh.QuadTo(cx+w*0.04, cy-h*0.42, cx+w*0.20, cy-h*0.24)
+		ctx.DrawPath(sh, stroke)
+	case IconKey:
+		// A ring and a toothed shaft, on the diagonal.
+		r := w * 0.165
+		ring := paintengine2d.Pt(cx-w*0.21, cy+h*0.19)
+		ctx.DrawCircle(ring, r, stroke)
+		ctx.DrawPath(lineP(ring.X+r*0.72, ring.Y-r*0.72, cx+w*0.30, cy-h*0.30), stroke)
+		ctx.DrawPath(lineP(cx+w*0.06, cy-h*0.06, cx+w*0.18, cy+h*0.06), stroke)
+		ctx.DrawPath(lineP(cx+w*0.17, cy-h*0.17, cx+w*0.27, cy-h*0.07), stroke)
+	case IconPassword:
+		// A field with dots in it: a password as a field shows it. The
+		// dots are inside a box because three dots on their own are
+		// IconMore.
+		field := paintengine2d.XYWH(b.Min.X+w*0.08, cy-h*0.22, w*0.84, h*0.44)
+		ctx.DrawRoundRect(field, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		for _, f := range []float32{-1, 0, 1} {
+			ctx.DrawCircle(paintengine2d.Pt(cx+f*w*0.19, cy), max(w*0.058, 1.1), fill)
+		}
+	case IconTerminal:
+		// A window with a prompt and a line being typed.
+		ctx.DrawRoundRect(b.Inset(2), 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		p := paintengine2d.NewPath()
+		p.MoveTo(cx-w*0.20, cy-h*0.10)
+		p.LineTo(cx-w*0.07, cy+h*0.03)
+		p.LineTo(cx-w*0.20, cy+h*0.16)
+		ctx.DrawPath(p, stroke)
+		ctx.DrawPath(lineP(cx+w*0.02, cy+h*0.16, cx+w*0.21, cy+h*0.16), stroke)
+	case IconDrive:
+		// A disk: the bay, the line across it and the light.
+		box := paintengine2d.XYWH(b.Min.X+w*0.08, cy-h*0.26, w*0.84, h*0.52)
+		ctx.DrawRoundRect(box, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawPath(lineP(box.Min.X, cy, box.Max.X, cy), stroke)
+		ctx.DrawCircle(paintengine2d.Pt(box.Max.X-w*0.13, cy+h*0.13), max(w*0.05, 1.0), fill)
+	case IconSafe:
+		// A strongbox: the door, its dial and the handle.
+		door := b.Inset(2)
+		ctx.DrawRoundRect(door, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		dial := paintengine2d.Pt(cx-w*0.04, cy)
+		ctx.DrawCircle(dial, w*0.165, stroke)
+		ctx.DrawPath(lineP(dial.X+w*0.17, cy, door.Max.X-w*0.06, cy), stroke)
+	case IconDice:
+		// The five face, which is the one a die is drawn as.
+		face := b.Inset(2)
+		ctx.DrawRoundRect(face, 3, 3, paintengine2d.StrokePaint(col, 1.5))
+		r := max(w*0.058, 1.0)
+		for _, pip := range [][2]float32{{-0.17, -0.17}, {0.17, -0.17}, {0, 0}, {-0.17, 0.17}, {0.17, 0.17}} {
+			ctx.DrawCircle(paintengine2d.Pt(cx+pip[0]*w, cy+pip[1]*h), r, fill)
+		}
 	default:
 		// A stem-only icon ([IconByStem]) in a drawn set: the toolkit has
 		// no vector for it, and drawing nothing would leave a button with
@@ -800,6 +857,55 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		body.Close()
 		ctx.DrawPath(body, stroke)
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+1.4, b.Max.Y-3.2, 4.2, 1.6), fill)
+	case IconLockOpen:
+		body := paintengine2d.XYWH(cx-w*0.26, cy-h*0.04, w*0.52, h*0.34)
+		ctx.DrawRect(body, paintengine2d.StrokePaint(col, 1.6))
+		sh := paintengine2d.NewPath()
+		sh.MoveTo(cx-w*0.15, cy-h*0.04)
+		sh.LineTo(cx-w*0.15, cy-h*0.24)
+		sh.LineTo(cx+w*0.09, cy-h*0.24)
+		sh.LineTo(cx+w*0.09, cy-h*0.14)
+		ctx.DrawPath(sh, stroke)
+	case IconKey:
+		// The square era's key: a box for the ring and a straight shaft.
+		ring := paintengine2d.XYWH(b.Min.X+w*0.08, cy-w*0.17, w*0.34, w*0.34)
+		ctx.DrawRect(ring, paintengine2d.StrokePaint(col, 1.6))
+		ctx.DrawRect(paintengine2d.XYWH(ring.Max.X, cy-1, b.Max.X-w*0.08-ring.Max.X, 2), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-w*0.26, cy, 2, h*0.16), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-w*0.14, cy, 2, h*0.16), fill)
+	case IconPassword:
+		field := paintengine2d.XYWH(b.Min.X+w*0.06, cy-h*0.24, w*0.88, h*0.48)
+		ctx.DrawRect(field, paintengine2d.StrokePaint(col, 1.6))
+		d := max(w*0.11, 2)
+		for _, f := range []float32{-1, 0, 1} {
+			ctx.DrawRect(paintengine2d.XYWH(cx+f*w*0.20-d*0.5, cy-d*0.5, d, d), fill)
+		}
+	case IconTerminal:
+		ctx.DrawRect(b.Inset(1.8), paintengine2d.StrokePaint(col, 1.6))
+		p := paintengine2d.NewPath()
+		p.MoveTo(cx-w*0.20, cy-h*0.12)
+		p.LineTo(cx-w*0.06, cy+h*0.02)
+		p.LineTo(cx-w*0.20, cy+h*0.16)
+		ctx.DrawPath(p, stroke)
+		ctx.DrawRect(paintengine2d.XYWH(cx+w*0.02, cy+h*0.14, w*0.20, 2), fill)
+	case IconDrive:
+		box := paintengine2d.XYWH(b.Min.X+w*0.06, cy-h*0.28, w*0.88, h*0.56)
+		ctx.DrawRect(box, paintengine2d.StrokePaint(col, 1.6))
+		ctx.DrawRect(paintengine2d.XYWH(box.Min.X, cy-1, box.Dx(), 2), fill)
+		ctx.DrawRect(paintengine2d.XYWH(box.Max.X-w*0.18, cy+h*0.10, max(w*0.1, 2), max(w*0.1, 2)), fill)
+	case IconSafe:
+		door := b.Inset(1.8)
+		ctx.DrawRect(door, paintengine2d.StrokePaint(col, 1.6))
+		dial := paintengine2d.XYWH(cx-w*0.20, cy-w*0.16, w*0.32, w*0.32)
+		ctx.DrawRect(dial, paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRect(paintengine2d.XYWH(dial.Max.X+w*0.04, cy-1, door.Max.X-w*0.06-dial.Max.X, 2), fill)
+	case IconDice:
+		face := b.Inset(1.8)
+		ctx.DrawRect(face, paintengine2d.StrokePaint(col, 1.6))
+		d := max(w*0.11, 2)
+		for _, pip := range [][2]float32{{-0.18, -0.18}, {0.18, -0.18}, {0, 0}, {-0.18, 0.18}, {0.18, 0.18}} {
+			ctx.DrawRect(paintengine2d.XYWH(cx+pip[0]*w-d*0.5, cy+pip[1]*h-d*0.5, d, d), fill)
+		}
 	default:
 		// A shape this set has no drawing of its own for. The classic
 		// vector is a better answer than an empty box, and better than a

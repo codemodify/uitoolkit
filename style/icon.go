@@ -104,6 +104,22 @@ const (
 	// A circular arrow. Reload is not redo: a browser's reload button is
 	// a ring, and IconRedo is the right-angled arrow that undoes an undo.
 	IconSync
+	// What a vault is made of. A padlock alone cannot say which of these
+	// a row is: a key, a password, a shell account, a disk, the safe
+	// itself, and the dice that make a new passphrase. An application
+	// that needed them drew all seven itself, in one ink, to sit beside
+	// the set's own.
+	//
+	// IconLockOpen is the padlock with its shackle swung open, which is
+	// the "unlock" every one of the five premiere packs ships — so it
+	// carries that stem and finds their art.
+	IconLockOpen
+	IconKey
+	IconPassword
+	IconTerminal
+	IconDrive
+	IconSafe
+	IconDice
 )
 
 var toolIconLabels = [...]string{
@@ -127,7 +143,10 @@ var toolIconLabels = [...]string{
 	IconArrowLeft: "Back", IconArrowRight: "Forward",
 	IconArrowUp: "Up", IconArrowDown: "Down",
 	IconInbox: "Inbox", IconPlus: "Add", IconClose2: "Close", IconLock: "Secure",
-	IconSync: "Reload",
+	IconSync:     "Reload",
+	IconLockOpen: "Unlocked", IconKey: "Key", IconPassword: "Password",
+	IconTerminal: "Terminal", IconDrive: "Drive", IconSafe: "Safe",
+	IconDice: "Roll",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -200,6 +219,15 @@ var toolIconFiles = []struct {
 	{IconClose2, "x"},
 	{IconLock, "lock"},
 	{IconSync, "sync"},
+	// "unlock" is the packs' own name for the open padlock, so the id
+	// takes it and their art answers for it.
+	{IconLockOpen, "unlock"},
+	{IconKey, "key"},
+	{IconPassword, "password"},
+	{IconTerminal, "terminal"},
+	{IconDrive, "drive"},
+	{IconSafe, "safe"},
+	{IconDice, "dice"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -219,6 +247,10 @@ var shippedIconStems = []string{
 	"home", "calendar", "clock", "link", "external-link",
 	"list", "layout", "columns", "rows", "table", "cards",
 	"sun", "moon", "print", "menu",
+	// What a vault is made of (IconKey and its neighbours). "unlock" is
+	// up there with "lock": the packs have always shipped the open
+	// padlock, and IconLockOpen carries that stem.
+	"key", "password", "terminal", "drive", "safe", "dice",
 	"no-icon",
 }
 
@@ -397,6 +429,13 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconClose2:       {"window-close", "edit-delete", "list-remove"},
 	IconLock:         {"channel-secure", "security-high", "lock"},
 	IconSync:         {"view-refresh", "reload", "system-software-update"},
+	IconLockOpen:     {"channel-insecure", "object-unlocked", "security-low", "unlock"},
+	IconKey:          {"password", "kgpg-key", "dialog-password", "key"},
+	IconPassword:     {"dialog-password", "password-show-off", "view-hidden"},
+	IconTerminal:     {"utilities-terminal", "terminal", "konsole"},
+	IconDrive:        {"drive-harddisk", "harddisk", "media-flash"},
+	IconSafe:         {"vault", "plasmavault", "security-high", "safe"},
+	IconDice:         {"roll", "dice", "applications-games"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

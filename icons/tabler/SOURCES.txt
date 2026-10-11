@@ -16,6 +16,7 @@ preferences     adjustments-horizontal
 quit            logout
 close           x
 more            dots
+menu            menu-2
 chevron-up      chevron-up
 chevron-down    chevron-down
 chevron-left    chevron-left
@@ -77,8 +78,13 @@ columns         layout-columns
 rows            layout-rows
 table           table
 cards           layout-grid
+print           printer
 sun             sun
 moon            moon
+key             key
+password        password
+terminal        terminal-2
+drive           server
+safe            vault
+dice            dice-5
 no-icon         placeholder (missing stem)
-print           printer
-menu            menu-2

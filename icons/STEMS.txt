@@ -80,4 +80,10 @@ cards
 print
 sun
 moon
+key
+password
+terminal
+drive
+safe
+dice
 no-icon

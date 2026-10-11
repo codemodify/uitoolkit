@@ -28,8 +28,8 @@ func TestDocumentedSymbolFallbacks(t *testing.T) {
 // table in docs/widgets.md can be trusted to be the whole list.
 func TestEveryToolIconIsNamedAndReachable(t *testing.T) {
 	ids := AllToolIcons()
-	if len(ids) != 56 {
-		t.Fatalf("%d typed icons; docs/widgets.md lists 56", len(ids))
+	if len(ids) != 63 {
+		t.Fatalf("%d typed icons; docs/widgets.md lists 63", len(ids))
 	}
 	for _, i := range ids {
 		name := ToolIconName(i)

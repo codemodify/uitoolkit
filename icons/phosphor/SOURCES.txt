@@ -16,6 +16,7 @@ preferences     sliders
 quit            sign-out
 close           x
 more            dots-three
+menu            list
 chevron-up      caret-up
 chevron-down    caret-down
 chevron-left    caret-left
@@ -77,8 +78,13 @@ columns         columns
 rows            rows
 table           table
 cards           squares-four
+print           printer
 sun             sun
 moon            moon
+key             key
+password        password
+terminal        terminal-window
+drive           hard-drive
+safe            vault
+dice            dice-five
 no-icon         placeholder (missing stem)
-print           printer
-menu            list
