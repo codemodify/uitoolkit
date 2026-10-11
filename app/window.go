@@ -100,6 +100,9 @@ type Window struct {
 	// flip is the window's two-sided content, where it has any, and
 	// flipShapes / flipShaped whether the window takes the turning
 	// card's silhouette and whether it is wearing one now (app/flip.go).
+	// glassUnder confines the compositor's blur to one component
+	// (app/shape.go); nil blurs behind the whole window.
+	glassUnder widget.Component
 	// litAt is where the pointer last moved the light on glass, in
 	// logical window pixels (app/glasslight.go).
 	litAt      paintengine2d.Point

@@ -45,6 +45,7 @@ func main() {
 	theme := flag.String("theme", "lumen-night", "the pack to run in")
 	behind := flag.Bool("glass", false, "ask the compositor to blur the desktop behind the window")
 	flat := flag.Bool("flat", false, "no glass at all, for comparison")
+	shell := flag.Bool("shell", false, "the whole window: a glass sidebar beside an opaque document, under one title bar")
 	shot := flag.String("shot", "", "paint one frame offscreen, write this PNG and exit")
 	flag.Parse()
 	log.SetFlags(0)
@@ -68,9 +69,16 @@ func main() {
 		opts.Look = pack.Look()
 	}
 	a := uitoolkit.New(opts)
-	win, err := a.NewWindow(platform.WindowOptions{
+	wo := platform.WindowOptions{
 		Title: windowTitle("Glass"), Width: 760, Height: 560, MinWidth: 520, MinHeight: 380,
-	})
+	}
+	if *shell {
+		// The toolkit draws the frame, so the window's corners, its
+		// shadow and its caption buttons come from the look and the
+		// title bar under them is the application's own.
+		wo.Decorations = platform.DecorationsClient
+	}
+	win, err := a.NewWindow(wo)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,6 +90,11 @@ func main() {
 	}
 
 	lib := newLibrary()
+	if *shell {
+		shellWindow(win, lib, *behind && !*flat)
+		runOrShoot(a, win, headless, *shot, *theme, *flat)
+		return
+	}
 	rows := widgets.NewScrollView(lib.list(*flat))
 	bar := lib.toolBar(*flat)
 	now := lib.nowPlaying(*flat)
@@ -102,18 +115,96 @@ func main() {
 		win.SetContent(over)
 	}
 
+	runOrShoot(a, win, headless, *shot, *theme, *flat)
+}
+
+func runOrShoot(a *uitoolkit.Application, win *uitoolkit.Window, headless bool, shot, theme string, flat bool) {
 	if headless {
-		if err := win.WritePNG(*shot); err != nil {
+		if err := win.WritePNG(shot); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("wrote", *shot)
+		fmt.Println("wrote", shot)
 		return
 	}
-	log.Printf("theme=%s glass asked=%v available=%v floating=%v",
-		*theme, win.Glass(), win.GlassAvailable(), !*flat)
+	log.Printf("theme=%s glass asked=%v available=%v under=%v floating=%v",
+		theme, win.Glass(), win.GlassAvailable(), win.GlassUnder() != nil, !flat)
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// shellWindow is the shape a modern application window actually has: one
+// title bar with the caption buttons in it, a sidebar of glass down the
+// left, and an opaque document beside it.
+//
+// **The sidebar is glass by being the only part of the window nothing
+// paints over.** A window that asks for glass is translucent all
+// through and the compositor blurs the desktop behind the whole of it;
+// the document then paints itself opaque on top, so the desktop shows
+// only where the sidebar is. SetGlassUnder tells the compositor as much,
+// so it blurs that strip rather than the whole surface — the rest of
+// that work would be thrown away behind the document.
+func shellWindow(win *uitoolkit.Window, lib *library, glass bool) {
+	// The application's own title bar *is* the caption: the look draws
+	// its buttons into it rather than stacking a strip of its own above
+	// it, which is what Chromium and VS Code do with theirs.
+	title := widgets.NewLabel(windowTitle("Glass"))
+	title.Bold = true
+	gapL, gapR := widgets.NewSpacer(), widgets.NewSpacer()
+	bar := widgets.NewRow(gapL, title, gapR)
+	bar.AddFlex(gapL, 1)
+	bar.AddFlex(gapR, 1)
+	win.SetTitleBar(widgets.NewPad(6, bar))
+	win.SetCaptionStyle(uitoolkit.CaptionMerged)
+
+	// The sidebar paints nothing of its own, so what shows there is the
+	// window's own translucent background — and behind that, the
+	// desktop. It takes its natural width; the document gets the rest.
+	side := widgets.NewPad(12, lib.sources())
+	doc := lib.document(win.Look())
+	row := widgets.NewRow(side, doc).WithGap(0)
+	row.AddFlex(doc, 1)
+	win.SetContent(row)
+
+	if glass {
+		win.SetGlass(true)
+		// An explicit tint: the window background has to be translucent
+		// for the compositor's blur to show through it at all, and the
+		// look's own is only as translucent as that look wanted.
+		win.SetGlassTint(paintengine2d.RGBA(0.11, 0.11, 0.13, 0.55))
+		win.SetGlassUnder(side)
+	}
+}
+
+// sources is the sidebar's list: plain text on nothing, so the glass
+// behind it is what the eye sees.
+func (l *library) sources() widget.Component {
+	col := widgets.NewColumn().WithGap(4)
+	head := widgets.NewLabel("Library")
+	head.Bold = true
+	col.Add(head)
+	for _, s := range []string{"Recently Added", "Artists", "Albums", "Songs", "Playlists"} {
+		col.Add(widgets.NewLabel(s))
+	}
+	fill := widgets.NewSpacer()
+	col.Add(fill)
+	col.AddFlex(fill, 1)
+	return col
+}
+
+// document is the opaque half.
+//
+// It has to paint itself solid, and a panel is not enough: a panel's
+// background is a wash of a few percent over whatever is behind it,
+// which over a translucent window is the desktop. Measured, the
+// document came back at 161/255 alpha against the sidebar's 140 —
+// showing the desktop through a document, which is not a window anybody
+// designs. A stretched block of the palette's own background under it
+// is what makes the window opaque exactly where it is meant to be.
+func (l *library) document(lk style.LookAndFeel) widget.Component {
+	solid := widgets.NewPicture(block(1, 1, lk.Palette().Background))
+	solid.Fit = widgets.FitStretch
+	return widgets.NewStack(solid, widgets.NewScrollView(l.list(true)))
 }
 
 // library is the content the glass sits over: rows with enough colour and

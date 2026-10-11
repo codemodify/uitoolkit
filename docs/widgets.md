@@ -1362,6 +1362,33 @@ to hold together: something behind the pane, a material clear enough to
 see it through, and an edge with thickness to bend it.
 `examples/uitoolkit-sample-glass` is all three at once.
 
+### A window of glass and an opaque document
+
+`win.SetGlassUnder(c)` confines the compositor's blur to one component.
+A sidebar of glass beside an opaque document is the usual shape of a
+window that asks for blur at all — blurring the whole surface for the
+sidebar's sake would put the desktop behind the document too, which is
+not a window anybody designs. The region follows the component as the
+window lays out, so it takes a component rather than a rectangle.
+
+Three things make that window, and the third is the one that catches
+people out:
+
+1. `platform.DecorationsClient` with `win.SetTitleBar(c)` and
+   `SetCaptionStyle(CaptionMerged)` — the look draws the corners, the
+   shadow and the caption buttons, and the application's own bar *is*
+   the caption.
+2. `win.SetGlass(true)` and a translucent `SetGlassTint` — a window that
+   asks for glass is translucent all through.
+3. **The opaque half has to paint itself opaque.** A `Panel` is not
+   enough: its background is a wash of a few percent, which over a
+   translucent window is the desktop. Measured on a real window, the
+   document came back at 161/255 alpha against the sidebar's 140 — the
+   desktop showing through a document. A solid fill under it is what
+   makes the window opaque exactly where it is meant to be.
+
+`examples/uitoolkit-sample-glass -shell` is that window.
+
 ## Wizards
 
 `widgets.NewWizard(title, pages...)` walks through `WizardPage`s with

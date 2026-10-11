@@ -1,6 +1,8 @@
 package app
 
 import (
+	"math"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -320,9 +322,19 @@ func (w *Window) applyShapeToFrame(f *platform.Frame, margin platform.FrameInset
 	if !w.wantsGlass() {
 		return
 	}
-	// Blur exactly where the window is. A compositor clips it to the
-	// surface anyway, but saying so keeps the blur out of a shaped
-	// window's hole, where it would smear the desktop for no reason.
+	// Blur under one component, where the application named one: a
+	// sidebar of glass beside opaque content is the usual shape of a
+	// modern window, and blurring the whole surface for it would put the
+	// desktop behind a document.
+	if box, ok := w.glassUnderBox(margin); ok {
+		f.Blur = []platform.FrameRect{box}
+		f.Alpha = true
+		return
+	}
+	// Otherwise blur exactly where the window is. A compositor clips it
+	// to the surface anyway, but saying so keeps the blur out of a
+	// shaped window's hole, where it would smear the desktop for no
+	// reason.
 	if r != nil {
 		f.Blur = platform.OffsetRects(r.Rects, margin.Left, margin.Top)
 	} else {
@@ -334,6 +346,52 @@ func (w *Window) applyShapeToFrame(f *platform.Frame, margin platform.FrameInset
 		}
 	}
 	f.Alpha = true
+}
+
+// SetGlassUnder confines the glass to one component: the compositor
+// blurs the desktop only where that component is, and the rest of the
+// window is whatever it paints.
+//
+// A sidebar of glass beside an opaque document is the usual shape of a
+// window that uses this at all — blurring the whole surface for the sake
+// of the sidebar would put the desktop behind the document too, which is
+// not a window anybody designs. The region follows the component as the
+// window lays out, so it is given a component rather than a rectangle.
+//
+// nil puts the glass back under the whole window.
+func (w *Window) SetGlassUnder(c widget.Component) {
+	if w == nil || w.glassUnder == c {
+		return
+	}
+	w.glassUnder = c
+	w.shapeChanged()
+}
+
+// GlassUnder is the component the glass is confined to, or nil for the
+// whole window.
+func (w *Window) GlassUnder() widget.Component { return w.glassUnder }
+
+// glassUnderBox is where the named component is, in surface coordinates,
+// and whether there is one with a box worth stating.
+func (w *Window) glassUnderBox(margin platform.FrameInsets) (platform.FrameRect, bool) {
+	if w == nil || w.glassUnder == nil {
+		return platform.FrameRect{}, false
+	}
+	b := widget.DeviceBounds(w.glassUnder)
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		// Not laid out yet: no region rather than a wrong one, since an
+		// empty blur region is "blur nothing" and a stale one would sit
+		// where the component used to be.
+		return platform.FrameRect{}, false
+	}
+	// FrameRects are whole logical pixels: round the box outwards so the
+	// blur never stops a pixel short of the glass drawn over it.
+	x0, y0 := int(math.Floor(float64(b.Min.X))), int(math.Floor(float64(b.Min.Y)))
+	x1, y1 := int(math.Ceil(float64(b.Max.X))), int(math.Ceil(float64(b.Max.Y)))
+	return platform.FrameRect{
+		X: margin.Left + x0, Y: margin.Top + y0,
+		W: x1 - x0, H: y1 - y0,
+	}, true
 }
 
 // wantsGlass reports whether the window should ask for blur behind it: the
