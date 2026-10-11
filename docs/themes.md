@@ -20,9 +20,13 @@ icon size stay independent `look.json` prefs.
 
 ## Built-in packs
 
-123 packs from 31 engines, by the year their original shipped. Each one was
+125 packs from 33 engines, by the year their original shipped. Each one was
 researched from published facts (design guides, SDK documentation, pixels
-measured from screenshots of the originals); no code or pixmaps were copied.
+measured from screenshots of the originals); no code or pixmaps were copied
+— with one exception, `hangar`, which reproduces no product at all: it is
+the genre every mission display, game HUD and avionics panel converged on,
+and it is here because a toolkit that can only dress as the past cannot
+dress as a console.
 Apps start in `metal-ocean` (`style.DefaultThemeName`) until the user picks
 one; `UITK_THEME=<id>` runs any app in any pack.
 
@@ -152,6 +156,7 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `linear-night` | Linear Dark | 2026 | Linear | `web` | Linear's dark theme: #121213 content beside a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo. |
 | `vscode-night` | VS Code Dark 2026 | 2026 | VS Code | `web` | VS Code's Dark 2026: a #121314 editor in #191a1b chrome, #297aa0 buttons, the #3994bc line atop the active tab, white-alpha selections. |
 | `vscode` | VS Code Light 2026 | 2026 | VS Code | `web` | VS Code's Light 2026: #fafafd chrome around a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab. |
+| `hangar` | Hangar | 2026 | Console | `hangar` | A telemetry console, of no product: a gunmetal-to-shadow ground under a diagonal weave, one ember accent spent only on what is on, hairline square boxes, chrome labels in capitals and segmented meters. |
 
 Aliases (load-only, not listed twice): `classic95` → `light`,
 `classic95-dark` → `dark`, `luna-dark` → `luna-night`, and the other

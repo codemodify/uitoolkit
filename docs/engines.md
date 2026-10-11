@@ -33,12 +33,12 @@ Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 
 | build | engines | size |
 | --- | --- | --- |
-| default | 1 | **12.71 MB** |
-| `theme_engine_oxygen` | 1 | 12.88 MB |
-| three engines | 3 | 13.29 MB |
-| `theme_engine_all` | 35 | 21.15 MB |
+| default | 1 | **12.98 MB** |
+| `theme_engine_oxygen` | 1 | 12.91 MB |
+| three engines | 3 | 13.36 MB |
+| `theme_engine_all` | 36 | 21.24 MB |
 
-**8.4 MB**, 40% of the binary, for an application that wants one look.
+**8.3 MB**, 39% of the binary, for an application that wants one look.
 
 ## How the tags are written
 
@@ -75,7 +75,7 @@ Engines could not be separated at first, and the reason was always the
 same: a helper written inside whichever engine happened to need it first,
 which every later engine then called. `snap`, a function that rounds to
 the pixel grid, lived in `engine_win95.go` and had **1001 call sites
-across 35 engines and the core**. While it lived there, no build could
+across 36 engines and the core**. While it lived there, no build could
 leave Windows 95 out.
 
 So there are kit files, with no build tag, on one rule: **anything more
