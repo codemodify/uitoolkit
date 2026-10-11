@@ -82,7 +82,7 @@ func main() {
 	}
 
 	lib := newLibrary()
-	rows := widgets.NewScrollView(lib.list())
+	rows := widgets.NewScrollView(lib.list(*flat))
 	bar := lib.toolBar(*flat)
 	now := lib.nowPlaying(*flat)
 
@@ -154,13 +154,29 @@ func newLibrary() *library {
 
 // list is the scrolling content. Each row carries a block of colour, so
 // the rows passing under a capsule are a pattern rather than a wash.
-func (l *library) list() widget.Component {
+func (l *library) list(flat bool) widget.Component {
 	col := widgets.NewColumn().WithGap(6)
 	for i, t := range l.tracks {
 		col.Add(l.row(i, t))
 	}
-	return widgets.NewPad(10, col)
+	pad := widgets.NewPad(10, col)
+	if !flat {
+		// **The content is inset by the chrome, inside the scroll.** The
+		// viewport keeps the whole window so rows pass under the bars as
+		// they scroll, but the scrolled column begins below the top bar
+		// and ends above the bottom one, so at rest nothing is hidden —
+		// which is iOS's content inset and macOS's safe area, and what
+		// the first version of this sample forgot: the chrome landed on
+		// the first and last rows and read as broken rather than as
+		// glass.
+		pad.T, pad.B = chromeInset, chromeInset
+	}
+	return pad
 }
+
+// chromeInset is how far the content keeps clear of a floating bar: the
+// bar's own height plus the gap it floats in, as a 1x design length.
+const chromeInset = 54
 
 func (l *library) row(i int, t track) widget.Component {
 	art := widgets.NewPicture(block(52, 52, hue(t.hue)))
