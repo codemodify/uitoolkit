@@ -45,7 +45,8 @@ func main() {
 	theme := flag.String("theme", "lumen-night", "the pack to run in")
 	behind := flag.Bool("glass", false, "ask the compositor to blur the desktop behind the window")
 	flat := flag.Bool("flat", false, "no glass at all, for comparison")
-	shell := flag.Bool("shell", false, "the whole window: a glass sidebar beside an opaque document, under one title bar")
+	shell := flag.Bool("shell", false, "the whole window: a sidebar and a document under one title bar")
+	confine := flag.Bool("sidebar", false, "with -shell: frost only the sidebar and keep the document opaque")
 	shot := flag.String("shot", "", "paint one frame offscreen, write this PNG and exit")
 	flag.Parse()
 	log.SetFlags(0)
@@ -83,15 +84,12 @@ func main() {
 		log.Fatal(err)
 	}
 	if *behind && !*flat {
-		// The desktop, blurred behind the whole window, where the
-		// compositor offers it. The tint has to stay translucent or the
-		// blur it asked for shows through nothing.
-		win.SetGlass(true)
+		frostWindow(win)
 	}
 
 	lib := newLibrary()
 	if *shell {
-		shellWindow(win, lib, *behind && !*flat)
+		shellWindow(win, lib, *behind && !*flat, *confine)
 		runOrShoot(a, win, headless, *shot, *theme, *flat)
 		return
 	}
@@ -144,7 +142,7 @@ func runOrShoot(a *uitoolkit.Application, win *uitoolkit.Window, headless bool, 
 // only where the sidebar is. SetGlassUnder tells the compositor as much,
 // so it blurs that strip rather than the whole surface — the rest of
 // that work would be thrown away behind the document.
-func shellWindow(win *uitoolkit.Window, lib *library, glass bool) {
+func shellWindow(win *uitoolkit.Window, lib *library, glass, confine bool) {
 	// The application's own title bar *is* the caption: the look draws
 	// its buttons into it rather than stacking a strip of its own above
 	// it, which is what Chromium and VS Code do with theirs.
@@ -157,23 +155,44 @@ func shellWindow(win *uitoolkit.Window, lib *library, glass bool) {
 	win.SetTitleBar(widgets.NewPad(6, bar))
 	win.SetCaptionStyle(uitoolkit.CaptionMerged)
 
-	// The sidebar paints nothing of its own, so what shows there is the
-	// window's own translucent background — and behind that, the
-	// desktop. It takes its natural width; the document gets the rest.
+	// Nothing paints a background in here, so what shows through the
+	// window is the desktop behind it.
 	side := widgets.NewPad(12, lib.sources())
-	doc := lib.document(win.Look())
+	var doc widget.Component = widgets.NewScrollView(lib.list(true))
+	if confine {
+		// The other shape: the document paints itself solid and only
+		// the sidebar is glass, so the desktop is not behind a page of
+		// text. Window.SetGlassUnder then tells the compositor to blur
+		// that strip rather than the whole surface, since the rest of
+		// that work would be thrown away under the document.
+		doc = lib.document(win.Look())
+	}
 	row := widgets.NewRow(side, doc).WithGap(0)
 	row.AddFlex(doc, 1)
 	win.SetContent(row)
 
 	if glass {
-		win.SetGlass(true)
-		// An explicit tint: the window background has to be translucent
-		// for the compositor's blur to show through it at all, and the
-		// look's own is only as translucent as that look wanted.
-		win.SetGlassTint(paintengine2d.RGBA(0.11, 0.11, 0.13, 0.55))
-		win.SetGlassUnder(side)
+		frostWindow(win)
+		if confine {
+			win.SetGlassUnder(side)
+		}
 	}
+}
+
+// frostWindow makes the window itself a pane of frosted glass: the
+// desktop behind it, blurred by the compositor, showing through
+// everything the application does not paint over.
+//
+// The tint is the application's say in how much of the desktop comes
+// through, and it has to be set: a look's own is as translucent as that
+// look wanted its windows to be, which for a document-shaped one is
+// barely at all. Measured on this window before it was set, the
+// background came back at 207/255 — four fifths opaque, which is a
+// slightly washed window rather than glass.
+func frostWindow(win *uitoolkit.Window) {
+	win.SetGlass(true)
+	bg := win.Look().Palette().Background
+	win.SetGlassTint(paintengine2d.RGBA(bg.R, bg.G, bg.B, 0.42))
 }
 
 // sources is the sidebar's list: plain text on nothing, so the glass
