@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -597,7 +598,7 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 			co.Folder, _ = filepath.Abs(opts.Path)
 		}
 	}
-	if pats := strings.FieldsFunc(opts.Filter, func(r rune) bool { return r == ' ' || r == ';' || r == ',' }); len(pats) > 0 {
+	if pats := FilterPatterns(opts.Filter); len(pats) > 0 {
 		co.Filters = []platform.FileFilter{{Name: strings.Join(pats, " "), Patterns: pats}}
 	}
 	return openNative(co, func(paths []string) {
@@ -657,22 +658,65 @@ func stubEntries() []FileInfo {
 	}
 }
 
+// FilterPatterns splits a [FileOptions.Filter] into its globs, the way
+// the field has always been documented: separated by spaces, semicolons
+// or commas.
+//
+// The native chooser is handed exactly these. The fallback used to parse
+// the field itself and read the whole of it as one filename suffix, so
+// the documented "*.mp4 *.mkv" matched no file at all and a video
+// player with a multi-format filter saw an empty folder wherever no
+// native chooser was available. One parser now serves both.
+func FilterPatterns(filter string) []string {
+	return strings.FieldsFunc(filter, func(r rune) bool {
+		return r == ' ' || r == ';' || r == ','
+	})
+}
+
+// filterEntries keeps the directories and the files any pattern matches.
+//
+// Matching is a real glob ([path.Match]) and not a suffix, so "*.mp4",
+// "video-*.*" and "frame-?.png" all mean what they look like. It is
+// case-insensitive, which a suffix comparison was too.
 func filterEntries(ents []FileInfo, filter string) []FileInfo {
-	filter = strings.TrimSpace(filter)
-	if filter == "" || filter == "*" || filter == "*.*" {
-		return ents
+	pats := FilterPatterns(filter)
+	globs := 0
+	for _, p := range pats {
+		if p == "*" || p == "*.*" {
+			return ents
+		}
+		// A pattern with no wildcard in it is not a filter anybody
+		// meant — it is a filter string that was never a glob. Such a
+		// filter shows everything rather than hiding every file, which
+		// is what the old suffix match did for anything not beginning
+		// "*.", and a chooser that silently shows an empty folder is
+		// worse than one that filters nothing.
+		if strings.ContainsAny(p, "*?[") {
+			if _, err := path.Match(p, "x"); err == nil {
+				globs++
+			}
+		}
 	}
-	ext := strings.TrimPrefix(filter, "*")
-	if !strings.HasPrefix(filter, "*.") {
+	if globs == 0 {
 		return ents
 	}
 	out := make([]FileInfo, 0, len(ents))
 	for _, e := range ents {
-		if e.Dir || strings.HasSuffix(strings.ToLower(e.Name), strings.ToLower(ext)) {
+		if e.Dir || matchesAnyPattern(e.Name, pats) {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+func matchesAnyPattern(name string, pats []string) bool {
+	low := strings.ToLower(name)
+	for _, p := range pats {
+		if ok, err := path.Match(strings.ToLower(p), low); err == nil && ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Preferred size hint so the overlay card is wide enough for a table.
