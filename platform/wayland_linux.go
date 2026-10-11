@@ -5372,9 +5372,26 @@ func (s *wlSurface) applyBlurLocked() {
 			return
 		}
 	}
+	// **The blur region is stated against the window geometry, not the
+	// surface.** Every other region in a Frame is the surface's, and the
+	// blur one arrives that way too — offset by the margin the shadow
+	// occupies. The compositor then measures it from the window's own
+	// origin, which is already past that margin, so the offset counted
+	// twice and the first margin's worth of the window went unblurred:
+	// a 49-pixel strip of sharp desktop down the left of every glass
+	// window at a 1.75 scale, and the top strip hidden under the title
+	// bar. Taking the margin back off is this conversion, and it belongs
+	// here with the other things only this protocol wants.
+	//
+	// It never showed in the nested rig because that compositor gives
+	// the window server-side decorations: no client shadow, no margin,
+	// nothing to count twice.
+	//
 	// Inwards, like the opaque region: blurring a pixel the window does
 	// not cover would smear the desktop outside the window.
-	if rects := flatRects(ScaleRects(s.frame.Blur, s.deviceScale(), false)); len(rects) > 0 {
+	m := s.marginLogical()
+	blur := OffsetRects(ScaleRects(s.frame.Blur, s.deviceScale(), false), -m.Left, -m.Top)
+	if rects := flatRects(blur); len(rects) > 0 {
 		C.ui_wl_blur_region(s.conn.compositor, s.bgSurf, &rects[0], C.int(len(rects)/4))
 	} else {
 		C.ui_wl_blur_region(s.conn.compositor, s.bgSurf, (*C.int)(nil), 0)
