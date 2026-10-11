@@ -93,7 +93,7 @@ func (w *Window) holds(c widget.Component) bool {
 	for p := c.Parent(); p != nil; p = p.Parent() {
 		top = p
 	}
-	return top != nil && (top == w.root || top == w.overlay || top == w.popup || top == w.caption)
+	return top != nil && (top == w.root || top == w.overlay || top == w.cover || top == w.popup || top == w.caption)
 }
 
 // navigateHistory offers back (forward false) or forward to the component

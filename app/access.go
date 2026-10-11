@@ -23,7 +23,7 @@ func (w *Window) AccessibleTree() *a11y.Node {
 	if w.caption != nil {
 		caption = w.caption
 	}
-	for _, c := range []widget.Component{caption, w.root, w.overlay, w.popup, w.tooltip} {
+	for _, c := range []widget.Component{caption, w.root, w.overlay, w.cover, w.popup, w.tooltip} {
 		widget.AccessibleTree(root, c)
 	}
 	return root
@@ -37,7 +37,7 @@ func (w *Window) AccessibleSetText(id uint64, s string) bool {
 		return false
 	}
 	var hit widget.Component
-	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.popup} {
+	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.cover, w.popup} {
 		if c == nil {
 			continue
 		}
@@ -59,7 +59,7 @@ func (w *Window) AccessibleSetText(id uint64, s string) bool {
 func (w *Window) AccessibleAction(id uint64, a a11y.Action) bool {
 	comp, item := widget.SplitItemID(id)
 	var hit widget.Component
-	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.popup, w.tooltip} {
+	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.cover, w.popup, w.tooltip} {
 		if c == nil {
 			continue
 		}

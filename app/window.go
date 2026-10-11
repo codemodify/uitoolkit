@@ -37,12 +37,16 @@ type Window struct {
 	// which for a dialog that wipes its secret fields on close wiped them
 	// (app/window.go, PushOverlay).
 	overlays []widget.Component
-	popup    widget.Component
-	tooltip  widget.Component
-	look     style.LookAndFeel
-	dirty    paintengine2d.Damage
-	full     bool
-	focus    widget.Component
+	// cover is the layer over the whole window inside its frame, title
+	// bar and content as one (app/cover.go). It is under the popups and
+	// over everything else.
+	cover   widget.Component
+	popup   widget.Component
+	tooltip widget.Component
+	look    style.LookAndFeel
+	dirty   paintengine2d.Damage
+	full    bool
+	focus   widget.Component
 	// The lock keys as of the last event that carried modifiers, and
 	// whether any event has carried them yet (app/lockkeys.go).
 	lockCaps, lockNum, lockKnown bool
@@ -757,7 +761,7 @@ func (w *Window) dropDeadRefs() {
 
 // layerRoots are the window's live layers below the tooltip, top first.
 func (w *Window) layerRoots() []widget.Component {
-	roots := []widget.Component{w.popup, w.overlay}
+	roots := []widget.Component{w.popup, w.cover, w.overlay}
 	if w.caption != nil {
 		roots = append(roots, w.caption)
 	}
@@ -1384,7 +1388,7 @@ func (w *Window) popupKey(popup widget.Component, e widget.KeyEvent) bool {
 // modal overlay; the title bar's come first (it is the window's top row).
 // It reports whether one ran.
 func (w *Window) accelerator(key platform.Key, mods platform.Modifiers) bool {
-	if w.overlay != nil {
+	if w.overlay != nil || w.cover != nil {
 		return false
 	}
 	if w.caption != nil && handleAccel(w.caption, key, mods) {
@@ -1441,6 +1445,11 @@ func (w *Window) hit(p paintengine2d.Point) widget.Component {
 }
 
 func (w *Window) hitContent(p paintengine2d.Point) widget.Component {
+	if w.cover != nil {
+		// Nothing under it: a press that misses the cover's own widgets
+		// reaches no one, because what it would reach cannot be seen.
+		return widget.HitRoot(w.cover, p)
+	}
 	if w.overlay != nil {
 		if h := widget.HitRoot(w.overlay, p); h != nil {
 			return h
@@ -1504,7 +1513,7 @@ func (w *Window) keyTarget() widget.Component {
 	if w == nil {
 		return nil
 	}
-	return widget.KeyTarget(w.focus, w.overlay)
+	return widget.KeyTarget(w.focus, w.containingLayer())
 }
 
 // keyEvent is a platform key event as the widgets see it: the key, the
@@ -1564,6 +1573,9 @@ func (w *Window) contentKey(e widget.KeyEvent) bool {
 	target := w.root
 	if w.overlay != nil {
 		target = w.overlay
+	}
+	if w.cover != nil {
+		target = w.cover
 	}
 	if target == nil {
 		return false
@@ -1855,6 +1867,8 @@ func (w *Window) tab(forward bool) {
 	switch {
 	case w.popup != nil:
 		list = widget.Focusables(w.popup)
+	case w.cover != nil:
+		list = widget.Focusables(w.cover)
 	case w.overlay != nil:
 		list = widget.Focusables(w.overlay)
 	default:
@@ -1918,6 +1932,7 @@ func (w *Window) layout() {
 			o.Arrange(ob)
 		}
 	}
+	w.arrangeCover()
 	if w.statusMenu && w.popup != nil {
 		w.popup.Arrange(box)
 	}
@@ -2134,6 +2149,9 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	for _, o := range w.overlays {
 		widget.PaintTree(o, ctx, dirty)
 	}
+	if w.cover != nil {
+		widget.PaintTree(w.cover, ctx, dirty)
+	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
 			w.paintShadow(ctx, c, style.PopupMenu, dirty)
@@ -2339,6 +2357,9 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	}
 	if w.overlay != nil {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
+	}
+	if w.cover != nil {
+		widget.RecordTree(w.cover, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {

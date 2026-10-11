@@ -180,6 +180,17 @@ slides against the screen; one placed by hand says so with
 (`SetHitShapeFunc`) is cut to it — surface, shadow and input region
 ([shapes.md](shapes.md#popups)).
 
+Over all of it, and under the popups, is the **cover**: `Window.SetCover`
+lays a component over the whole window inside its frame, title bar and
+content as one, for a transition, a lock screen or a splash. It is the one
+layer that reaches the title bar — an overlay is laid over the content
+alone, because a modal dialog dimming its own caption would be wrong, so a
+card that turns the window over to its back could not turn the caption
+with it. What it covers it owns: the pointer and the keyboard reach the
+cover and nothing under it, while the frame around it stays the window's,
+so a framed window can still be resized from its edges. Escape does not
+take it down; the application does, with `SetCover(nil)`.
+
 A popup owns the keyboard while it is up, which is what a menu wants and
 what a **completion list** does not: there the user is still typing into
 the field underneath. `widget.SetPopupKeysPass` makes one non-capturing —

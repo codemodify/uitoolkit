@@ -79,6 +79,11 @@ type frameGeom struct {
 	// box of the content and, in a framed window, of the overlay.
 	caption paintengine2d.Rect
 	content paintengine2d.Rect
+	// inner is the window inside the frame the toolkit draws: the caption
+	// and the content as one box, which is what a cover covers
+	// ([Window.SetCover]). It is the whole surface where the frame is the
+	// desktop's.
+	inner paintengine2d.Rect
 }
 
 // translucent reports whether the frame needs an alpha channel: it has a
@@ -781,7 +786,7 @@ func (w *Window) applyFrame() {
 // layoutFrame arranges the caption inside the surface box full and returns
 // the geometry.
 func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
-	g := frameGeom{content: full, window: full}
+	g := frameGeom{content: full, window: full, inner: full}
 	if w.caption == nil {
 		w.geom = g
 		return g
@@ -800,6 +805,7 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 		g.border = w.frameBorder()
 		inner = w.innerBox(g.window, true)
 	}
+	g.inner = inner
 	g.caption = w.captionBox(inner, g.framed)
 	h := g.caption.Dy()
 	g.content = paintengine2d.XYWH(inner.Min.X, inner.Min.Y+h, inner.Dx(), max(0, inner.Dy()-h))
