@@ -673,14 +673,31 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 // MouseWheel scrolls, and reports false when it cannot: an unscrollable or
 // already-at-the-edge view must let the wheel bubble to an outer scroll pane
 // instead of swallowing it.
+// MouseWheel scrolls the list, and **ends the click history whether or
+// not it scrolls**.
+//
+// A wheel notch is a gesture of the user's, not of the list's: having
+// turned the wheel between two presses, nobody means them as a double
+// click. The list used to reason the other way round — it reset the
+// history only when the offset actually moved — so a wheel on a list
+// short enough to fit, or at either end of one that does not, left the
+// history alive and the next press completed a double click across it.
+// The two early returns are exactly the cases where there is nothing to
+// scroll, which is where this is easiest to get wrong and hardest to
+// notice.
+//
+// Both still return false, so a list that cannot scroll lets the notch
+// through to a scroll pane around it.
 func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
 	if l.MaxOffset() <= 0 {
+		l.resetClicks()
 		return false
 	}
 	before := l.OffsetY
 	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH(), e.Precise)
 	l.clamp()
 	if l.OffsetY == before {
+		l.resetClicks()
 		return false
 	}
 	l.resetClicks()

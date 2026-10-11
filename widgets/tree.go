@@ -680,14 +680,20 @@ func (t *TreeView) MouseRelease(widget.MouseEvent) bool {
 // MouseWheel scrolls, and reports false when it cannot: an unscrollable or
 // already-at-the-edge view must let the wheel bubble to an outer scroll pane
 // instead of swallowing it.
+// MouseWheel scrolls the tree, and ends the click history whether or not
+// it scrolls — the same rule as [ListView.MouseWheel], and for the same
+// reason: a wheel turned between two presses means they are not a double
+// click, on a tree short enough to fit as much as on any other.
 func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
 	if t.MaxOffset() <= 0 {
+		t.resetClicks()
 		return false
 	}
 	before := t.OffsetY
 	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH(), e.Precise)
 	t.clamp()
 	if t.OffsetY == before {
+		t.resetClicks()
 		return false
 	}
 	t.resetClicks()

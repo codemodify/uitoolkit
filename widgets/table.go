@@ -1147,6 +1147,10 @@ func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
 		t.ScrollByX(wheelDelta(dx, t.rowH(), e.Precise))
 	}
 	if t.OffsetY == beforeY && t.OffsetX == beforeX {
+		// Nothing moved — a table that fits, or one already at the end
+		// the wheel is pushing towards. The gesture still ends: see
+		// [ListView.MouseWheel].
+		t.resetClicks()
 		return false
 	}
 	t.resetClicks()
