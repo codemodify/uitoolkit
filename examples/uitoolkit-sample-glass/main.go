@@ -47,6 +47,9 @@ func main() {
 	flat := flag.Bool("flat", false, "no glass at all, for comparison")
 	shell := flag.Bool("shell", false, "the whole window: a sidebar and a document under one title bar")
 	confine := flag.Bool("sidebar", false, "with -shell: frost only the sidebar and keep the document opaque")
+	blur := flag.Float64("blur", 0, "the material's blur, in 1x pixels (0 keeps the pack's)")
+	bevel := flag.Float64("bevel", 0, "how thick the glass is at its edge, in 1x pixels (0 follows the corner)")
+	through := flag.Float64("through", 0, "how much of the desktop the window lets through, 0..1 (0 keeps the default)")
 	shot := flag.String("shot", "", "paint one frame offscreen, write this PNG and exit")
 	flag.Parse()
 	log.SetFlags(0)
@@ -67,7 +70,7 @@ func main() {
 		if !ok {
 			log.Fatalf("no theme %q — build with -tags theme_engine_all, or name one style.EngineIDs() lists", *theme)
 		}
-		opts.Look = pack.Look()
+		opts.Look = tune(pack, float32(*blur), float32(*bevel)).Look()
 	}
 	a := uitoolkit.New(opts)
 	wo := platform.WindowOptions{
@@ -84,12 +87,12 @@ func main() {
 		log.Fatal(err)
 	}
 	if *behind && !*flat {
-		frostWindow(win)
+		frostWindow(win, float32(*through))
 	}
 
 	lib := newLibrary()
 	if *shell {
-		shellWindow(win, lib, *behind && !*flat, *confine)
+		shellWindow(win, lib, *behind && !*flat, *confine, float32(*through))
 		runOrShoot(a, win, headless, *shot, *theme, *flat)
 		return
 	}
@@ -142,7 +145,7 @@ func runOrShoot(a *uitoolkit.Application, win *uitoolkit.Window, headless bool, 
 // only where the sidebar is. SetGlassUnder tells the compositor as much,
 // so it blurs that strip rather than the whole surface — the rest of
 // that work would be thrown away behind the document.
-func shellWindow(win *uitoolkit.Window, lib *library, glass, confine bool) {
+func shellWindow(win *uitoolkit.Window, lib *library, glass, confine bool, through float32) {
 	// The application's own title bar *is* the caption: the look draws
 	// its buttons into it rather than stacking a strip of its own above
 	// it, which is what Chromium and VS Code do with theirs.
@@ -172,7 +175,7 @@ func shellWindow(win *uitoolkit.Window, lib *library, glass, confine bool) {
 	win.SetContent(row)
 
 	if glass {
-		frostWindow(win)
+		frostWindow(win, through)
 		if confine {
 			win.SetGlassUnder(side)
 		}
@@ -189,10 +192,40 @@ func shellWindow(win *uitoolkit.Window, lib *library, glass, confine bool) {
 // barely at all. Measured on this window before it was set, the
 // background came back at 207/255 — four fifths opaque, which is a
 // slightly washed window rather than glass.
-func frostWindow(win *uitoolkit.Window) {
+func frostWindow(win *uitoolkit.Window, through float32) {
 	win.SetGlass(true)
 	bg := win.Look().Palette().Background
-	win.SetGlassTint(paintengine2d.RGBA(bg.R, bg.G, bg.B, 0.42))
+	a := float32(0.42)
+	if through > 0 && through <= 1 {
+		// "through" is how much of the desktop comes through, so the
+		// tint's alpha is what is left of the window.
+		a = 1 - through
+	}
+	win.SetGlassTint(paintengine2d.RGBA(bg.R, bg.G, bg.B, a))
+}
+
+// tune is the pack with the material's own numbers changed.
+//
+// The pack's token maps belong to the registry, so they are copied
+// before anything is written: adjusting them in place would restyle
+// every other window in the process, and the registered pack with it.
+// [style.ThemePack.Look] then builds from the copy.
+func tune(p style.ThemePack, blur, bevel float32) style.ThemePack {
+	if blur <= 0 && bevel <= 0 {
+		return p
+	}
+	params := map[string]float32{}
+	for k, v := range p.Tokens.Params {
+		params[k] = v
+	}
+	if blur > 0 {
+		params["glassBlur"], params["menuBlur"] = blur, blur
+	}
+	if bevel > 0 {
+		params["glassBevel"] = bevel
+	}
+	p.Tokens.Params = params
+	return p
 }
 
 // sources is the sidebar's list: plain text on nothing, so the glass
