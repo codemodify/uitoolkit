@@ -209,9 +209,25 @@ func (p ThemePack) Appearance() Appearance {
 	}.Normalize()
 }
 
-// Look builds a Classic look from the pack (1× metrics, the pack's corners).
+// Look builds a Classic look from the pack (1× metrics, the pack's
+// corners) — **from this pack, including any tokens the caller has
+// changed**.
+//
+// It used to go back to the registry by the pack's name, so a caller who
+// loaded a pack, adjusted a param or an Extra colour and asked for its
+// look got the registered pack back and its change silently dropped.
+// That is how an application sets the material's own numbers — the blur
+// of a glass pane, the bevel on its edge — without having to register a
+// theme of its own.
+//
+// A pack with no tokens of its own is still resolved by name, which is
+// what a pack from a theme.json with only a palette needs.
 func (p ThemePack) Look() *Classic {
-	return p.Appearance().Look()
+	a := p.Appearance().Effective()
+	if p.Tokens.Empty() {
+		return a.Look()
+	}
+	return a.lookFrom(finishTokens(p.Tokens, p.Name, a))
 }
 
 func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error) {

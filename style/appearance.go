@@ -517,12 +517,27 @@ func lookMetrics(d Density, scale float32, tok ThemeTokens, corners CornerStyle,
 // Look builds a Classic LookAndFeel from the appearance prefs (1× metrics).
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
-	a = a.Effective()
-	tok := tokensForAppearance(a)
+	return a.Effective().lookFrom(tokensForAppearance(a.Effective()))
+}
+
+// lookFrom is Look with the tokens already chosen, for a caller that has
+// its own ([ThemePack.Look]) rather than the registry's.
+func (a Appearance) lookFrom(tok ThemeTokens) *Classic {
 	m := packMetrics(DensityDefault, tok, a.Corners, a.IconSize)
 	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
 		setPack(a.Name).setDensity(DensityDefault).setScale(1).
 		setAppearanceBits(a.FontUI, a.FontMono, a.FollowDesktop)
+}
+
+// finishTokens is the rest of what tokensForAppearance does once the
+// tokens are in hand: resolve them, take the desktop's accent where the
+// appearance follows it, and lay the era's and the user's fonts over.
+func finishTokens(tok ThemeTokens, packName string, a Appearance) ThemeTokens {
+	tok = tok.Resolve()
+	if a.FollowDesktop {
+		tok = withDesktopAccent(tok)
+	}
+	return withUserFonts(withEraFonts(tok, packName), a.FontUI, a.FontMono)
 }
 
 func tokensForAppearance(a Appearance) ThemeTokens {
@@ -532,11 +547,7 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 		if tok.Empty() {
 			tok = ThemeTokens{Family: pack.Palette, Palette: paletteForFamily(pack.Palette)}
 		}
-		tok = tok.Resolve()
-		if a.FollowDesktop {
-			tok = withDesktopAccent(tok)
-		}
-		return withUserFonts(withEraFonts(tok, pack.Name), a.FontUI, a.FontMono)
+		return finishTokens(tok, pack.Name, a)
 	}
 	// The pack is not in this build ([Appearance.Missing]). Show the one
 	// this build would have shown if look.json had said nothing, not the

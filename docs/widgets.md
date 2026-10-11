@@ -1332,6 +1332,33 @@ spread. Refraction needs something sharp behind it, which is what the
 clear chrome panes have: an eighth of an alpha over the window's own
 content, no blur at all.
 
+**The material's numbers are the application's to set.** How much of the
+desktop comes through is `win.SetGlassTint` — the alpha of that colour,
+and nothing else; a look's own is as translucent as that look wanted its
+windows to be, which for a document-shaped one is barely at all. The
+blur *behind* the window is not settable by anyone:
+`ext_background_effect_v1` has one request, `set_blur_region`, and the
+compositor picks the strength.
+
+The material's own blur and the thickness of its edge are pack numbers —
+`glassBlur`, `menuBlur`, `glassBevel` — and an application sets them by
+adjusting the pack it loaded:
+
+```go
+pack, _ := style.LoadTheme("lumen-night")
+params := map[string]float32{}          // the registry's map is shared
+for k, v := range pack.Tokens.Params {  // so copy before changing it
+    params[k] = v
+}
+params["glassBlur"], params["glassBevel"] = 12, 4
+pack.Tokens.Params = params
+look := pack.Look()
+```
+
+`ThemePack.Look` builds from *that* pack. It used to go back to the
+registry by name, so the three lines above did nothing at all and said
+nothing about it.
+
 It can only ever apply to glass over the application's **own** content.
 For glass over the *desktop* the compositor does the blurring and the
 client never sees the result, so there is nothing to bend — on Wayland no

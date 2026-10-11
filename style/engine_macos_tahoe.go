@@ -351,7 +351,15 @@ func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b painteng
 // quarter there is no flat middle left and the whole thing reads as a
 // bubble.
 func tahoeBevel(l *Classic, b paintengine2d.Rect, r float32) float32 {
-	d := max(r*0.75, l.S(6))
+	// "glassBevel" is how thick the pane is, as a 1x design length. Unset
+	// it follows the corner, which is the only thing that said how
+	// sharply the pane turned away — and meant the one number that
+	// decides whether glass reads as a sheet or a slab could not be set
+	// at all, by a pack or by anyone.
+	d := l.S(l.P("glassBevel", 0))
+	if d <= 0 {
+		d = max(r*0.75, l.S(6))
+	}
 	return min(d, b.Dx()/3, b.Dy()/3)
 }
 

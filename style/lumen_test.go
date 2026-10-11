@@ -220,3 +220,66 @@ func TestSoftCornersAreAHintNotACurve(t *testing.T) {
 		t.Errorf("at twice the font size the hint is %v, want %v", got, float32(SoftRadius*2))
 	}
 }
+
+// **A pack carries its own tokens into its look.** An application sets
+// the material's numbers — the blur of a pane, the bevel on its edge —
+// by adjusting the pack it loaded and asking for its look. That used to
+// go back to the registry by name and drop the change on the floor, with
+// no error and nothing to see.
+func TestAPacksOwnTokensReachItsLook(t *testing.T) {
+	pack, ok := LoadTheme("lumen-night")
+	if !ok {
+		t.Skip("the macOS Tahoe engine is not in this build")
+	}
+	if got := pack.Look().P("glassBlur", -1); got != 7 {
+		t.Fatalf("the pack ships glassBlur %v, want 7", got)
+	}
+
+	// A copy with its own numbers: the map is shared with the registry's
+	// pack, so it has to be copied before it is changed.
+	tuned := pack
+	tuned.Tokens.Params = map[string]float32{}
+	for k, v := range pack.Tokens.Params {
+		tuned.Tokens.Params[k] = v
+	}
+	tuned.Tokens.Params["glassBlur"] = 19
+	tuned.Tokens.Params["glassBevel"] = 11
+
+	if got := tuned.Look().P("glassBlur", -1); got != 19 {
+		t.Errorf("the adjusted pack's look has glassBlur %v, want 19", got)
+	}
+	if got := tuned.Look().P("glassBevel", -1); got != 11 {
+		t.Errorf("the adjusted pack's look has glassBevel %v, want 11", got)
+	}
+	// And the registered pack is untouched: a caller tuning a copy must
+	// not restyle every other window in the process.
+	if again, _ := LoadTheme("lumen-night"); again.Look().P("glassBlur", -1) != 7 {
+		t.Error("adjusting a copy changed the registered pack")
+	}
+}
+
+// The bevel follows the corner when nothing says otherwise, and the
+// param when something does — so a pack or an application can say how
+// thick the glass is.
+func TestTheBevelTakesItsParam(t *testing.T) {
+	pack, ok := LoadTheme("lumen-night")
+	if !ok {
+		t.Skip("the macOS Tahoe engine is not in this build")
+	}
+	box := paintengine2d.XYWH(0, 0, 300, 120)
+	plain := tahoeBevel(pack.Look(), box, 20)
+	if plain <= 0 {
+		t.Fatalf("with no param the bevel is %v", plain)
+	}
+	tuned := pack
+	tuned.Tokens.Params = map[string]float32{"era": 2, "glassBevel": 11}
+	if got := tahoeBevel(tuned.Look(), box, 20); got != 11 {
+		t.Errorf("with glassBevel 11 the bevel is %v", got)
+	}
+	// Still held under a third of the smaller side, so a small control
+	// cannot be all edge.
+	small := paintengine2d.XYWH(0, 0, 24, 18)
+	if got := tahoeBevel(tuned.Look(), small, 20); got > 6.01 {
+		t.Errorf("on an 18-high control the bevel is %v, want at most a third", got)
+	}
+}
