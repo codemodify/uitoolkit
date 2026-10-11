@@ -23,7 +23,7 @@
 //
 //	go run ./examples/uitoolkit-sample-glass
 //	go run ./examples/uitoolkit-sample-glass -glass      # desktop blurred behind too
-//	go run ./examples/uitoolkit-sample-glass -theme tahoe
+//	go run ./examples/uitoolkit-sample-glass -theme tahoe-night   # Apple's own, for comparison
 //	go run ./examples/uitoolkit-sample-glass -flat       # the same window, no glass
 package main
 
@@ -42,7 +42,7 @@ import (
 )
 
 func main() {
-	theme := flag.String("theme", "tahoe-night", "the pack to run in")
+	theme := flag.String("theme", "lumen-night", "the pack to run in")
 	behind := flag.Bool("glass", false, "ask the compositor to blur the desktop behind the window")
 	flat := flag.Bool("flat", false, "no glass at all, for comparison")
 	shot := flag.String("shot", "", "paint one frame offscreen, write this PNG and exit")
