@@ -229,7 +229,8 @@ That is why a skin needs a dozen sprites rather than two hundred.
 | `button` | push buttons, dialog buttons, scrollbar step buttons |
 | `tool` | tool bar buttons and free toggles |
 | `field` | text fields and text areas |
-| `check` | the check box and radio well |
+| `check` | the check box well, and the radio's unless `radio` is bound |
+| `radio` | the radio well, for a skin whose radios are round where its check boxes are square (else `check`) |
 | `row` | list, tree and table row highlights |
 | `tab` | tabs |
 | `thumb` | scrollbar thumbs |

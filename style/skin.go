@@ -362,7 +362,7 @@ var skinPartNames = map[string]string{
 	"button":   "push buttons, dialog buttons, scrollbar step buttons",
 	"tool":     "tool bar buttons and free toggles",
 	"field":    "text fields and text areas",
-	"check":    "the check box and radio well",
+	"check":    "the check box well, and the radio's unless \"radio\" is bound",
 	"row":      "list, tree and table row highlights",
 	"tab":      "tabs",
 	"thumb":    "scrollbar thumbs",
@@ -375,6 +375,7 @@ var skinPartNames = map[string]string{
 
 	// Parts below are glyphs and whole controls the Role faces cannot
 	// express, each bound to one engine hook.
+	"radio":          "the radio well, where a skin wants a round one where its check box is square (else \"check\")",
 	"check.mark":     "the tick inside a checked box",
 	"radio.mark":     "the dot inside a selected radio",
 	"arrow.up":       "up arrows (scroll, spin, sort)",

@@ -257,28 +257,42 @@ func skinBaseForeground(l *Classic, role Role, st ControlState) paintengine2d.Co
 
 func (skinEngine) CheckIndicator(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, checked bool) {
 	sk := skinFor(l)
-	if sk == nil || !sk.checkLike(l, ctx, box, st, checked, "check.mark") {
+	if sk == nil || !sk.checkLike(l, ctx, box, st, checked, "check", "check.mark") {
 		under(l).CheckIndicator(l, ctx, box, st, checked)
 	}
 }
 
 func (skinEngine) RadioIndicator(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, selected bool) {
 	sk := skinFor(l)
-	if sk == nil || !sk.checkLike(l, ctx, box, st, selected, "radio.mark") {
+	if sk == nil || !sk.checkLike(l, ctx, box, st, selected, radioWell(sk), "radio.mark") {
 		under(l).RadioIndicator(l, ctx, box, st, selected)
 	}
 }
 
-// checkLike paints a check box or radio: the "check" well for its state,
-// then the mark over it when it is on. A skin that draws the on state into
-// the well itself needs no mark part — the well's "checked" art is enough.
-func (sk *Skin) checkLike(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, on bool, mark string) bool {
-	well := st
-	if on {
-		well |= StateChecked
+// radioWell is the part a radio's well comes from: its own where the skin
+// binds one, else the check box's.
+//
+// A radio is round and a check box is square in nearly every era, and for
+// as long as there was one part for both, a skin that bound it painted its
+// radios in its check boxes' well — square, with no way to say otherwise.
+// The fallback is what keeps every skin written before this painting as it
+// did.
+func radioWell(sk *Skin) string {
+	if sk != nil && sk.has("radio") {
+		return "radio"
 	}
-	drew := sk.draw(l, ctx, box, "check", well)
-	if !drew {
+	return "check"
+}
+
+// checkLike paints a check box or radio: the well part for its state, then
+// the mark over it when it is on. A skin that draws the on state into the
+// well itself needs no mark part — the well's "checked" art is enough.
+func (sk *Skin) checkLike(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, on bool, well, mark string) bool {
+	wellState := st
+	if on {
+		wellState |= StateChecked
+	}
+	if !sk.draw(l, ctx, box, well, wellState) {
 		return false
 	}
 	if on {
@@ -286,7 +300,7 @@ func (sk *Skin) checkLike(l *Classic, ctx *paintengine2d.Context, box paintengin
 		if st.Disabled() {
 			state = "disabled"
 		}
-		ink := sk.textColor(l, sk.part("check"), well)
+		ink := sk.textColor(l, sk.part(well), wellState)
 		if colorUnset(ink) {
 			ink = l.palette.TextOnAccent
 		}
@@ -776,7 +790,7 @@ func (skinEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b paint
 }
 
 func (skinEngine) DrawRadio(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string) {
-	underFor(l, "check").DrawRadio(l, ctx, b, st, selected, label)
+	underFor(l, "radio", "check").DrawRadio(l, ctx, b, st, selected, label)
 }
 
 func (skinEngine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
