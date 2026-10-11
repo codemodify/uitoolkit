@@ -1,7 +1,10 @@
 package widget
 
 import (
+	"fmt"
+
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/diag"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -48,6 +51,16 @@ func notifyPresented(from, c Component) {
 
 // ShowPopup places c on the window popup layer. c should already be Arranged
 // in window coordinates.
+//
+// The look reaches the popup *here* — a popup is a root, so it has no
+// look of its own until it is given the window's ([PreparePopup]) — and
+// a caller that measured it before calling this measured it in the
+// toolkit's default look at scale 1. On a screen at twice that the popup
+// was then drawn at twice the size inside a box of the first: its words
+// cut short, its last rows off the bottom. So when the look changes
+// under a popup that was already arranged, the popup is measured again
+// and grown where it stands. Measuring after [PreparePopup], which the
+// Place* helpers all do, leaves nothing to grow.
 func ShowPopup(from Component, popup Component) bool {
 	if from == nil || popup == nil {
 		return false
@@ -60,11 +73,110 @@ func ShowPopup(from Component, popup Component) bool {
 	if !ok {
 		return false
 	}
+	was := lookOf(popup)
 	popup.SetHost(h)
 	inheritLook(from, popup, h)
+	if now := lookOf(popup); measuresDifferently(was, now) {
+		refitPopup(popup, was, now)
+	}
 	ph.SetPopup(popup)
 	notifyPresented(from, popup)
 	return true
+}
+
+// lookOf is the look a popup resolves to, or nil for one that has none to
+// resolve (a component that is not a widget).
+func lookOf(c Component) style.LookAndFeel {
+	l, ok := c.(interface{ Look() style.LookAndFeel })
+	if !ok {
+		return nil
+	}
+	return l.Look()
+}
+
+// measuresDifferently reports whether a size measured in look a could
+// have come out other than in look b: the display scale and every metric
+// a widget measures itself from. It is a comparison of *values*, not of
+// looks: the same look is re-derived behind a theme scope often enough —
+// every open of a combo box in a themed pane hands its menu a fresh
+// object — and re-arranging a popup because a pointer moved would undo a
+// placement that was already right.
+func measuresDifferently(a, b style.LookAndFeel) bool {
+	if a == nil || b == nil {
+		return a != b
+	}
+	return style.LookScale(a) != style.LookScale(b) || a.Metrics() != b.Metrics()
+}
+
+// refitPopup grows a popup that was arranged in a look other than the one
+// it is about to be drawn in, which is what a caller who measured before
+// [ShowPopup] could only have done.
+//
+// It grows and never shrinks: a popup deliberately arranged smaller than
+// its content — a panel holding a list that scrolls — is a size somebody
+// chose, and the look changing is no reason to overrule it. What was
+// chosen in the *wrong* look is not a size anybody chose, and a box that
+// is too small for the content is the one case this can tell apart.
+//
+// Growing stays inside the window, by the same clamp the Place* helpers
+// use: a popup that would now hang off the bottom is moved up, and one
+// taller than the window keeps the room there is.
+func refitPopup(popup Component, was, now style.LookAndFeel) {
+	b := popup.Bounds()
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		// Never arranged: there is no size to be wrong, and whoever shows
+		// a popup like this is placing it after.
+		return
+	}
+	want := popup.Measure(layout.Unbounded())
+	box := popupSurfaceBox(popup)
+	maxW, maxH := want.X, want.Y
+	if !box.Empty() {
+		maxW, maxH = box.Dx()-8, box.Dy()-8
+	}
+	if want.Y > maxH {
+		// Taller than the window: measure against the room there is,
+		// which is how a long list becomes one that scrolls.
+		if sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: maxH}); sz.Y > 0 {
+			want = paintengine2d.Pt(max(sz.X, want.X), sz.Y)
+		}
+	}
+	w, h := b.Dx(), b.Dy()
+	if want.X > w {
+		w = min(want.X, maxW)
+	}
+	if want.Y > h {
+		h = min(want.Y, maxH)
+	}
+	if w <= b.Dx() && h <= b.Dy() {
+		return
+	}
+	x, w := shiftPopupAxis(b.Min.X, w, box.Min.X, box.Max.X, 4)
+	y, h := shiftPopupAxis(b.Min.Y, h, box.Min.Y, box.Max.Y, 4)
+	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+	diag.Report(diag.Finding{
+		Level: diag.Note,
+		Area:  "popup",
+		Asked: fmt.Sprintf("a popup shown at the %gx%g it was arranged at",
+			b.Dx(), b.Dy()),
+		Got: fmt.Sprintf("%gx%g, its size in the window's look (it was measured in %s at scale %g, and is drawn in %s at scale %g)",
+			w, h, lookName(was), style.LookScale(was), lookName(now), style.LookScale(now)),
+		Fix: "widget.PreparePopup(from, popup) before measuring it, or place it with widget.PlacePopupForAnchor / PlacePopup",
+	})
+}
+
+// lookName is a look's pack name for a diagnostic, and "the default look"
+// for one that has none.
+func lookName(l style.LookAndFeel) string {
+	if l == nil {
+		return "no look"
+	}
+	if p, ok := l.(interface{ Pack() string }); ok {
+		if n := p.Pack(); n != "" {
+			return n
+		}
+	}
+	return "the default look"
 }
 
 // inheritLook gives a popup, a submenu, an overlay or a tooltip the look
