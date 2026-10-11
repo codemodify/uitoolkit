@@ -100,6 +100,9 @@ type Window struct {
 	// flip is the window's two-sided content, where it has any, and
 	// flipShapes / flipShaped whether the window takes the turning
 	// card's silhouette and whether it is wearing one now (app/flip.go).
+	// onDeviceClosing runs before the window's GPU device is closed,
+	// with its context still current (app/paintdevice.go).
+	onDeviceClosing func()
 	// glassUnder confines the compositor's blur to one component
 	// (app/shape.go); nil blurs behind the whole window.
 	glassUnder widget.Component

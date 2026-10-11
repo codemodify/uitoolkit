@@ -646,8 +646,13 @@ func (a *Application) Run() error {
 	// work nothing will ever drain would be a passphrase left on the
 	// clipboard (platform.SetLoopPoster).
 	platform.SetLoopPoster(a.Post)
+	// And the other thing only this package can answer: which window a
+	// surface belongs to, so a backend about to close a GPU device can
+	// give that window a moment with its context still current.
+	platform.SetGPUClosing(a.surfaceClosingGPU)
 	defer func() {
 		platform.SetLoopPoster(nil)
+		platform.SetGPUClosing(nil)
 		a.mu.Lock()
 		a.looping = false
 		a.mu.Unlock()
@@ -927,4 +932,20 @@ func (a *Application) remove(w *Window) {
 		}
 	}
 	a.windows = out
+}
+
+// surfaceClosingGPU runs the before-close callback of whichever window
+// owns surf. It is called from inside a backend's teardown, on this
+// goroutine, with the dying context still current
+// ([Window.OnPaintDeviceClosing]).
+func (a *Application) surfaceClosingGPU(surf platform.Surface) {
+	if a == nil || surf == nil {
+		return
+	}
+	for _, w := range a.Windows() {
+		if w != nil && w.surf == surf {
+			w.deviceClosing()
+			return
+		}
+	}
 }

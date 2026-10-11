@@ -58,3 +58,50 @@ func (n *paintDeviceNotice) paintDeviceEvent(dev paintengine2d.Device) []Event {
 	}
 	return []Event{{Kind: EventPaintDevice}}
 }
+
+// closingGPU is what to run, on the UI goroutine and with the old
+// context still current, immediately before a surface's GPU device is
+// closed.
+//
+// After-the-fact notice is not enough for an application that holds a
+// renderer *on* the device. libmpv's render API requires the context it
+// was created against to be current when its renderer is destroyed, and
+// every backend's closeGPU closes the device before queuing
+// [EventPaintDevice] — so by the time anything heard, the context the
+// application needed was gone. It had no moment in which to let go.
+//
+// It is a package-level hook rather than a field on each surface for the
+// same reason [SetLoopPoster] is: the app package owns the one UI
+// goroutine and knows which window a surface belongs to, and three
+// backends should not each grow their own callback plumbing.
+var closingGPU func(Surface)
+
+// SetGPUClosing registers that hook, and nil clears it. The app package
+// sets it; it is not for applications, which use
+// Window.OnPaintDeviceClosing.
+func SetGPUClosing(fn func(Surface)) { closingGPU = fn }
+
+// noteGPUClosing runs the hook for s. A backend calls it as the last
+// thing before it closes a GPU device, never after.
+func noteGPUClosing(s Surface) {
+	if closingGPU != nil && s != nil {
+		closingGPU(s)
+	}
+}
+
+// gpuCloser is what a backend's GPU device offers here: closing it.
+type gpuCloser interface{ Close() error }
+
+// closeGPUDevice tells the application and then closes dev, in that
+// order — which is the whole of this: an application holding a renderer
+// on the device gets its moment while the context is still current.
+//
+// Both backends go through it so the order is written once. Doing it by
+// hand in each was how the order came to be wrong in the first place,
+// and nothing about a hand-written sequence can be tested without a GPU.
+func closeGPUDevice(s Surface, dev gpuCloser) {
+	noteGPUClosing(s)
+	if dev != nil {
+		_ = dev.Close()
+	}
+}

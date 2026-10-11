@@ -129,7 +129,9 @@ func (s *wlSurface) closeGPU() {
 	}
 	s.gpuUnpainted = false
 	if s.gpu != nil {
-		_ = s.gpu.Close()
+		// Tells the application, then closes, in that order
+		// (paintdevice.go).
+		closeGPUDevice(s, s.gpu)
 		s.gpu = nil
 	}
 	if s.eglWin != nil {

@@ -57,3 +57,37 @@ func (w *Window) PaintDevice() paintengine2d.Device {
 func (w *Window) UsesGPU() bool {
 	return w != nil && w.surf != nil && platform.SurfaceUsesGPU(w.surf)
 }
+
+// OnPaintDeviceClosing is called immediately *before* this window's GPU
+// device is closed, while its context is still current.
+//
+// [Window.OnPaintDeviceChange] is the other half and says what happened;
+// this one is the moment to do something about it. An application that
+// holds a renderer on the device — libmpv's, whose render API requires
+// the context it was created against to be current when the renderer is
+// destroyed — has nowhere else to let go: every backend closed the
+// device and only then queued the change, so by the time anything heard,
+// the context it needed was gone.
+//
+// It runs on the UI goroutine, from inside the backend's teardown, so it
+// must do its own cleanup and return. It must not resize or repaint the
+// window, and what it releases it has to make again when
+// OnPaintDeviceChange reports whatever [Window.PaintDevice] now answers.
+//
+// It is not called for a device that is lost rather than closed — a GPU
+// that went away mid-run takes its context with it and there is no
+// moment to run in. OnPaintDeviceChange still reports that, which is why
+// an application needs both.
+func (w *Window) OnPaintDeviceClosing(fn func()) {
+	if w == nil {
+		return
+	}
+	w.onDeviceClosing = fn
+}
+
+// deviceClosing runs the window's before-close callback.
+func (w *Window) deviceClosing() {
+	if w != nil && w.onDeviceClosing != nil {
+		w.onDeviceClosing()
+	}
+}

@@ -63,7 +63,10 @@ func (s *x11Surface) closeGPU() {
 	if s == nil || s.gpu == nil {
 		return
 	}
-	_ = s.gpu.Close()
+	// While the context is still current: an application holding a
+	// renderer on this device has to destroy it against the context it
+	// was made against (paintdevice.go).
+	closeGPUDevice(s, s.gpu)
 	s.gpu = nil
 	s.notePaintDevice()
 }
