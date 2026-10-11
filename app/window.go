@@ -951,6 +951,37 @@ func (w *Window) RequestLayout() {
 	w.fullInvalidate()
 }
 
+// Layout lays the window out now, the way its next frame would: the title
+// bar and the content measured and arranged at the window's current size.
+//
+// A window is otherwise laid out at its next frame, which is the right
+// time for almost everything — an application that changed its content
+// says [Window.RequestLayout] and lets the frame do it. It is the wrong
+// time for anything that wants to *read* the laid-out window before it is
+// drawn: a picture of the window taken the moment it is shown (a card
+// turning over, a cross-fade between two pages) needs boxes, and until
+// this an application had to measure and arrange the layers itself to get
+// them.
+//
+// It is safe to call again: a window already laid out at this size is
+// measured and arranged to the same boxes.
+func (w *Window) Layout() {
+	if w == nil || w.Closed() {
+		return
+	}
+	// This is the frame's own layout step, so it is the whole of it: a
+	// window that needed laying out drops what the last layout cached of
+	// it (the scene's layers are of a tree whose boxes have moved) and is
+	// repainted whole, exactly as it would have been had the frame done
+	// the laying out itself.
+	stale := !w.laid
+	w.layout()
+	if stale {
+		w.dropScene()
+		w.fullInvalidate()
+	}
+}
+
 func (w *Window) fullInvalidate() {
 	w.markPopsDirty()
 	ww, hh := w.surf.Size()
