@@ -75,6 +75,11 @@ type Window struct {
 	// hiddenCaption and captionActions are this window's own say over
 	// its caption buttons (app/frame.go).
 	noBorder bool
+	// frameShadow is whether the frame the toolkit draws keeps the look's
+	// shadow, and with it the transparent margin the shadow is drawn in
+	// (Window.SetFrameShadow). It starts true for every window, which is
+	// why the field says what it wants rather than what it refuses.
+	frameShadow bool
 	// capStyle is the window's say over the look's era about whether its
 	// own title bar is the caption (style.CaptionMerged) or sits under
 	// the look's strip. See Window.SetCaptionStyle.
@@ -242,8 +247,9 @@ type Window struct {
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
 	w := &Window{
 		app: a, surf: surf, full: true,
-		tipDelay: 450 * time.Millisecond,
-		layers:   widget.NewSceneCache(),
+		tipDelay:    450 * time.Millisecond,
+		layers:      widget.NewSceneCache(),
+		frameShadow: true,
 	}
 	w.scale = a.windowScale(surf)
 	w.look = a.scaledLook(w.scale)

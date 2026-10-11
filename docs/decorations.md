@@ -489,6 +489,15 @@ margin   = max(the look's shadow reach, the 10 px resize band), per edge,
 | Full screen | no frame at all | | |
 | Tiled (`xdg_toplevel` `tiled_*`, KWin quick tile) | none on the tiled edges | square where a tiled edge meets | none on those edges |
 | No compositing manager (X11) | none | square | none — `WindowState.Solid`, GTK's `.solid-csd` |
+| `Window.SetFrameShadow(false)` | none | the look's | none |
+
+`Window.SetFrameShadow(false)` is the application's say here, for a window
+that wants to be a crisp rectangle: the look's border, corners, caption and
+buttons as they are, and no soft edge fading out of the window — so no
+margin either, because the margin *is* where the shadow was drawn. Resizing
+moves inside the window's edge, exactly as it already is under a look that
+drops no shadow. It cannot ask for a shadow a look does not draw: `true` is
+"the look's own", not "a shadow please".
 
 A window's **silhouette** follows the same rules one step further: a
 maximized, full-screen or tiled window drops its shape as it drops its

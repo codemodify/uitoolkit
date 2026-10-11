@@ -103,6 +103,16 @@ type DecorationState struct {
 	// look's. Zero: the look's own. [DecorationOf] applies it for every
 	// look, and the caption's buttons shrink to stand in it.
 	Caption float32
+	// NoShadow: the application asked for crisp edges
+	// ([app.Window.SetFrameShadow]), so the frame keeps its border, its
+	// corners and its caption and drops the soft shadow round it — and
+	// with it the transparent margin the shadow was drawn in. The window
+	// is then exactly the rectangle it appears to be.
+	//
+	// It is the application's word and not the look's: a look that drops
+	// its own shadow says so by having none. A window cannot ask a look
+	// for a shadow it does not draw.
+	NoShadow bool
 }
 
 // CaptionStyle is how an application's own title bar meets the look's
@@ -381,6 +391,12 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	if st.Maximized || st.Solid {
 		s.Radius, s.Shadow = [4]float32{}, Insets{}
 		return s
+	}
+	if st.NoShadow {
+		// Crisp edges: the border, the corners and the caption as the look
+		// draws them, and nothing soft outside the window. The margin goes
+		// with it, because the margin *is* where the shadow was drawn.
+		s.Shadow = Insets{}
 	}
 	s.Radius = tiledRadius(s.Radius, st.Tiled)
 	s.Shadow = tiledShadow(s.Shadow, st.Tiled)

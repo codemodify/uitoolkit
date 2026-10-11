@@ -158,6 +158,39 @@ func (w *Window) SetBorderless(v bool) {
 // Borderless reports whether the look's border has been dropped.
 func (w *Window) Borderless() bool { return w != nil && w.noBorder }
 
+// SetFrameShadow says whether the frame the toolkit draws keeps the
+// look's soft shadow round the window. The default is true: the look's
+// own frame, shadow and all.
+//
+// False is for a window that wants to be a crisp rectangle — the whole
+// window exactly where its border is, with no soft edge fading out of it.
+// What goes with the shadow is the *transparent margin* it was drawn in:
+// a window with a shadow is a surface bigger than the window it shows,
+// and without one the surface is the window. Everything else stays — the
+// border, the corners, the caption, the buttons, and resizing, whose band
+// moves inside the window's edge exactly as it already is under a look
+// that drops no shadow.
+//
+// It cannot ask for a shadow a look does not draw: true is "the look's
+// own", not "a shadow please". And it does nothing under a frame the
+// desktop draws, where the shadow is the desktop's.
+func (w *Window) SetFrameShadow(on bool) {
+	if w == nil || w.frameShadow == on {
+		return
+	}
+	w.frameShadow = on
+	// The surface's own size changes with the margin, so this is a frame
+	// change and not a repaint: applyFrame asks for the new buffer at the
+	// next layout.
+	w.lookShapeCur = nil
+	w.laid = false
+	w.dropScene()
+	w.fullInvalidate()
+}
+
+// FrameShadow reports whether the window keeps the look's shadow.
+func (w *Window) FrameShadow() bool { return w == nil || w.frameShadow }
+
 // SetCaptionStyle says whether this window's own title bar *is* the
 // caption or sits in a row under the look's title strip, overriding what
 // the pack's era would have decided.

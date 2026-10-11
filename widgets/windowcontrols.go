@@ -245,6 +245,7 @@ func frameState(h widget.FrameHost, custom bool) style.DecorationState {
 			st.Role = r.FrameRole()
 			st.Caption = r.CaptionHeight()
 			st.NoBorder = r.Borderless()
+			st.NoShadow = !r.FrameShadow()
 		}
 	}
 	return st

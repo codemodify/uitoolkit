@@ -107,4 +107,8 @@ type FrameRequests interface {
 	// Borderless reports that the window's chrome runs to its edges, so
 	// the frame draws no line down the sides or along the bottom.
 	Borderless() bool
+	// FrameShadow reports whether the window wants the look's shadow
+	// round its frame. False drops it, and the transparent margin it was
+	// drawn in with it ([app.Window.SetFrameShadow]).
+	FrameShadow() bool
 }
