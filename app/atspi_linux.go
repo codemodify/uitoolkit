@@ -200,6 +200,21 @@ func (b *atspiBridge) sync() {
 		}
 		b.win = win
 	}
+	// What the windows asked to have said, politely, before the focus
+	// work: an announcement is about what just happened, and a focus
+	// move that happened with it is the newer news.
+	if said := b.app.takeAnnouncements(); len(said) > 0 {
+		path := atspiRootPath
+		if win != nil {
+			path = b.windowPath(win)
+		}
+		for _, text := range said {
+			// Object:Announcement, politeness 1 (polite): spoken after
+			// whatever is being read, never cutting it off. AT-SPI's own
+			// name for ARIA's aria-live="polite".
+			b.emitData(path, "Announcement", "", atspiPolite, 0, text)
+		}
+	}
 	if win == nil {
 		return
 	}
@@ -226,6 +241,10 @@ func (b *atspiBridge) sync() {
 	b.emit(path, "Object", "StateChanged", "focused", 1)
 	b.focus, b.seen = path, now
 }
+
+// atspiPolite is AT-SPI's politeness for an announcement that waits its
+// turn (Atspi::Live polite); 2 would interrupt.
+const atspiPolite int32 = 1
 
 // atspiWatched are the states whose changes a screen reader speaks.
 var atspiWatched = []struct {

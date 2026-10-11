@@ -114,7 +114,12 @@ type Application struct {
 	// belongs to the application, not to a window: a drag started in one
 	// is dropped on another, and a desktop carries only one at a time.
 	drag *dragRun
-	quit atomic.Bool
+	// announcements are what the windows have asked assistive technology
+	// to say, waiting for the adapter to drain them (app/announce.go).
+	// They are the application's rather than a window's because the
+	// adapter is: one bridge speaks for every window.
+	announcements []string
+	quit          atomic.Bool
 	// trimOwed, stir: see trim.go. trimAt and stirSeen belong to the run
 	// loop.
 	trimOwed atomic.Bool

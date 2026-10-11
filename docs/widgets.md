@@ -162,6 +162,7 @@ names) is in [compare.md](compare.md).
 | Text prompt | `Prompt` (`MessageBoxOptions.Input`) | `QInputDialog::getText` | entry in a `GtkDialog` ≈ | — | `dialog.NewEntry` | `InputBox` (VB) | — | `NSAlert` + accessory ≈ | `TextField` in an `alert` | — |
 | Wizard | `Wizard` / `WizardPage` (validation, optional and skipped pages, steps) | `QWizard` / `QWizardPage` | `GtkAssistant` (deprecated in 4.10) | — | — | — | — (`NavigationWindow` ≈) | `NSPageController` ≈ | — | [sheet](screenshots/breadth/wizard-1x.webp) |
 | Tooltip | `Tip` / `TipWrap` | `QToolTip` / `ToolTip` | widget tooltip | `ToolTip` | widget `ToolTip` | `ToolTip` | `ToolTip` | tooltip | `.help()` | [thumb](screenshots/compare/tooltip.png) · [gallery](screenshots/gallery-tooltip.png) |
+| Passing note | `Toast` / `ShowToast` (over the content, stacked, announced) | `ToolTip` with a timeout ≈ | `AdwToast` | `NotificationCard` ≈ | — | `ToolTip.Show` ≈ | `Snackbar` (toolkit extras) ≈ | `NSUserNotification` (out of process) ≈ | — | — |
 
 `FileDialog` is an in-process modal list + path field, not a native portal /
 COM picker. Its modes are `FileOpen`, `FileSave` and `FileOpenFolder` (a
@@ -179,6 +180,23 @@ slides against the screen; one placed by hand says so with
 `widget.SetPopupAnchor`. A popup component with a hit shape
 (`SetHitShapeFunc`) is cut to it — surface, shadow and input region
 ([shapes.md](shapes.md#popups)).
+
+A **passing note** is the other thing a window has to say and nowhere to
+say it: what just happened. `widgets.ShowToast(from, text, kind, d)` puts
+a line over the content — the kind picks its mark and the ink of its
+leading edge (`ToastInfo`, `ToastSuccess`, `ToastWarning`, `ToastError`)
+— for `d`, or for `ToastDuration` where `d` is zero, or until
+`Toast.Dismiss` where it is negative, which is what a note about
+something still happening wants. Several notes stack, newest nearest the
+edge. A note is read and not used: nothing in it answers a press, so the
+pointer reaches the content under it, and there is no action button to
+chase. It fades in and out, at once under reduced motion
+(`style.Animations`), and every note is said to assistive technology as a
+polite announcement (`Window.Announce`, the toolkit's word for ARIA's
+polite live region) as well as standing in the accessibility tree with
+the role of a status bar — because nothing moved the focus, and a screen
+reader would otherwise never hear of it. A status bar is the other
+answer, and it never goes and takes a row of the layout for ever.
 
 Over all of it, and under the popups, is the **cover**: `Window.SetCover`
 lays a component over the whole window inside its frame, title bar and

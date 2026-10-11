@@ -40,7 +40,11 @@ type Window struct {
 	// cover is the layer over the whole window inside its frame, title
 	// bar and content as one (app/cover.go). It is under the popups and
 	// over everything else.
-	cover   widget.Component
+	cover widget.Component
+	// toasts is the layer of passing notes over the content (app/toast.go
+	// and widgets/toast.go): over everything, under the popups, and
+	// never hit-tested.
+	toasts  widget.Component
 	popup   widget.Component
 	tooltip widget.Component
 	look    style.LookAndFeel
@@ -1970,6 +1974,7 @@ func (w *Window) layout() {
 		}
 	}
 	w.arrangeCover()
+	w.arrangeToasts()
 	if w.statusMenu && w.popup != nil {
 		w.popup.Arrange(box)
 	}
@@ -2189,6 +2194,9 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	if w.cover != nil {
 		widget.PaintTree(w.cover, ctx, dirty)
 	}
+	if w.toasts != nil {
+		widget.PaintTree(w.toasts, ctx, dirty)
+	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
 			w.paintShadow(ctx, c, style.PopupMenu, dirty)
@@ -2397,6 +2405,9 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	}
 	if w.cover != nil {
 		widget.RecordTree(w.cover, rec, ctx, nil, w.layers, true)
+	}
+	if w.toasts != nil {
+		widget.RecordTree(w.toasts, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
