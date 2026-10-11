@@ -5299,6 +5299,27 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	C.ui_wl_region(s.conn.compositor, s.surf, 0, &band[0], 1)
 	// Opaque: the window less its rounded corners. Nothing is claimed
 	// opaque that is not — a compositor skips what is behind it.
+	//
+	// **A window with glass claims nothing.** An opaque region is a
+	// promise that the compositor need not draw what is behind, and a
+	// window asking for the desktop to be blurred behind it is asking
+	// for exactly that drawing. Claiming both says the surface is solid
+	// and the blur is never composited: the window comes out flat, which
+	// is what every unshaped glass window did until this. It went unseen
+	// because the one sample that showed glass is a *shaped* window, and
+	// a shape takes applyShapeLocked instead, which honours Frame.Opaque
+	// and states an empty region.
+	//
+	// The region could be the window less the blur — the opaque half of
+	// a window with a glass sidebar really is solid, and saying so would
+	// save the compositor that work. It is not worth a region
+	// subtraction here: the promise has to be exactly right or it is
+	// visible corruption, and the cost of claiming nothing is a little
+	// compositing on the few windows that ask for glass at all.
+	if len(s.frame.Blur) > 0 {
+		C.ui_wl_region_none(s.surf, 1)
+		return
+	}
 	rects := flatRects(OpaqueRects(box, s.frame.Radius, s.deviceScale()))
 	if len(rects) == 0 {
 		C.ui_wl_region_none(s.surf, 1)
