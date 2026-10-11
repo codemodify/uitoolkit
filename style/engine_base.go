@@ -158,6 +158,9 @@ func (BaseEngine) ToolBarInsets(l *Classic) Insets { return Insets{Left: l.S(6),
 // ControlFont: every control is labelled in the body font.
 func (BaseEngine) ControlFont(l *Classic, role Role) *Font { return l.body }
 
+// ControlLabel: the words the application wrote. Only a skin changes them.
+func (BaseEngine) ControlLabel(l *Classic, role Role, s string) string { return s }
+
 // ItemFocus: a one-pixel ring in the focus colour just inside the row
 // (Fusion and GTK mark the current item this way).
 func (BaseEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {

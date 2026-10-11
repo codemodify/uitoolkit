@@ -2,6 +2,7 @@ package style
 
 import (
 	"math"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -518,7 +519,7 @@ func (skinEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2
 			ink = l.palette.TextMuted
 		}
 	}
-	l.drawFittedText(ctx, font, label, b, ink, AlignCenter, 8)
+	l.drawFittedText(ctx, font, l.ControlLabel(RoleTab, label), b, ink, AlignCenter, 8)
 	if st.Focused() {
 		l.DrawFocusRing(ctx, b.Inset(l.S(2)))
 	}
@@ -611,6 +612,48 @@ func (skinEngine) ControlFont(l *Classic, role Role) *Font {
 }
 
 // textFor is a part's text role, or the skin's "control" default.
+// ControlLabel puts a role's label in capitals where the skin's text role
+// for that part asks for it.
+//
+// A text role's case was applied where the frame paints the window's title
+// and nowhere else, so a skin could ask for capitals and get them on one
+// string in the whole window. It is the same choice about the same thing —
+// how the art reads — wherever the engine paints a label for a part the
+// skin binds.
+func (skinEngine) ControlLabel(l *Classic, role Role, s string) string {
+	if s == "" {
+		return s
+	}
+	sk := skinFor(l)
+	if sk == nil {
+		return s
+	}
+	name, ok := skinCaseRolePart[role]
+	if !ok {
+		return s
+	}
+	if t := sk.textFor(name); t != nil && t.Upper {
+		// The skin's choice, and only its painting: the label the
+		// application set is still the label, and that is what the
+		// accessibility tree reads.
+		return strings.ToUpper(s)
+	}
+	return s
+}
+
+// skinCaseRolePart is the roles whose label the engine itself paints, and
+// the part each is bound with. The case belongs to a label the *chrome*
+// writes — a button, a tab, a tool item, the word in a closed combo box —
+// and not to what a control shows of the person's own content: a field's
+// text, a row's data and a menu's items are theirs, and a skin putting
+// them in capitals would be rewriting the document to suit the art.
+var skinCaseRolePart = map[Role]string{
+	RoleButton: "button",
+	RoleTool:   "tool",
+	RoleTab:    "tab",
+	RoleCombo:  "combo",
+}
+
 func (sk *Skin) textFor(part string) *SkinText {
 	if p := sk.part(part); p != nil && p.Text != nil {
 		return p.Text

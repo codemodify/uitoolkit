@@ -246,8 +246,11 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	w := style.Dip(lk, floor)
 	f := style.ControlFontOf(lk, style.RoleCombo)
 	for _, s := range c.Items {
-		tw := f.Advance(s)
-		if ink := f.InkWidth(s); ink > tw {
+		// What the closed box will paint: a look whose art asks for
+		// capitals paints them, and they are wider than what was written.
+		shown := style.ControlLabelOf(lk, style.RoleCombo, s)
+		tw := f.Advance(shown)
+		if ink := f.InkWidth(shown); ink > tw {
 			tw = ink
 		}
 		tw += style.Dip(lk, 44)

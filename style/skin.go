@@ -280,6 +280,12 @@ type SkinText struct {
 	// their titles in capitals — and it changes only the painting: the
 	// window keeps the title the app gave it, and that is what the
 	// accessibility tree reads.
+	//
+	// It reaches the labels the chrome writes: the window's title, and a
+	// push button, a tool item, a tab or a closed combo box whose part is
+	// bound to the role ([Classic.ControlLabel]). It does not reach what
+	// a control shows of the person's own content — a field's text, a
+	// row, a menu's items — which is theirs and not the art's.
 	Upper bool
 }
 

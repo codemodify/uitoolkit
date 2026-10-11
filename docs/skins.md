@@ -718,6 +718,15 @@ role sets it in capitals — Minim's panels print their titles that way, as the
 era did — and it is painting only: the window keeps the title the app gave
 it, and that is what a screen reader and the desktop's window list read.
 
+The case reaches the labels the chrome itself writes: the window's title,
+a push button, a tool item, a tab, and the word a closed combo box shows,
+each from the role its part is bound with. It does not reach what a
+control shows of the person's own content — a field's text, a list or
+table row, a menu's items — because a skin dresses an app's window and
+does not get to rewrite its document to suit the art. Widgets measure a
+label in the case it will be painted in, so a button in capitals is as
+wide as its capitals.
+
 ## What a skin cannot do
 
 **Carry behaviour.** Not a gap: a decision. No scripting, no bytecode, no

@@ -165,7 +165,7 @@ func NewButton(text string, onClick func()) *Button {
 func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := b.Look()
 	m := lk.Metrics()
-	w := style.ControlFontOf(lk, style.RoleButton).Advance(b.Text) + m.Pad*2 + style.Dip(lk, 16)
+	w := style.ControlAdvanceOf(lk, style.RoleButton, b.Text) + m.Pad*2 + style.Dip(lk, 16)
 	h := m.ControlH
 	if b.Icon != style.IconNone {
 		// One strip, for the mark, and the label is centred in what is left
@@ -419,7 +419,7 @@ func (b *ToolButton) Measure(c layout.Constraints) paintengine2d.Point {
 		}
 	}
 	if b.Text != "" {
-		w += style.ControlFontOf(lk, style.RoleTool).Advance(b.Text)
+		w += style.ControlAdvanceOf(lk, style.RoleTool, b.Text)
 	}
 	if b.Text == "" && b.Icon == style.IconNone && w < h {
 		w = h

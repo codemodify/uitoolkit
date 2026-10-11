@@ -107,6 +107,13 @@ type Engine interface {
 	// ControlFont is the face the look labels a control of role with
 	// (Metal's bold buttons and menus); widgets measure labels with it.
 	ControlFont(l *Classic, role Role) *Font
+	// ControlLabel is the label the look *paints* for a control of role,
+	// given the one the application set: the words as written for every
+	// engine but one, and in capitals where a skin's text role asks for
+	// them ("case": "upper"). It is painting only — the application's
+	// string is what a screen reader reads and what a test searches for —
+	// and widgets measure with it so a label in capitals has room.
+	ControlLabel(l *Classic, role Role, s string) string
 	// ItemFocus marks the current row of a focused view over the painted
 	// row b (Win95's dotted rectangle); st is the row's state.
 	ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
@@ -699,6 +706,42 @@ type ControlFontLook interface {
 
 // ControlFont implements [ControlFontLook].
 func (l *Classic) ControlFont(role Role) *Font { return l.eng().ControlFont(l, role) }
+
+// ControlLabelLook names the label a look paints for a control role.
+type ControlLabelLook interface {
+	ControlLabel(role Role, s string) string
+}
+
+// ControlLabel implements [ControlLabelLook].
+func (l *Classic) ControlLabel(role Role, s string) string {
+	return l.eng().ControlLabel(l, role, s)
+}
+
+// ControlLabelOf is the label lk paints for role, given the one the
+// application set: the words as written unless the look's art asks for
+// capitals. Measure with this and paint with this, so the two agree.
+func ControlLabelOf(lk LookAndFeel, role Role, s string) string {
+	if lk == nil || s == "" {
+		return s
+	}
+	if c, ok := lk.(ControlLabelLook); ok {
+		return c.ControlLabel(role, s)
+	}
+	return s
+}
+
+// ControlAdvanceOf is the width a label of role needs in lk: the face the
+// look labels with, measuring the words the look will actually paint. A
+// widget that measures the string it was given and a look that paints
+// another one do not agree, and the label is squeezed or clipped by the
+// difference.
+func ControlAdvanceOf(lk LookAndFeel, role Role, s string) float32 {
+	f := ControlFontOf(lk, role)
+	if f == nil || s == "" {
+		return 0
+	}
+	return f.Advance(ControlLabelOf(lk, role, s))
+}
 
 // ControlFontOf is the face lk labels role with: its ControlFont, else its
 // body font. Widgets measure labels with it so a bold look's text fits.

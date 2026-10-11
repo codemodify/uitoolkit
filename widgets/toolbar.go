@@ -242,8 +242,9 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 		}
 		return btn
 	}
-	textW := t.Look().Font().InkWidth(it.Text)
-	if adv := style.ControlFontOf(t.Look(), style.RoleTool).Advance(it.Text); adv > textW {
+	label := style.ControlLabelOf(t.Look(), style.RoleTool, it.Text)
+	textW := t.Look().Font().InkWidth(label)
+	if adv := style.ControlAdvanceOf(t.Look(), style.RoleTool, it.Text); adv > textW {
 		textW = adv
 	}
 	w := pad*2 + textW

@@ -37,7 +37,9 @@ func (s *Segmented) segW() float32 {
 	f := style.ControlFontOf(lk, style.RoleButton)
 	var w float32
 	for _, t := range s.Segments {
-		if a := f.Advance(t); a > w {
+		// A segment is painted as a tool button, so the case its label is
+		// painted in is the tool part's.
+		if a := f.Advance(style.ControlLabelOf(lk, style.RoleTool, t)); a > w {
 			w = a
 		}
 	}

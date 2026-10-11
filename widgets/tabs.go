@@ -150,7 +150,6 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 		return nil
 	}
 	lk := t.Look()
-	f := style.ControlFontOf(lk, style.RoleTab)
 	h := t.LocalBounds().Dy()
 	margin := style.Dip(lk, 4)
 	x := margin
@@ -172,7 +171,7 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	minW := style.Dip(lk, 56)
 	var total float32
 	for k, i := range vis {
-		ws[k] = max(f.Advance(t.Titles[i])+style.Dip(lk, 28), minW)
+		ws[k] = max(style.ControlAdvanceOf(lk, style.RoleTab, t.Titles[i])+style.Dip(lk, 28), minW)
 		total += ws[k]
 	}
 	total -= ov * float32(len(vis)-1)

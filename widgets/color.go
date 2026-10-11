@@ -47,7 +47,7 @@ func ColorHex(c paintengine2d.Color) string {
 func (b *ColorButton) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := b.Look()
 	m := lk.Metrics()
-	w := style.ControlFontOf(lk, style.RoleButton).Advance("#000000") + m.Pad*2 + style.Dip(lk, 40)
+	w := style.ControlAdvanceOf(lk, style.RoleButton, "#000000") + m.Pad*2 + style.Dip(lk, 40)
 	return c.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 
@@ -67,7 +67,9 @@ func (b *ColorButton) Paint(ctx *paintengine2d.Context) {
 	f := style.ControlFontOf(lk, style.RoleButton)
 	side := f.Height() * 0.9
 	gap := style.Dip(lk, 6)
-	x := r.Min.X + (r.Dx()-f.Advance(label))*0.5 - gap - side
+	// The swatch sits before the label the *look* paints, which is not
+	// the hex string when the look's art asks for capitals.
+	x := r.Min.X + (r.Dx()-f.Advance(style.ControlLabelOf(lk, style.RoleButton, label)))*0.5 - gap - side
 	if x < r.Min.X+style.Dip(lk, 6) {
 		x = r.Min.X + style.Dip(lk, 6)
 	}

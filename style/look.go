@@ -375,7 +375,7 @@ func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	// The mark in the label's own ink, and the words in what is left: the box
 	// is the button when there is no mark, so this is the plain case too.
 	l.DrawButtonMark(ctx, b, d, col)
-	l.drawFittedText(ctx, face, d.Label, l.ButtonLabelBox(b, d), col, AlignCenter, 8)
+	l.drawFittedText(ctx, face, l.ControlLabel(RoleButton, d.Label), l.ButtonLabelBox(b, d), col, AlignCenter, 8)
 }
 
 func (l *Classic) baseDrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
@@ -898,7 +898,7 @@ func (l *Classic) baseDrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 		font = l.muted
 		fg = l.palette.TextMuted
 	}
-	l.drawFittedText(ctx, font, label, b, fg, AlignCenter, 8)
+	l.drawFittedText(ctx, font, l.ControlLabel(RoleTab, label), b, fg, AlignCenter, 8)
 	if st.Focused() {
 		l.DrawFocusRing(ctx, b.Inset(l.S(2)))
 	}
@@ -1074,7 +1074,7 @@ func (l *Classic) baseDrawToolButton(ctx *paintengine2d.Context, b paintengine2d
 		}
 		ctx.Save()
 		ctx.ClipRect(paintengine2d.XYWH(x, b.Min.Y, right-x, b.Dy()))
-		font.Draw(ctx, label, paintengine2d.Pt(x, b.Min.Y+(b.Dy()-font.Height())*0.5), fg)
+		font.Draw(ctx, l.ControlLabel(RoleTool, label), paintengine2d.Pt(x, b.Min.Y+(b.Dy()-font.Height())*0.5), fg)
 		ctx.Restore()
 	}
 }
@@ -1203,7 +1203,7 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 	ctx.Save()
 	ctx.ClipRect(inner)
 	if text != "" {
-		show := f.Fit(text, inner.Dx())
+		show := f.Fit(l.ControlLabel(RoleCombo, text), inner.Dx())
 		f.Draw(ctx, show, paintengine2d.Pt(inner.Min.X, ty), col)
 	}
 	ctx.Restore()
