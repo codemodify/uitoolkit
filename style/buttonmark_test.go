@@ -20,11 +20,15 @@ import (
 
 // buttonShot draws one button and reports the image.
 func buttonShot(t *testing.T, lk LookAndFeel, d ButtonDraw, w, h int) *paintengine2d.Image {
+	return buttonShotState(t, lk, StateNone, d, w, h)
+}
+
+func buttonShotState(t *testing.T, lk LookAndFeel, st ControlState, d ButtonDraw, w, h int) *paintengine2d.Image {
 	t.Helper()
 	img := paintengine2d.NewImage(w, h)
 	ctx := paintengine2d.NewContext(img)
 	ctx.Clear(lk.Palette().Background)
-	lk.DrawButton(ctx, paintengine2d.XYWH(0, 0, float32(w), float32(h)), StateNone, d)
+	lk.DrawButton(ctx, paintengine2d.XYWH(0, 0, float32(w), float32(h)), st, d)
 	img.Touch()
 	return img
 }
@@ -46,7 +50,7 @@ func inkIn(a, base *paintengine2d.Image, r paintengine2d.Rect) int {
 
 func TestEveryEngineDrawsAButtonsMark(t *testing.T) {
 	const w, h = 160, 32
-	var missing, unmoved []string
+	var missing, unmoved, invisible []string
 	for _, p := range ListThemes() {
 		lk := p.Look()
 		if lk == nil {
@@ -54,6 +58,11 @@ func TestEveryEngineDrawsAButtonsMark(t *testing.T) {
 		}
 		plain := buttonShot(t, lk, ButtonDraw{Label: "Save"}, w, h)
 		marked := buttonShot(t, lk, ButtonDraw{Label: "Save", Icon: IconSave}, w, h)
+		// The default button too, whose face is the accent: a mark in the
+		// body ink rather than the label's can be the colour of the face
+		// it is on (TestADefaultButtonsMarkIsInItsLabelsInk).
+		plainDef := buttonShotState(t, lk, StatePrimary, ButtonDraw{Label: "Save"}, w, h)
+		markedDef := buttonShotState(t, lk, StatePrimary, ButtonDraw{Label: "Save", Icon: IconSave}, w, h)
 
 		box := paintengine2d.XYWH(0, 0, w, h)
 		ib := ButtonIconBox(lk, box, ButtonDraw{Label: "Save", Icon: IconSave})
@@ -66,6 +75,9 @@ func TestEveryEngineDrawsAButtonsMark(t *testing.T) {
 			missing = append(missing, p.Name)
 			continue
 		}
+		if inkIn(markedDef, plainDef, ib) < 8 {
+			invisible = append(invisible, p.Name)
+		}
 		// And the label moved out of the way: the whole picture differs
 		// somewhere to the right of the strip, because a label centred in the
 		// button and one centred beside the mark are not in the same place.
@@ -76,6 +88,9 @@ func TestEveryEngineDrawsAButtonsMark(t *testing.T) {
 	}
 	if len(missing) > 0 {
 		t.Errorf("%d packs drew no mark: %v", len(missing), trim(missing))
+	}
+	if len(invisible) > 0 {
+		t.Errorf("%d packs drew no mark on the default button: %v", len(invisible), trim(invisible))
 	}
 	if len(unmoved) > 0 {
 		t.Errorf("%d packs left the label where it was, so the mark overlaps it or the width is wasted: %v",
@@ -88,4 +103,45 @@ func trim(v []string) []string {
 		return append(v[:8:8], "...")
 	}
 	return v
+}
+
+// **A default button's mark is in its label's ink, not in the body
+// text's.** The two are different colours on exactly one button: the
+// default one, whose face is the accent and whose label is the ink that
+// reads on the accent. A mark drawn in the body ink there is drawn in a
+// colour chosen to read on the *window*, and in a look whose accent is
+// near-black that is a black mark on a black key — invisible, which is
+// what a manager's own look hit.
+//
+// The look here is built to make that the only outcome: the body ink IS
+// the accent, so a mark in it cannot be seen and a mark in the label's
+// ink cannot be missed.
+func TestADefaultButtonsMarkIsInItsLabelsInk(t *testing.T) {
+	base := DarkLook()
+	p := base.Palette()
+	p.Accent = paintengine2d.RGB(0.04, 0.04, 0.05)
+	p.AccentHover, p.AccentPress = p.Accent, p.Accent
+	p.Text, p.TextMuted = p.Accent, p.Accent
+	p.TextOnAccent = paintengine2d.RGB(1, 1, 1)
+	lk := NewClassic("mark-ink-probe", p, base.Metrics())
+
+	const w, h = 160, 32
+	d := ButtonDraw{Label: "Save", Icon: IconSave}
+	box := paintengine2d.XYWH(0, 0, w, h)
+	ib := ButtonIconBox(lk, box, d)
+	if ib.Empty() {
+		t.Fatal("no mark box to look in")
+	}
+	plain := buttonShotState(t, lk, StatePrimary, ButtonDraw{Label: "Save"}, w, h)
+	marked := buttonShotState(t, lk, StatePrimary, d, w, h)
+	if n := inkIn(marked, plain, ib); n < 8 {
+		t.Errorf("the default button's mark changed %d pixels: it is the colour of the face it is on", n)
+	}
+	// The ordinary button is the other half of the rule: there the
+	// label's ink *is* the body ink, and the mark still shows.
+	plainOff := buttonShotState(t, lk, StateNone, ButtonDraw{Label: "Save"}, w, h)
+	markedOff := buttonShotState(t, lk, StateNone, d, w, h)
+	if n := inkIn(markedOff, plainOff, ib); n < 8 {
+		t.Errorf("an ordinary button's mark changed %d pixels", n)
+	}
 }
