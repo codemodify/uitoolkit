@@ -15,7 +15,7 @@
 # tools/test-windows.sh needs, because a Mac already has sshd and can be
 # told to turn it on in one line; the Windows guests could not.
 #
-# UITK_MAC_HOST  user@host of the Mac (required)
+# UITK_MAC_HOST  user@host of the Mac; else ~/.config/uitoolkit/mac-host
 # UITK_MAC_KEY   ssh key to use, if not the agent's
 # UITK_MAC_DIR   where to mirror the tree (default ~/uitoolkit)
 # UITK_MAC_GO    the Go toolchain there (default ~/sdk/go1.27.1)
@@ -34,9 +34,40 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Where the Mac is, in the order that survives: what you said, what you
+# wrote down once, and then its own name on the network.
+#
+# **Prefer the name over the address.** A laptop's address changes with
+# the network it is on — this one has been 10.2.16.126, 172.20.10.9 and
+# 10.60.3.244 — and every time it moves, a note with an address in it is
+# wrong and the next person debugs ssh instead of the toolkit. A Mac
+# announces itself over mDNS as <LocalHostName>.local, which follows it,
+# and this box resolves that already (nsswitch has mdns_minimal).
 HOST=${UITK_MAC_HOST:-}
+HOSTFILE=${UITK_MAC_HOSTFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/uitoolkit/mac-host}
+if [ -z "$HOST" ] && [ -r "$HOSTFILE" ]; then
+  HOST=$(grep -vE '^\s*(#|$)' "$HOSTFILE" | head -1 | tr -d '[:space:]')
+fi
 if [ -z "$HOST" ]; then
-  echo "set UITK_MAC_HOST to user@host of a Mac with Remote Login on" >&2
+  cat >&2 <<'MSG'
+No Mac to build on. Either:
+
+  UITK_MAC_HOST=user@name.local tools/test-darwin.sh ./...
+
+or write it down once, and this finds it every time after:
+
+  mkdir -p ~/.config/uitoolkit
+  echo user@name.local > ~/.config/uitoolkit/mac-host
+
+Use the .local name rather than an address: a laptop's address changes
+with the network, the name does not. `avahi-browse -tr _ssh._tcp` lists
+the Macs on this network with Remote Login on.
+MSG
+  exit 2
+fi
+if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true 2>/dev/null; then
+  echo "cannot reach $HOST over ssh (key, Remote Login, or the name moved)" >&2
+  echo "try: avahi-browse -tr _ssh._tcp" >&2
   exit 2
 fi
 DIR=${UITK_MAC_DIR:-'~/uitoolkit'}

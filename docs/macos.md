@@ -366,10 +366,18 @@ arrow-over-text flicker.
 ## Testing it
 
 ```sh
-export UITK_MAC_HOST=user@the-mac
+echo user@the-mac.local > ~/.config/uitoolkit/mac-host   # once
 tools/test-darwin.sh ./...
 tools/test-darwin.sh -run TestAppKit -v ./platform/
 ```
+
+Write down the Mac's **mDNS name**, not its address. A laptop moves
+between networks and its address moves with it — the one this was
+developed against has been 10.2.16.126, 172.20.10.9 and 10.60.3.244 —
+while `<LocalHostName>.local` follows it, and Linux resolves that out of
+the box (`nsswitch.conf` has `mdns_minimal`). `UITK_MAC_HOST` overrides
+the file, and `avahi-browse -tr _ssh._tcp` lists the Macs on this
+network with Remote Login on.
 
 The script mirrors the tree with rsync, builds on the Mac and brings
 the output back. It is ssh rather than the HTTP-over-slirp contraption

@@ -45,17 +45,32 @@
 #     and will not start ("The system cannot execute the specified
 #     program"), which looks exactly like a broken build.
 #
-# UITK_WIN_VM_MON  the QEMU monitor socket of the guest to drive
+# UITK_WIN_VM      a guest in tools/vm/vms.conf (win10, win11): start it
+#                  if it is not up and use its monitor. The easy way in.
+# UITK_WIN_VM_MON  the QEMU monitor socket of the guest to drive, for a
+#                  guest the rig does not own.
 # UITK_WIN_VM_PORT the port this serves on (default 8099)
 # UITK_WIN_PKGS    the packages to test (default ./...)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MON=${UITK_WIN_VM_MON:-}
+VM=${UITK_WIN_VM:-}
 PORT=${UITK_WIN_VM_PORT:-8099}
 PKGS=${UITK_WIN_PKGS:-./...}
+if [ -z "$MON" ] && [ -n "$VM" ]; then
+  # The rig knows where its guests are and refuses to start a second
+  # qemu on a disk something else already has open.
+  tools/vm/vm.sh start "$VM" >&2
+  MON="${XDG_RUNTIME_DIR:-/tmp}/uitk-vm/$VM.mon"
+fi
 if [ -z "$MON" ]; then
-  echo "set UITK_WIN_VM_MON to the QEMU monitor socket of a logged-in Windows guest" >&2
+  echo "set UITK_WIN_VM to a guest in tools/vm/vms.conf (win10, win11)," >&2
+  echo "or UITK_WIN_VM_MON to the QEMU monitor socket of a logged-in Windows guest." >&2
+  exit 2
+fi
+if [ ! -S "$MON" ]; then
+  echo "no monitor socket at $MON: is the guest running?" >&2
   exit 2
 fi
 

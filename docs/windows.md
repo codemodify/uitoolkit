@@ -274,8 +274,8 @@ Two scripts, because the two halves cost very different amounts:
 
 ```sh
 tools/build-windows.sh                     # seconds, needs no Windows
-UITK_WIN_VM_MON=/path/to/monitor.sock \
-  tools/test-windows.sh                    # runs the tests on real Windows
+UITK_WIN_VM=win10 tools/test-windows.sh    # runs the tests on real Windows
+UITK_WIN_VM=win11 tools/test-windows.sh
 ```
 
 **`tools/build-windows.sh`** cross-compiles and vets the whole tree for
@@ -291,6 +291,14 @@ needs two things set up once: an interactive logged-in desktop, because
 the tests make real windows and a window needs a session to appear in;
 and Microsoft Defender told to leave the directory alone, because it
 quarantines freshly built unsigned Go binaries.
+
+Both of those are *already done* in the guests the repository keeps:
+`UITK_WIN_VM=win10` or `win11` starts one from
+[tools/vm](../tools/vm/README.md) and uses it, and the Windows 11 one is
+installed unattended by `tools/vm/install-win11.sh` — autologon and the
+Defender exclusion are in its answer file, so a guest that has gone
+wrong is remade rather than repaired. `UITK_WIN_VM_MON` still points the
+script at any other monitor socket.
 
 ### Why this exists at all
 

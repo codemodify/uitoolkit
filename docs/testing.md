@@ -106,9 +106,29 @@ unreadable. Neither was reachable from a suite with no display.
 **The other two platforms** are tested on real ones, from here:
 
 ```bash
-UITK_WIN_VM_MON=/path/to/monitor.sock tools/test-windows.sh   # docs/windows.md
-UITK_MAC_HOST=user@the-mac            tools/test-darwin.sh ./...  # docs/macos.md
+UITK_WIN_VM=win10 tools/test-windows.sh        # docs/windows.md
+UITK_WIN_VM=win11 tools/test-windows.sh
+tools/test-darwin.sh ./...                     # docs/macos.md
 ```
+
+Neither takes an address or a path any more, and that is the point.
+
+The Windows guests are a **fixture**, listed in `tools/vm/vms.conf` and
+started by `tools/vm/vm.sh` — headless, driven through the qemu monitor,
+with the monitor socket always in the same place. `UITK_WIN_VM=win10`
+boots one if it is not up and runs the suite on it;
+`tools/vm/install-win11.sh` makes the Windows 11 one from an ISO in one
+unattended command, so it can be thrown away and remade rather than
+nursed. See [tools/vm/README.md](../tools/vm/README.md), which also
+records the two things that cost an afternoon each: the 108-byte cap on
+a unix socket path, and that Windows drops a burst of `sendkey`.
+
+The Mac is found by **name**: `~/.config/uitoolkit/mac-host` holds
+`user@something.local` and `tools/test-darwin.sh` reads it. A laptop's
+address changes with the network it is on — this one has been three
+different addresses in two weeks — and mDNS follows it, so the name is
+the thing worth writing down. `UITK_MAC_HOST` still overrides it, and
+`avahi-browse -tr _ssh._tcp` finds a Mac whose name you have forgotten.
 
 Both run the **whole suite**, not just `./platform/`. The Windows one
 used to run that single package, and the asymmetry cost real bugs: the
