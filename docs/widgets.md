@@ -95,6 +95,7 @@ opens `OnContext` for the current row.
 | Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | [thumb](screenshots/compare/popupmenu.png) |
 | Tool bar | `ToolBar` / `ToolToggle` / `ToolWidget` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | [thumb](screenshots/compare/statusbar.png) |
+| Breadcrumbs | `Breadcrumbs` / `Crumb` (chevrons or interlocking slabs, per-step drop-down, keyboard) | — | — | `BreadcrumbBar` (extras) ≈ | — | — | — | `NSPathControl` | — | — |
 | Title bar | `TitleBar` | custom chrome ≈ | `GtkHeaderBar` ≈ | window chrome ≈ | window title ≈ | `Form.Text` ≈ | window chrome ≈ | `NSWindow` title | `navigationTitle` | [thumb](screenshots/compare/titlebar.png) |
 | Header bar (window title bar) | `HeaderBar` + `Window.SetTitleBar`, `WindowControls`, `DragArea` / `NoDrag` | custom frameless window | `GtkHeaderBar` + `gtk_window_set_titlebar`, `GtkWindowControls`, `GtkWindowHandle` | `WindowDrawnDecorations` (12) | `widget/material.Decorations` (Gio) ≈ | custom `WM_NCHITTEST` | `WindowChrome` | `NSWindow` full-size content view | `.windowStyle(.hiddenTitleBar)` ≈ | — |
 
@@ -180,6 +181,20 @@ slides against the screen; one placed by hand says so with
 `widget.SetPopupAnchor`. A popup component with a hit shape
 (`SetHitShapeFunc`) is cut to it — surface, shadow and input region
 ([shapes.md](shapes.md#popups)).
+
+**Breadcrumbs** say where a window is as a row of steps — Vault › personal
+› Logins — each a button: `widgets.NewBreadcrumbs(Crumb{Text, Icon,
+OnClick, Menu}, …)`. A step with a `Menu` opens what it could be changed
+to instead of going anywhere, and the menu is built when it is pressed,
+so a list that depends on what is on disk is read then. The default shape
+is words with the look's own chevron between them (a file manager's
+address bar); `Arrows` draws each step as a slab with a point and the
+next one's notch over it (a shell's path bar), where a press in the notch
+goes to the step before, as the shape says it should. A path too long for
+its row keeps its *end* — the last step is where the window is — and the
+steps there was no room for are offered under a leading `…`. The keyboard
+takes the row as one stop with the arrows inside it, as a tool bar does,
+and a reader hears a row of buttons each with its place in the path.
 
 A **passing note** is the other thing a window has to say and nowhere to
 say it: what just happened. `widgets.ShowToast(from, text, kind, d)` puts

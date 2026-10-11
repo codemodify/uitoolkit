@@ -1072,3 +1072,53 @@ func (l *SecretLabel) Describe(n *a11y.Node) {
 		n.Value = "concealed"
 	}
 }
+
+// Describe says a path of steps is a tool bar: a row of buttons, which is
+// what it is to a reader, and the role every toolkit maps a breadcrumb
+// onto (neither AT-SPI nor UI Automation has one of its own).
+func (b *Breadcrumbs) Describe(n *a11y.Node) { n.Role = a11y.RoleToolBar }
+
+// AccessibleItems are the steps, each a button named by its words, with
+// its place in the path — "Logins, 3 of 3" — so the path is read as a
+// path and not as a row of unrelated words. A step there was no room for
+// is offscreen rather than missing, because it is still in the path.
+func (b *Breadcrumbs) AccessibleItems() []*a11y.Node {
+	out := make([]*a11y.Node, 0, len(b.Crumbs)+1)
+	for i, c := range b.Crumbs {
+		name := c.Text
+		if name == "" {
+			name = c.Icon.Label()
+		}
+		r := b.CrumbRect(i)
+		if r.Empty() {
+			// Not shown: give it the row's own box so a reader has
+			// somewhere to point, and say it is offscreen.
+			r = b.LocalBounds()
+		}
+		node := item(b, i, a11y.RoleButton, name, r)
+		node.Index, node.Count = i+1, len(b.Crumbs)
+		if b.CrumbRect(i).Empty() {
+			node.State |= a11y.StateOffscreen
+		}
+		node.Actions = node.Actions.With(a11y.ActionDefault)
+		out = append(out, node)
+	}
+	return out
+}
+
+// AccessibleAction presses a step.
+func (b *Breadcrumbs) AccessibleAction(i int, a a11y.Action) bool {
+	if a != a11y.ActionDefault || i < 0 || i >= len(b.Crumbs) {
+		return false
+	}
+	b.activate(i)
+	return true
+}
+
+// AccessibleFocusItem is the step the keyboard is on.
+func (b *Breadcrumbs) AccessibleFocusItem() int {
+	if len(b.Crumbs) == 0 {
+		return -1
+	}
+	return b.focus
+}
