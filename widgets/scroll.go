@@ -461,6 +461,18 @@ func (s *ScrollView) MouseExit() {
 	s.Base.MouseExit()
 }
 
+// pagingKey reports whether a Page Up or Page Down is this view's to
+// take. A bare one is, and so is Shift+Page, which has meant "a page"
+// since the first scroll bars. Ctrl+Page Up and Ctrl+Page Down are the
+// previous and the next *tab* — in a [TabView], in every browser, and in
+// anything that stacks pages — and Alt+Page is a window-manager key on
+// several desktops. A view that scrolled on those would swallow them: a
+// page inside a tab is almost always inside a scroll view, so the key
+// would never reach the thing it names.
+func pagingKey(e widget.KeyEvent) bool {
+	return e.Mods.Chord()&^platform.ModShift == 0
+}
+
 func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {
 	if !s.Enabled() {
 		return false
@@ -474,9 +486,15 @@ func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {
 		s.ScrollBy(-s.lineStep())
 		return true
 	case platform.KeyPageDown:
+		if !pagingKey(e) {
+			return false
+		}
 		s.ScrollBy(s.pageStep())
 		return true
 	case platform.KeyPageUp:
+		if !pagingKey(e) {
+			return false
+		}
 		s.ScrollBy(-s.pageStep())
 		return true
 	case platform.KeyHome:
