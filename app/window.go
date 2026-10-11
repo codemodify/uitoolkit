@@ -1319,7 +1319,7 @@ func (w *Window) dispatch(ev platform.Event) {
 		}
 		if w.popup != nil {
 			leaf := widget.CascadeLeaf(w.popup)
-			if leaf.KeyPress(keyEvent(ev)) {
+			if w.popupKey(leaf, keyEvent(ev)) {
 				return
 			}
 			// The popup owns the keyboard while it is up; bubbling on
@@ -1352,6 +1352,32 @@ func (w *Window) dispatch(ev platform.Event) {
 			t.TextInput(ev.Rune)
 		}
 	}
+}
+
+// popupKey offers a key to what is up while a popup is up: to the widget
+// that has the keyboard when it is inside the popup, and up its
+// ancestors to the popup itself. A menu's keyboard is the menu, so for a
+// menu this is the popup alone, exactly as it was; a popup of widgets —
+// a drop-down holding a list, a panel of fields — is why the rest is
+// here. [Window.FocusOn] puts the keyboard on a widget in there and Tab
+// moves it round, and until this a list or a button in a popup never
+// heard a key: Up, Down and Enter reached the popup and stopped.
+func (w *Window) popupKey(popup widget.Component, e widget.KeyEvent) bool {
+	// w.focus rather than keyTarget: a popup is above a modal dialog, so
+	// a drop-down in a dialog has the keyboard even though what holds it
+	// is not inside the dialog.
+	if f := w.focus; f != nil && f != popup && widget.LiveUnder(f, popup) {
+		for c := f; c != nil; c = c.Parent() {
+			if c.KeyPress(e) {
+				return true
+			}
+			if c == popup {
+				break
+			}
+		}
+		return false
+	}
+	return popup.KeyPress(e)
 }
 
 // accelerator runs the first menu accelerator for key, but not under a
@@ -1497,8 +1523,21 @@ func keyEvent(ev platform.Event) widget.KeyEvent {
 // reports whether one of them took it.
 func (w *Window) bubbleKey(e widget.KeyEvent) bool {
 	start := w.keyTarget()
+	if start != nil && !widget.LiveUnder(start, w.layerRoots()...) {
+		// What had the keyboard was taken out of the window — a page
+		// swapped for another, a tab's content replaced — and nothing
+		// tells the window about it: a subtree comes off the tree with
+		// its parent and its host cleared, and the field still points at
+		// it. Offering the key up a chain that no longer reaches the
+		// window delivered it to a tree nobody can see, and stopped: the
+		// window's own keys (Escape, Delete, Ctrl+Page Up) died until
+		// something was clicked. So the keyboard goes to nothing, which
+		// is what it has, and the key is offered as a key with no focus.
+		w.RequestFocus(nil)
+		start = nil
+	}
 	if start == nil {
-		return false
+		return w.contentKey(e)
 	}
 	var top widget.Component
 	for c := start; c != nil; c = c.Parent() {
@@ -1513,6 +1552,23 @@ func (w *Window) bubbleKey(e widget.KeyEvent) bool {
 		return w.root.KeyPress(e)
 	}
 	return false
+}
+
+// contentKey offers a key to the layer that *is* the window's content —
+// the dialog on top while one is up, the content root otherwise — which
+// is where an application keeps the window's own keys. It is how a key
+// with the keyboard on nothing is still heard: a window that has never
+// been clicked in, or whose focused widget has just left it, is not a
+// window whose shortcuts should stop working.
+func (w *Window) contentKey(e widget.KeyEvent) bool {
+	target := w.root
+	if w.overlay != nil {
+		target = w.overlay
+	}
+	if target == nil {
+		return false
+	}
+	return target.KeyPress(e)
 }
 
 // focusOnClick reports whether a click should focus c. Widgets that take

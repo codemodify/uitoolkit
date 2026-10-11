@@ -291,6 +291,17 @@ func (m *MenuBar) KeyPress(e widget.KeyEvent) bool {
 	if !m.Enabled() || len(m.menus) == 0 {
 		return false
 	}
+	switch e.Key {
+	case platform.KeyLeft, platform.KeyRight, platform.KeyDown,
+		platform.KeyReturn, platform.KeySpace:
+	default:
+		// A key the bar does not take leaves the bar as it was. It is
+		// offered every key the window hears when nothing has the
+		// keyboard, and marking keyboard navigation on one of those
+		// underlined a menu nobody was navigating — in a look that
+		// underlines mnemonics on Alt, pressing Alt alone was enough.
+		return false
+	}
 	m.keyNav = true
 	if m.focus < 0 {
 		m.focus = 0
