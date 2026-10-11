@@ -24,6 +24,10 @@ type Offscreen struct {
 	// They are the desktop's device pixels, as an X11 root window's are;
 	// Move and Position speak logical ones and convert at the scale.
 	posX, posY int
+	// moveIgnored makes a move request succeed and do nothing, which is
+	// the window manager a rack has to be able to wait out
+	// (Offscreen.SetMoveHonoured).
+	moveIgnored bool
 	// noGeom are the geometry capabilities this simulated desktop has
 	// had taken away (SimulateGeometry), so a test can reach the Wayland
 	// case — a window that cannot be moved and is never told where it is
@@ -230,8 +234,27 @@ func (o *Offscreen) Move(x, y int) bool {
 	if o == nil || !o.GeometryCaps().Has(GeometryMove) {
 		return false
 	}
+	if o.moveIgnored {
+		// Taken and not acted on: the request succeeds, the window stays
+		// where it was, and nothing is reported. See SetMoveHonoured.
+		return true
+	}
 	o.posX, o.posY = DevicePosition(x, o.Scale()), DevicePosition(y, o.Scale())
 	return true
+}
+
+// SetMoveHonoured says whether a move request actually moves this window.
+//
+// false is the window manager that takes the request and does nothing
+// with it: a tiled window, a maximized one, one a rule pins to a screen.
+// A client cannot tell that from an answer still in flight except by
+// waiting, which is why anything that places its own windows needs to
+// cope with it — and why it has to be possible to test without a window
+// manager that behaves this way to hand.
+func (o *Offscreen) SetMoveHonoured(on bool) {
+	if o != nil {
+		o.moveIgnored = !on
+	}
 }
 
 // PlaceAtScreen is Move here: a simulated desktop has no layer shell to

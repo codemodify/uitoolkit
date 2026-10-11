@@ -45,6 +45,10 @@ func TestSatellitesFollowOnTheDesktopsWord(t *testing.T) {
 	// The desktop drags Main. No Follow call from the application.
 	o := main.Surface().(*platform.Offscreen)
 	o.SimulateDesktopMove(300, 300)
+	// Two pumps: the first delivers the desktop's word and posts the pass
+	// it asks for (one per burst, however many configures a drag sends),
+	// the second runs it. See settle in followcoalesce_test.go.
+	a.PumpOnce()
 	a.PumpOnce()
 
 	if b := d.Rack.Pane(si).Box; b.X != 300 || b.Y != 400 {

@@ -39,6 +39,98 @@ func coalesceRig(t *testing.T) (*app.Application, *Desk, *app.Window, *app.Windo
 	return a, d, main, sat, mi, si, &now
 }
 
+// settle delivers whatever the desktop has to say and then runs the pass
+// those events asked for.
+//
+// Two pumps, because a move does not run a pass where it arrives: it
+// *posts* one, so a burst of configures is one pass and not one each, and
+// the loop runs what is posted at the top of its next turn (PumpOnce runs
+// the posted work first, then drains the events). A real application never
+// waits for that turn — Post wakes the loop — but a test that pumps once
+// has only delivered the news.
+func settle(a *app.Application) {
+	a.PumpOnce()
+	a.PumpOnce()
+}
+
+// **A burst of moves is one pass.** A drag delivers a configure for every
+// step; four arriving in one turn of the loop used to be four passes, each
+// walking every pane and asking the window system to move every satellite
+// again — and the first three placements were overwritten by the fourth
+// before anything was painted.
+func TestABurstOfMovesIsOnePass(t *testing.T) {
+	a, d, main, _, _, si, _ := coalesceRig(t)
+	o := main.Surface().(*platform.Offscreen)
+	passes := 0
+	d.Moved = func() { passes++ }
+
+	was := d.Rack.Pane(si).Box
+	for _, at := range [][2]int{{10, 10}, {20, 20}, {30, 30}, {40, 40}} {
+		o.SimulateDesktopMove(at[0], at[1])
+	}
+	// The four are delivered in this turn. One pass is owed and none has
+	// run: the satellites are still where they were, because a burst is
+	// answered once, after it.
+	a.PumpOnce()
+	if !d.owed {
+		t.Error("the moves ran their passes where they arrived instead of asking for one")
+	}
+	if b := d.Rack.Pane(si).Box; b != was {
+		t.Errorf("the satellite moved to %v during the burst; want it answered once, after it", b)
+	}
+	a.PumpOnce()
+	if d.owed {
+		t.Error("the pass that was owed did not run")
+	}
+	if passes != 1 {
+		t.Errorf("four moves in one turn ran %d passes, want one", passes)
+	}
+	// And the one pass put the satellite under where the window came to
+	// rest, which is the only placement that was ever going to be seen.
+	if b := d.Rack.Pane(si).Box; b.X != 40 || b.Y != 140 {
+		t.Errorf("the satellite is at %d,%d; want 40,140", b.X, b.Y)
+	}
+}
+
+// **A move request the window manager never honours is reconciled when
+// the patience runs out.** The rack allows a quarter of a second for a
+// window to arrive where it was asked to go — and when it never does,
+// nothing looked again: no move happened, so no event came, and the rack
+// kept the geometry nobody honoured until the application's own pulse or
+// an explicit Follow. A player with no pulse waited for ever.
+func TestARefusedMoveIsReconciledWhenThePatienceRunsOut(t *testing.T) {
+	a, d, main, sat, _, si, _ := coalesceRig(t)
+	// The real clock: the wake-up is a real timer and the deadline is a
+	// real quarter of a second.
+	d.SetClock(nil)
+	so := sat.Surface().(*platform.Offscreen)
+	so.SetMoveHonoured(false)
+	was := d.Rack.Pane(si).Box
+
+	// The main window is dragged away. The satellite is asked to follow
+	// and the window manager takes the request and does nothing.
+	main.Surface().(*platform.Offscreen).SimulateDesktopMove(600, 600)
+	settle(a)
+	if x, y, _ := sat.Position(); x != was.X || y != was.Y {
+		t.Fatalf("the satellite moved to %d,%d; this test needs a window manager that refuses", x, y)
+	}
+
+	// Nothing else happens: no event, no Follow call, no application
+	// pulse. The rack has to come back by itself.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		a.PumpOnce()
+		if d.Rack.Pane(si).Box.X == was.X && d.Rack.Pane(si).To == -1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the rack still has the satellite at %v bonded to %d after the patience ran out",
+				d.Rack.Pane(si).Box, d.Rack.Pane(si).To)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // The last move of a drag is the one that says where the window came to
 // rest, and it used to be the one lost.
 //
@@ -56,7 +148,7 @@ func TestAMoveDuringAPassIsNotLost(t *testing.T) {
 	// what a satellite's own move callback does from inside Follow.
 	d.inFollow = true
 	o.SimulateDesktopMove(300, 300)
-	a.PumpOnce()
+	settle(a)
 	if !d.again {
 		t.Fatal("a move that arrived during a pass was dropped rather than noted")
 	}
@@ -64,7 +156,7 @@ func TestAMoveDuringAPassIsNotLost(t *testing.T) {
 
 	// The next callback runs the pass that was owed.
 	o.SimulateDesktopMove(300, 300)
-	a.PumpOnce()
+	settle(a)
 	if b := d.Rack.Pane(si).Box; b.X != 300 || b.Y != 400 {
 		t.Errorf("the satellite is at %d,%d; want 300,400", b.X, b.Y)
 	}

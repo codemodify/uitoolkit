@@ -51,6 +51,14 @@ type Desk struct {
 	// again says a move arrived while a pass was running, so the pass read
 	// positions that were already out of date and another one is owed.
 	again bool
+	// owed says a pass has been asked for and not run yet: the batch of
+	// events this one came in is still being delivered. It is what makes
+	// a burst of configures one pass instead of one each.
+	owed bool
+	// stopWake cancels the pass owed when a move request's patience runs
+	// out, so a new request replaces the old deadline instead of adding
+	// to it.
+	stopWake func()
 	// now is the clock, so a test can hold it still. nil is time.Now.
 	now func() time.Time
 	// Moved runs after Follow has moved anything, so a player can repaint
@@ -94,13 +102,54 @@ func (d *Desk) Add(name string, w *app.Window) int {
 	return i
 }
 
-// followFromEvent is Follow, run because the desktop said a window moved.
+// followFromEvent is Follow, asked for because the desktop said a window
+// moved.
 //
-// Coalesced to one pass per batch of events: a drag delivers a configure
-// for every step, and each one would otherwise walk every pane and ask
-// the window system to move the satellites again. The flag is cleared by
-// the pass itself, so the next batch runs one more.
+// It is coalesced to one pass per batch of events rather than run here. A
+// drag delivers a configure for every step, and four of them in one turn
+// of the loop used to be four passes: each walked every pane and asked
+// the window system to move every satellite, and the first three
+// placements were overwritten by the fourth before anything was painted.
+// So the pass is *posted* — the loop runs what is posted at the top of
+// its next turn, before it paints — and the events that arrive in the
+// meantime find one already owed and add nothing.
+//
+// Posting also puts the pass on the loop's own goroutine, which is where
+// a move request has to be made from, and that is what lets the deadline
+// wake-up below use the same road.
 func (d *Desk) followFromEvent() {
+	if d == nil || d.owed {
+		return
+	}
+	a := d.application()
+	if a == nil {
+		// No application to post to (a Desk under test, or windows that
+		// are gone): the pass runs here, as it always did.
+		d.followNow()
+		return
+	}
+	d.owed = true
+	a.Post(func() {
+		d.owed = false
+		d.followNow()
+	})
+}
+
+// application is the application the rack's windows belong to, or nil.
+func (d *Desk) application() *app.Application {
+	for _, w := range d.wins {
+		if w == nil || w.Closed() {
+			continue
+		}
+		if a := w.App(); a != nil {
+			return a
+		}
+	}
+	return nil
+}
+
+// followNow runs a pass, and another if a move arrived while it ran.
+func (d *Desk) followNow() {
 	if d == nil {
 		return
 	}
@@ -277,8 +326,44 @@ func (d *Desk) Apply() {
 		if w.Move(p.Box.X, p.Box.Y) {
 			d.want[i] = p.Box
 			d.until[i] = d.patience(w, p.Box)
+			d.wakeAt(w, d.until[i])
 		}
 	}
+}
+
+// wakeAt arranges for a pass when a move request's patience runs out.
+//
+// A request the window manager refuses — a tiled window, a maximized one,
+// a move that lands somewhere else — leaves the rack waiting out
+// movePatience and then needing somebody to look again. Nothing looked:
+// the desktop reports no move, because none happened, so no event comes,
+// and the rack kept the geometry nobody honoured until the application's
+// own pulse or an explicit Follow reconciled it. A player with no pulse
+// waited for ever.
+//
+// One wake-up at a time, replaced by each new request, because they all
+// ask the same question: has what we asked for arrived? The window's own
+// timer is the road, so it dies with the window and lands on the loop's
+// goroutine, and the pass it asks for is coalesced with anything else
+// owed.
+func (d *Desk) wakeAt(w *app.Window, until time.Time) {
+	if d == nil || w == nil || until.IsZero() {
+		return
+	}
+	in := until.Sub(d.clock())
+	if in <= 0 {
+		return
+	}
+	if d.stopWake != nil {
+		d.stopWake()
+		d.stopWake = nil
+	}
+	// A hair past the deadline: at exactly it Follow is still inside its
+	// patience (the comparison is Before) and would wait another round.
+	d.stopWake = w.AfterFunc(in+time.Millisecond, func() {
+		d.stopWake = nil
+		d.followFromEvent()
+	})
 }
 
 // patience is when the rack stops waiting for a window it has just asked to
