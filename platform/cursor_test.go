@@ -69,3 +69,35 @@ func TestHostCursorNames(t *testing.T) {
 		t.Fatal("darwin text/row")
 	}
 }
+
+// **The pointing hand says "this can be clicked."** It is the shape a
+// link has in every toolkit (CSS pointer, GTK pointer, Qt's
+// PointingHandCursor, macOS pointingHandCursor, IDC_HAND), and the only
+// thing a page with nothing on it but a picture can say so with. Every
+// backend has to reach the desktop's own hand, not fall back to an arrow.
+func TestThePointingHandIsOnEveryBackend(t *testing.T) {
+	if CursorPointer.String() != "pointer" {
+		t.Errorf("the shape is named %q", CursorPointer.String())
+	}
+	if got := waylandCursorShape(CursorPointer); got != wlShapePointer {
+		t.Errorf("cursor-shape-v1 %d, want the pointer shape %d", got, wlShapePointer)
+	}
+	// A theme that predates the CSS names still has hand2: the X11 list
+	// asks for that first, the Wayland one for the modern name.
+	wl, x11 := waylandThemeCursorNames(CursorPointer), x11ThemeCursorNames(CursorPointer)
+	if len(wl) == 0 || wl[0] != "pointer" {
+		t.Errorf("wayland theme names %v", wl)
+	}
+	if len(x11) == 0 || x11[0] != "hand2" {
+		t.Errorf("x11 theme names %v", x11)
+	}
+	if got := x11FontCursorShape(CursorPointer); got != 58 {
+		t.Errorf("X cursor font shape %d, want XC_hand2 (58)", got)
+	}
+	if got := win32CursorID(CursorPointer); got != winIDCHand {
+		t.Errorf("win32 id %d, want IDC_HAND %d", got, winIDCHand)
+	}
+	if got := darwinCursorKind(CursorPointer); got != akCursorPointingHand {
+		t.Errorf("NSCursor kind %d, want the pointing hand %d", got, akCursorPointingHand)
+	}
+}

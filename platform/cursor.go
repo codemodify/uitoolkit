@@ -35,6 +35,14 @@ const (
 	CursorDragMove
 	CursorDragLink
 	CursorNoDrop
+	// CursorPointer is the pointing hand that says "this can be clicked":
+	// a link's cursor (CSS pointer, GTK pointer, Qt's
+	// PointingHandCursor, macOS pointingHandCursor, IDC_HAND). It is what
+	// a page with nothing else on it — a logo that unlocks a vault, a
+	// picture that opens — has to say so with, and it is the one shape of
+	// the lot a component asks for about its *own* content rather than
+	// about the window's chrome.
+	CursorPointer
 )
 
 var cursorNames = [...]string{
@@ -44,7 +52,7 @@ var cursorNames = [...]string{
 	CursorResizeNW: "nw-resize", CursorResizeSE: "se-resize", CursorResizeSW: "sw-resize",
 	CursorMove: "move", CursorGrab: "grab", CursorGrabbing: "grabbing",
 	CursorDragCopy: "copy", CursorDragMove: "move", CursorDragLink: "alias",
-	CursorNoDrop: "no-drop",
+	CursorNoDrop: "no-drop", CursorPointer: "pointer",
 }
 
 // DragCursor is the pointer shape for what a drop would do here: the
@@ -131,6 +139,8 @@ func waylandCursorShape(c Cursor) uint32 {
 		return wlShapeAlias
 	case CursorNoDrop:
 		return wlShapeNoDrop
+	case CursorPointer:
+		return wlShapePointer
 	default:
 		return wlShapeDefault
 	}
@@ -170,6 +180,8 @@ func waylandThemeCursorNames(c Cursor) []string {
 		return []string{"row-resize", "ns-resize", "sb_v_double_arrow", "split_v"}
 	case CursorText:
 		return []string{"text", "xterm", "ibeam", "IBeam"}
+	case CursorPointer:
+		return []string{"pointer", "hand2", "pointing_hand", "hand1", "hand"}
 	default:
 		return []string{"left_ptr", "default", "arrow", "top_left_arrow"}
 	}
@@ -187,6 +199,10 @@ func x11ThemeCursorNames(c Cursor) []string {
 		return []string{"sb_v_double_arrow", "row-resize", "ns-resize"}
 	case CursorText:
 		return []string{"xterm", "text", "ibeam"}
+	case CursorPointer:
+		// hand2 first: every X cursor theme ships it, and it is the one
+		// the toolkits have pointed at since Motif.
+		return []string{"hand2", "pointer", "pointing_hand", "hand1", "hand"}
 	default:
 		return []string{"left_ptr", "default", "arrow"}
 	}
@@ -218,6 +234,8 @@ func x11FontCursorShape(c Cursor) uint {
 		return 12 // XC_bottom_left_corner
 	case CursorMove, CursorGrab, CursorGrabbing:
 		return 52 // XC_fleur
+	case CursorPointer:
+		return 58 // XC_hand2
 	default:
 		return 68 // XC_left_ptr
 	}
@@ -246,7 +264,7 @@ func win32CursorID(c Cursor) uintptr {
 		return winIDCSizeNESW
 	case CursorMove, CursorGrabbing:
 		return winIDCSizeAll
-	case CursorGrab:
+	case CursorGrab, CursorPointer:
 		return winIDCHand
 	case CursorText:
 		return winIDCIbeam
@@ -305,6 +323,8 @@ func darwinCursorKind(c Cursor) int {
 		return akCursorDragLink
 	case CursorNoDrop:
 		return akCursorNoDrop
+	case CursorPointer:
+		return akCursorPointingHand
 	// CursorDragMove keeps the arrow: a plain move is what macOS shows
 	// nothing special for, and the badge-less arrow is the shape that
 	// says "this will move".
