@@ -401,13 +401,24 @@ func (r *Rack) rebond(i int, carried []int) {
 		// does whatever was already hanging from it.
 		if i == 0 {
 			r.hangFrom(i, j)
+			// The pane that was dragged closes the gap, not the group it
+			// joined. A bond is taken from as far as Reach away, so there
+			// is usually a gap to close, and placing the *other* side by
+			// the bond moved a window nobody touched — the moving window
+			// stopped where it was dropped and the stationary group
+			// jumped the last two pixels to meet it. Shifting this pane
+			// by what the bond would have moved the other one leaves the
+			// group standing and reflow then finds it already in place.
+			if pj := r.Pane(j); pj != nil && pj.To == i {
+				at := pj.Bond.Place(p.Box, pj.Box.W, pj.Box.H)
+				p.Box = p.Box.Moved(pj.Box.X-at.X, pj.Box.Y-at.Y)
+			}
 			return
 		}
 		p.To, p.Bond = j, bond
 		p.Box = bond.Place(other.Box, p.Box.W, p.Box.H)
 	}
 }
-
 
 // hangFrom makes pane j, and the component it belongs to, hang from pane
 // i without moving anything: the bond is read the other way round, and
@@ -439,24 +450,34 @@ func (r *Rack) hangFrom(i, j int) {
 	}
 	// Walk it the other way: each pane takes the one below it as its
 	// anchor, so what was j's root ends up hanging from j.
+	//
+	// Only the *parent's* link is written. Clearing the node's as well
+	// threw away the link the turn before had just written it — in a
+	// chain of three or more panes the middle one came out of this with
+	// no anchor at all, a second root beside the first, and the group
+	// stopped following the main window. (A two-pane chain has one link
+	// and no middle, which is why it passed.) The node's own link is
+	// either the next turn's to write or j's, and j's is written below.
 	for _, l := range chain {
 		p, up := r.Pane(l.node), r.Pane(l.parent)
 		if p == nil || up == nil {
 			continue
 		}
-		bond, ok := Snap(p.Box, up.Box, r.Reach)
-		p.To, p.Bond = -1, Bond{}
-		if ok {
+		if bond, ok := Snap(p.Box, up.Box, r.Reach); ok {
 			up.To, up.Bond = l.node, bond
 		} else {
 			up.To, up.Bond = -1, Bond{}
 		}
 	}
-	// Now hang j from i, reading the bond from i's side.
+	// Now hang j from i, reading the bond from i's side. j is the one
+	// pane of the chain whose old link nothing above rewrote, so it is
+	// cleared here: left pointing up its old chain it would point at a
+	// pane that now points back at it.
 	pj, pi := r.Pane(j), r.Pane(i)
 	if pj == nil || pi == nil {
 		return
 	}
+	pj.To, pj.Bond = -1, Bond{}
 	if bond, ok := Snap(pi.Box, pj.Box, r.Reach); ok {
 		pj.To, pj.Bond = i, bond
 	}
