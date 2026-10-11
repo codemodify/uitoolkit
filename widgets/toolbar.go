@@ -99,6 +99,20 @@ func ToolGrow(c widget.Component) *ToolItem { return &ToolItem{Widget: c, Grow: 
 // ToolBar is a horizontal strip of tool buttons.
 type ToolBar struct {
 	widget.Base
+	// Floating leaves the bar's own background unpainted: the bar is
+	// over content rather than in a strip of its own, so what the eye
+	// reads as chrome is the look's group capsules
+	// ([style.ToolGroupsOf]) and the buttons, with the view showing
+	// between them.
+	//
+	// It is what a bar inside a [FloatOver] wants. A bar paints a strip
+	// because a bar normally has a row of its own, and a strip is opaque
+	// — which puts a solid background behind every translucent capsule
+	// on it and leaves the material with nothing to be translucent of.
+	// On a look that draws no group capsules the bar then paints nothing
+	// at all but its buttons, which is what a floating bar is.
+	Floating bool
+
 	items  []*ToolItem
 	hover  int
 	press  int
@@ -456,8 +470,9 @@ func (t *ToolBar) itemAt(p paintengine2d.Point) int {
 
 func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
-	if !inMergedCaption(t) {
-		// In a title bar the toolkit draws, the caption is the bar.
+	if !inMergedCaption(t) && !t.Floating {
+		// In a title bar the toolkit draws, the caption is the bar; a
+		// floating bar has the view behind it and paints no strip.
 		lk.DrawToolBar(ctx, t.LocalBounds())
 	}
 	rects := t.itemRects()

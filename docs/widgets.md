@@ -1343,6 +1343,25 @@ window only tracks it for a look that asks for glass, and only once the
 pointer has travelled eight logical pixels — under the width of the rim
 itself, so the highlight slides rather than steps.
 
+### Chrome that floats over content
+
+`widgets.NewFloatOver(content)` with `SetTop` / `SetBottom` lays chrome
+*over* a view rather than beside it: the content keeps the whole box and
+the bars are laid on top, each against an edge and only as tall as it
+needs. Clicks fall through — each floating piece is an ordinary child
+with its own small box, so a press reaches the content everywhere the
+bar is not. A bar on one wants `ToolBar.Floating`, which leaves the
+bar's own background strip unpainted.
+
+**This is the part that makes glass look like glass, and it is a layout
+decision rather than a palette one.** A column puts a bar above a list
+and the list begins where the bar ends, so nothing of the list is ever
+behind the bar — and a translucent material with nothing behind it draws
+as a grey rectangle, however well it is drawn. The three conditions have
+to hold together: something behind the pane, a material clear enough to
+see it through, and an edge with thickness to bend it.
+`examples/uitoolkit-sample-glass` is all three at once.
+
 ## Wizards
 
 `widgets.NewWizard(title, pages...)` walks through `WizardPage`s with
