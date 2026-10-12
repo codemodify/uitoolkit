@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -247,11 +248,9 @@ func TestTheCountedClaimAboutLatchedButtonsIsTheCount(t *testing.T) {
 			t.Errorf("%s no longer makes the claim this counts; drop it from the list or put the sentence back", f)
 			continue
 		}
-		if m[1] != itoa(same) || m[2] != itoa(len(packs)) {
+		if m[1] != strconv.Itoa(same) || m[2] != strconv.Itoa(len(packs)) {
 			t.Errorf("%s says %s of %s packs draw a checked button like an ordinary one; it is %d of %d",
 				f, m[1], m[2], same, len(packs))
 		}
 	}
 }
-
-func itoa(n int) string { return fmt.Sprintf("%d", n) }
