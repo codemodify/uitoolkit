@@ -1,7 +1,7 @@
 # uitoolkit, running
 
 Every frame on this page was rendered by this repo painting through
-**paintengine2d v0.11.0**, on the offscreen backend — no X11, no Wayland, no compositor
+**paintengine2d v0.12.2**, on the offscreen backend — no X11, no Wayland, no compositor
 involved. Regenerate the stills at any time with:
 
 ```sh

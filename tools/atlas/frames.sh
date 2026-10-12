@@ -1,7 +1,8 @@
 #!/bin/bash
 # frames.sh [DEST] — the README's window-frame sheet: one active frame per
 # era, System 1 in 1984 to macOS Tahoe in 2025, each drawn by its own
-# engine. DEST defaults to docs/screenshots/themes/frames.webp.
+# engine, and a last row of the four the toolkit draws as itself. DEST
+# defaults to docs/screenshots/themes/frames.webp.
 #
 # This exists because the image did not have it. It was made by hand
 # once, and by the time anything about frame drawing changed — the
@@ -23,6 +24,11 @@ trap 'rm -rf "$WORK"' EXIT
 # 1997 window managers and System 7 kept beside their neighbours rather
 # than strictly sorted, because the sheet reads as a history and a
 # strict sort breaks the pairs that belong together.
+#
+# The last row is the toolkit's own, which reproduce nothing: Hangar's
+# cut corners, Lumen's glass, Nocturne's drawn art and Deck, whose
+# window is not a rectangle at all. They are last because the rest is a
+# history and these are not in it.
 PACKS=(
   system1 openlook next motif
   win31 system7 amiga31 win95
@@ -31,6 +37,7 @@ PACKS=(
   metal-ocean aero oxygen nimbus
   win10 bigsur fluent breeze6
   adwaita48 sourcegit islands tahoe
+  hangar lumen nocturne deck
 )
 
 cd "$REPO"

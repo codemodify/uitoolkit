@@ -23,8 +23,8 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.5
-go get github.com/codemodify/paintengine2d@v0.12.0
+go get github.com/codemodify/uitoolkit@v0.23.6
+go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
 **Start here: [docs/building.md](docs/building.md)** — the path through the
@@ -184,9 +184,10 @@ platform it came from. The rust dot is the default, Metal (Ocean).*
 Each theme also draws the window frame its original had, from the Mac's
 close box to SourceGit's flat cells. The app paints its own title bar,
 borders and buttons; the desktop still moves, resizes, snaps and closes
-the window.
+the window. The last row is the four that copy nothing — the toolkit's
+own, down to a window that is not a rectangle.
 
-![Window frames from System 1 in 1984 to macOS Tahoe in 2025, each in its own era's style](docs/screenshots/themes/frames.webp)
+![Window frames from System 1 in 1984 to macOS Tahoe in 2025, each in its own era's style, and the toolkit's own four: Hangar, Lumen, Nocturne and Deck](docs/screenshots/themes/frames.webp)
 
 Every tile below is the same small app, the Settings window's preview,
 drawn by its pack's engine. Nothing in a tile is a setting of Settings'
@@ -212,9 +213,11 @@ outside what the atlas crops.
 ### 2020s
 
 The platforms' latest eras are here too: KDE Plasma 6's Breeze, GNOME 48's
-Adwaita, macOS 26 Tahoe's Liquid Glass and Material 3 Expressive.
+Adwaita, macOS 26 Tahoe's Liquid Glass and Material 3 Expressive. The last
+five are the toolkit's own rather than anybody's product — Hangar, a
+telemetry console, and the four Lumens, this toolkit's glass.
 
-![libadwaita and GNOME 48's Adwaita, macOS Big Sur and Tahoe, Material 3 and Material 3 Expressive, Fluent, Plasma 6's Breeze, light and dark](docs/screenshots/themes/themes-2020s.webp)
+![libadwaita and GNOME 48's Adwaita, macOS Big Sur and Tahoe, Material 3 and Material 3 Expressive, Fluent, Plasma 6's Breeze, Hangar and the four Lumen packs, light and dark](docs/screenshots/themes/themes-2020s.webp)
 
 ### The web and its apps
 
@@ -763,7 +766,7 @@ under.
 
 | Command | The application | What it proves |
 | --- | --- | --- |
-| `go run ./examples/uitoolkit-sample-tour` | [`examples/uitoolkit-sample-tour/tourapp`](examples/uitoolkit-sample-tour/tourapp) | Every widget the toolkit has, over three pages built on the public [`showcase`](showcase) package — the controls, the views that hold rows, the documents — and then everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
+| `go run ./examples/uitoolkit-sample-tour` | [`examples/uitoolkit-sample-tour/tourapp`](examples/uitoolkit-sample-tour/tourapp) | Every widget the toolkit has, over three pages built on the public [`showcase`](showcase) package — the controls, the views that hold rows, the documents — and then everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, three packs cascading inside one window, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
@@ -924,6 +927,20 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.6** — **What the toolkit draws as itself.** Two looks that
+reproduce no product: Lumen, a glass material of the toolkit's own in two
+shapes, and Hangar, a telemetry console whose windows have three corners
+cut off. With them, the things a glass interface needs — chrome that
+floats over content (`widgets.FloatOver`), a specular rim that follows the
+pointer — and a window that turns over to put its settings on its back
+(`Window.Flip`), a line of text that appears and goes (`widgets.Toast`), a
+cover over the title bar as well as the content (`Window.SetCover`), and
+`widgets.Breadcrumbs`. **Two breaking changes**: `Engine.DrawButton` takes
+a `ButtonDraw` rather than a label string, so a marked button is one strip
+wider instead of two; and the toolkit no longer takes its motion setting
+from the session it was started in — `UITK_ANIMATIONS=1` forces animation,
+and `style.SetFollowDesktopMotion(true)` is the old behaviour in one line.
 
 **0.23.5** — **Four applications' lists, emptied.** A video player joined the
 three that report against this toolkit; twenty-seven of the twenty-nine

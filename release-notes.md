@@ -7,6 +7,223 @@ about the problem it solved.
 
 ---
 
+## 0.23.6
+
+**What the toolkit draws as itself.** Almost every pack until now
+reproduced somebody's product. Two of the looks here reproduce nothing:
+**Lumen**, a glass material of the toolkit's own in two shapes, and
+**Hangar**, a telemetry console. With them come the things a glass
+interface needs and nobody had asked for yet — chrome that floats over
+content, a specular rim that follows the pointer, a window that turns
+over to put its settings on its back, a line of text that appears and
+goes, and a cover drawn over the title bar as well as the content.
+
+**Two breaking changes.** `Engine.DrawButton` takes a `ButtonDraw`
+rather than a label string, and the toolkit no longer takes its motion
+setting from the session it was started in. Both are below, with what to
+write if you want the old behaviour.
+
+New: `widgets.Breadcrumbs` and `Crumb`; `widgets.Toast`, `ShowToast`,
+`Toasts` and `DismissToasts`; `widgets.FlipPanel` and `widgets.FloatOver`;
+`Window.SetCover`, `Flip`, `SetFlipFaces`, `SetFlipShapesWindow`,
+`SetFrameShadow`, `SetGlassUnder`, `SetToastLayer`, `Layout`, `Announce`
+and `OnPaintDeviceClosing`; `platform.CursorPointer`; `style.ButtonDraw`
+with `ButtonLabelBox`, `ButtonIconBox` and `ButtonIconWidth`;
+`style.SetGlassLight`, `GlassLight` and `GlassRimPaint`;
+`style.ControlLabelOf` and `ControlAdvanceOf`;
+`style.SetFollowDesktopMotion` and `FollowsDesktopMotion`;
+`skingen.Plan.Fonts`; seven icons — `IconLockOpen`, `IconKey`,
+`IconPassword`, `IconTerminal`, `IconDrive`, `IconSafe` and `IconDice`.
+paintengine2d moves to v0.12.2.
+
+### Lumen, the toolkit's own glass
+
+Tahoe draws the right *shapes* for a glass interface — capsules of
+chrome, a floating sidebar — and the wrong material, on purpose: macOS
+26's tool bar glass is an eighth of an alpha with no blur, and Tahoe is a
+reproduction of macOS 26. Over content that is an outline you read
+straight through.
+
+Lumen is the material: four packs (`lumen`, `lumen-night`,
+`lumen-square`, `lumen-square-night`) that differ from each other in
+`Corners` and nothing else, because the shape is a preference and not a
+second look. Getting it to read as glass took three things the toolkit
+did not have:
+
+- **Chrome that floats over content.** A column puts a bar above a list
+  and the list begins where the bar ends, so nothing of the list is ever
+  behind the bar — right for an opaque bar, fatal for a translucent one.
+  A material with nothing behind it has nothing to be translucent *of*.
+  `widgets.FloatOver` lays its content under its top and bottom instead
+  of beside them.
+- **A rim that is lit from somewhere.** The specular highlight follows
+  the pointer (`style.SetGlassLight`), which is what tells the eye the
+  pane has a thickness.
+- **The material's own numbers.** `ThemePack.Look` went back to the
+  registry by the pack's name, so loading a pack, adjusting
+  `glassBlur` and asking for its look returned the registered pack with
+  the change silently dropped. It builds from the pack it was called on
+  now, which is what its documentation always said.
+
+Three defects in the glass that was already there went with it: a window
+asking for glass told the compositor it was opaque, the blur region was
+the surface's rather than the window's, and the window was not actually
+see-through.
+
+### Hangar, a telemetry console
+
+A pack of no product: the genre every mission display, game HUD and
+avionics panel converged on. Three corners cut off every window and
+panel (the window itself is cut, through `WindowShape`), a
+gunmetal-to-shadow ground under a diagonal weave, one ember accent spent
+only on what is *on*, hairline boxes, chrome labels in capitals,
+segmented meters, and caption buttons as tall as the band they sit in.
+
+It is here because a toolkit that can only dress as the past cannot
+dress as a console — and because every seam it needed was one an engine
+is supposed to have. The one seam it did not have is the next section.
+
+### A marked button is one strip wider
+
+**Breaking.** `Engine.DrawButton` takes a `ButtonDraw` — the label and
+the mark — rather than a label string:
+
+```go
+DrawButton(ctx, b, st, d ButtonDraw)   // was: label string
+```
+
+A button with an icon was about 64 device pixels wider than one without.
+The trade-off was documented rather than wrong, and it came from a seam
+that could not say what was needed: a push button's label is drawn *by
+the engine*, every engine centres it in the box it is handed and
+decorates it its own way — Clearlooks embosses it, Win95 shadows it,
+Aqua draws gel text. The widget could not move the label without taking
+that away, so it reserved a strip at *each* end and let the centred
+label land between them. Half of that width was symmetry nobody asked
+for.
+
+`DrawToolButton` has been handed the icon all along, which is exactly
+why a tool button can be tight. This is the same idea applied to the
+seam that was missing it. An engine that drew only `d.Label` needs no
+other change; `style.ButtonLabelBox` and `ButtonIconBox` do the
+arithmetic for one that draws both.
+
+### The toolkit decides its own motion
+
+**Breaking.** A Plasma session with its animation speed at Instant
+publishes reduced-motion through the portal, and the toolkit obeyed it:
+every animation in every uitoolkit app went off, with nothing an
+application could say about it. It was found the way these things are
+found — the flip panel's demo was reported as "no 3D flip, it just
+flickers", and the flip was correct.
+
+```sh
+UITK_ANIMATIONS=0   # instant, as before
+UITK_ANIMATIONS=1   # animate, over every preference — new
+# unset             # the application decides
+```
+
+The desktop's reduced-motion is **recorded** now
+(`style.DesktopReducesMotion`) rather than obeyed, unless the application
+asks for the old behaviour with `SetFollowDesktopMotion(true)` — one
+line. That is a real accessibility setting, and an application with no
+reason to do otherwise should pass it on, through that call or its own
+settings page. The user's own preference (`SetReduceMotion`,
+`look.json`) is obeyed exactly as before: that one is the application's,
+not the session's.
+
+### A window turns over, says things, and can be covered
+
+- **`Window.Flip`** turns the whole window over in perspective, front
+  face to back, and `SetFlipShapesWindow` cuts the window to the card's
+  outline while it turns, so the desktop shows through the corner the
+  card has turned away. A card comes back the way it went.
+- **`widgets.Toast`** is a line that appears and goes — Copied,
+  Unlocked, Canceled. Nothing in the toolkit said something and went: a
+  status bar was the only place a window had for what just happened, and
+  a status bar never goes. A toast announces itself to the screen reader
+  as a polite live region, and a press goes straight through it.
+- **`Window.SetCover`** draws over the whole window, title bar and all.
+  An overlay covers the content alone, because a modal dimming its own
+  title bar would be wrong; a card turning the window over needs the
+  other thing.
+- **`widgets.Breadcrumbs`** is a path of steps whose arrows overlap, hit
+  tested by shape, with the keyboard and the accessibility nodes an
+  application would otherwise write itself.
+- **`Window.SetFrameShadow(false)`** gives up the soft shadow the look
+  drops into the transparent margin, without giving up the toolkit's
+  frame, buttons and resizing with it.
+- **`Window.Layout`** lays the window out at once rather than at its
+  next frame — what a picture of the window, taken the moment it is
+  shown, needs.
+- **`Window.OnPaintDeviceClosing`** runs *before* the GPU device goes,
+  which is the only moment an application can still release a texture it
+  made on it.
+- **`platform.CursorPointer`**, the pointing hand, on all four backends.
+- **Seven icons a vault is made of**: an open padlock, a key, a masked
+  password, a shell prompt, a disk, a safe and dice.
+
+### The rest
+
+- **A rack answers a burst of moves once.** A drag delivers a configure
+  for every step, and four arriving in one turn of the loop were four
+  passes over every pane, the first three placements overwritten by the
+  fourth before anything was painted. It is one pass now, after the
+  burst — and a move request the window manager never honours is
+  reconciled when the patience runs out, which is a length of time
+  rather than a number of looks.
+- **A rack keeps every link when the main window rejoins its group.**
+- **A popup is shown at the size it was measured at**, in the look it is
+  drawn in rather than the look that opened it.
+- **A key reaches whatever has the keyboard**, in a popup and out of
+  one; a key with no focus reaches the content root instead of being
+  dropped.
+- **A scroll view leaves Ctrl+Page Up and Down alone**, so the tabs
+  underneath get them.
+- **A measured size is whole pixels**, so layout cannot hand back less
+  than was asked for.
+- **The fallback file chooser takes every pattern in a filter**, not the
+  first.
+- **A wheel ends a click gesture** even when nothing scrolls.
+- **A skin can say what its radios' well looks like.** One part served
+  the check box's well and the radio's, so a skin that bound `check`
+  painted its radios square.
+- **A skin's capitals reach the labels it paints**, and a generated skin
+  can state its typefaces (`skingen.Plan.Fonts`) instead of the
+  application reopening the manifest the generator just wrote.
+- **A window panel's caption can move the window it is the chrome of.**
+
+### Tooling and documentation
+
+- **The Windows guests are in the repository.** `tools/vm/` —
+  `vms.conf`, `vm.sh`, `install-win11.sh` and an answer file — brings up
+  Windows 10 and an unattended-installed Windows 11 for
+  `tools/test-windows.sh`, and the Mac is found by name rather than by
+  an address that moves. The Windows run packs the source tree rather
+  than the scratch directory beside it, which is what had been making it
+  die before the first test.
+- **The documentation's counts have a test behind them.** The table that
+  lists the packs was seven short — Lumen's four, Nocturne, Cassette and
+  Deck all shipped and were in nobody's documentation. Every built-in
+  pack must have a row now, the counts above the table must be what
+  `AllBuiltinThemeNames` and `EngineIDs` return, and the three places
+  that say how many packs leave a latched button looking like an
+  ordinary one must say what `CheckedFaceOf` measures. It was 53 of 135;
+  it is 49 of 132.
+- **The screenshots and the theme sheets are regenerated**, and the
+  frame sheet has a last row of the four the toolkit draws as itself.
+
+### Known
+
+- **Printing** is still not in the toolkit. It is the one item left open
+  across the four applications that report against it, and it is pinned.
+- **No complex text**: no bidirectional layout, no shaping, no font
+  fallback for a missing glyph. [docs/text.md](docs/text.md) says what
+  that means for a label in Arabic, Hebrew, Devanagari or CJK.
+- **arm64 has never been run**, on any of the three platforms.
+
+---
+
 ## 0.23.5
 
 **Four applications' lists, emptied.** A video player joined the three that

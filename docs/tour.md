@@ -110,10 +110,10 @@ and one in the status bar saying what to do.
 | **Docking** — four sides, tabs, splits, floats, and the layout as JSON | **Drag and drop** — two lists, a drop zone, and the negotiated action |
 | ![Frames](screenshots/tour-frames.webp) | ![Shapes](screenshots/tour-shapes.webp) |
 | **Frames** — whose frame, which button order, and what maximizing costs | **Shapes** — the silhouette, measured in rects |
-| ![Skins](screenshots/tour-skins.webp) | ![Desktop](screenshots/tour-desktop.webp) |
-| **Skins** — a preview in one pack inside a window running another | **Desktop** — clipboard, tray, notification, both file dialogs |
-| ![Access](screenshots/tour-access.webp) | |
-| **Access** — the tree, the linter, the tab order, motion and scale | |
+| ![Skins](screenshots/tour-skins.webp) | ![Cascade](screenshots/tour-cascade.webp) |
+| **Skins** — a preview in one pack inside a window running another | **Cascade** — three packs in one window, each inheriting what it does not state |
+| ![Desktop](screenshots/tour-desktop.webp) | ![Access](screenshots/tour-access.webp) |
+| **Desktop** — clipboard, tray, notification, both file dialogs | **Access** — the tree, the linter, the tab order, motion and scale |
 
 All of them at once:
 
