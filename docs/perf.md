@@ -314,17 +314,17 @@ Medians of 61 alternated runs. Against a first frame that lands between
 79 ms and 150 ms in the rig, package init was 10–13 ms of it and is now
 6–8.
 
-The cause was not the 129 packs or the 33 engines as such. Building every
-engine's packs — every `…Packs()` function in `style`, called back to
-back — is 1.0 ms, 0.8 MB and 1200 allocations all told, and the 33
-`RegisterEngine` calls are a map insert each. What cost was **the
-built-in skins' registration doing the whole job eight times**: a skin's
-`Pack` resolves it against its base pack, which builds the era-pack index
-(129 packs, each `Resolve`d, plus the embedded starters parsed out of the
-binary), and `RegisterPack` invalidates the index the moment it is
-handed one. Resolving all eight skins before registering any of them
-builds it once. That is the first commit, and it is the whole of the
-table above.
+The cause was not the packs or the engines as such — there were 129 and
+33 of them at that version. Building every engine's packs — every
+`…Packs()` function in `style`, called back to back — is 1.0 ms, 0.8 MB
+and 1200 allocations all told, and the `RegisterEngine` calls are a map
+insert each. What cost was **the built-in skins' registration doing the
+whole job eight times**: a skin's `Pack` resolves it against its base
+pack, which builds the era-pack index (those 129 packs, each `Resolve`d,
+plus the embedded starters parsed out of the binary), and `RegisterPack`
+invalidates the index the moment it is handed one. Resolving all eight
+skins before registering any of them builds it once. That is the first
+commit, and it is the whole of the table above.
 
 What is left, for whoever looks next: `loadBuiltinSkins` is 2.2 MB in
 22 400 allocations — 42% of the bytes and 64% of the allocations still

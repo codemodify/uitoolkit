@@ -12,9 +12,9 @@ import (
 //
 // A latched push button is a search that is on, a filter that is
 // applied, a panel that is showing: the control stays down until it is
-// pressed again. Most eras draw one, and 53 of the 135 shipped packs
+// pressed again. Most eras draw one, and 49 of the 132 shipped packs
 // draw a checked button exactly as they draw an ordinary one — so a
-// button that told the truth about its state on the other 82 said
+// button that told the truth about its state on the other 83 said
 // nothing at all on these.
 //
 // Where a pack does not mark it, the button is drawn **pressed**

@@ -369,7 +369,7 @@ fallback rather than a broken window.
 ## For widgets
 
 A component takes input across its whole box, and always has. That is the
-default, every widget in the toolkit and all 123 packs rely on it, and
+default, every widget in the toolkit and all 132 packs rely on it, and
 nothing about it has changed — a component that never asks pays two nil
 checks and a failed type assertion in `HitTest`.
 

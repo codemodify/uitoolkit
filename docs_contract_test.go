@@ -1,6 +1,7 @@
 package uitoolkit_test
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // The documentation names APIs; this checks they exist.
@@ -162,3 +165,93 @@ func exportedOf(t *testing.T, dir string) map[string]bool {
 	}
 	return out
 }
+
+// **Every pack the toolkit ships has a row in the table that lists the
+// packs.** The table is read as the list of what there is — `themes.md`
+// opens by saying so — and it had fallen seven behind: Lumen's four,
+// Nocturne, Cassette and Deck all shipped, were in Settings' theme list
+// and in nobody's documentation. Nothing compared the page with the
+// toolkit, so the page could only be right by somebody remembering.
+//
+// The counts in its first line are checked only in the build that has
+// every engine, because they are counts of everything there is and a
+// build with one engine has eight packs. `tools/test.sh` is that build.
+func TestEveryPackIsInTheThemesTable(t *testing.T) {
+	src, err := os.ReadFile("docs/themes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(src)
+	packs := style.AllBuiltinThemeNames()
+	var missing []string
+	for _, n := range packs {
+		if !strings.Contains(page, "| `"+n+"` |") {
+			missing = append(missing, n)
+		}
+	}
+	if len(missing) > 0 {
+		t.Errorf("docs/themes.md lists no row for %d of the %d built-in packs: %s",
+			len(missing), len(packs), strings.Join(missing, " "))
+	}
+
+	engines := style.EngineIDs()
+	if len(engines) < 30 {
+		t.Skipf("built with %d engines; the counts are only checked under theme_engine_all", len(engines))
+	}
+	want := fmt.Sprintf("%d packs from %d engines", len(packs), len(engines))
+	if !strings.Contains(page, want) {
+		first := page
+		if i := strings.Index(page, "## Built-in packs"); i >= 0 {
+			first = page[i:]
+		}
+		if i := strings.Index(first, "engines"); i >= 0 {
+			first = first[:i+len("engines")]
+		}
+		t.Errorf("docs/themes.md does not say %q; it opens the table with %q", want,
+			strings.TrimSpace(strings.TrimPrefix(first, "## Built-in packs")))
+	}
+}
+
+// **A counted claim is counted again here.** Three places say how many
+// packs leave a latched button looking like an ordinary one — two pages
+// and the comment over the code that measures it — and the number drifts
+// every time a pack is added. It had: the pages said 53 of 135 when the
+// toolkit had 132 packs and 49 of them drew it the same way.
+//
+// Only checked in the build that has every engine, because it is a count
+// of every pack there is.
+func TestTheCountedClaimAboutLatchedButtonsIsTheCount(t *testing.T) {
+	if n := len(style.EngineIDs()); n < 30 {
+		t.Skipf("built with %d engines; the count is only checked under theme_engine_all", n)
+	}
+	packs := style.AllBuiltinThemeNames()
+	same := 0
+	for _, n := range packs {
+		p, ok := style.LoadTheme(n)
+		if !ok {
+			t.Fatalf("%s is in the built-in list and does not load", n)
+		}
+		if !style.CheckedFaceOf(p.Look()) {
+			same++
+		}
+	}
+
+	claim := regexp.MustCompile(`(\d+) of the\s+(\d+) (?:shipped )?packs\s+(?://\s+)?draw a checked button`)
+	for _, f := range []string{"docs/recipes.md", "docs/widgets.md", "style/checkedface.go"} {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := claim.FindStringSubmatch(strings.ReplaceAll(string(src), "\n", " "))
+		if m == nil {
+			t.Errorf("%s no longer makes the claim this counts; drop it from the list or put the sentence back", f)
+			continue
+		}
+		if m[1] != itoa(same) || m[2] != itoa(len(packs)) {
+			t.Errorf("%s says %s of %s packs draw a checked button like an ordinary one; it is %d of %d",
+				f, m[1], m[2], same, len(packs))
+		}
+	}
+}
+
+func itoa(n int) string { return fmt.Sprintf("%d", n) }

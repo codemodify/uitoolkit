@@ -20,7 +20,7 @@ a rectangle of pixels; everything inside that rectangle is its own.
 
 That is not unusual — Avalonia, Fyne and Flutter all draw their own
 widgets, and so does Qt in the sense that QStyle paints rather than
-calls the platform. What is unusual is **what** it draws: 33 engines
+calls the platform. What is unusual is **what** it draws: 34 engines
 that reproduce the *shapes* of four decades of desktop looks, driving
 132 packs, so an application can wear Windows 95, Platinum, Aqua, Luna,
 Breeze, Adwaita or Tahoe and be that thing rather than a modern widget
@@ -39,7 +39,7 @@ in a period colour scheme.
 | Mobile / web | no | yes | no | yes | yes | no | no | no | iOS etc. |
 | Complex text (bidi, shaping) | **no** | yes (HarfBuzz) | yes (Pango) | yes | yes | yes | yes | yes | yes |
 | Accessibility | Linux only | all platforms | all platforms | all platforms | partial | yes | yes | partial | yes |
-| Period-accurate themes | **33 engines, 132 packs** | a few styles | CSS themes | Fluent + CSS-ish | one look | the OS look | the OS look | one look | the OS look |
+| Period-accurate themes | **34 engines, 132 packs** | a few styles | CSS themes | Fluent + CSS-ish | one look | the OS look | the OS look | one look | the OS look |
 | cgo / native deps | only where the OS demands | n/a | n/a | n/a | yes (OpenGL) | n/a | n/a | n/a | n/a |
 | Binary | 13 MB (21 with every engine) | large, shared libs | large, shared libs | .NET runtime | ~20–40 MB | .NET runtime | tiny | large | n/a |
 
@@ -151,11 +151,11 @@ Measured in this repository at the version in [version.go](../version.go):
 
 | | |
 | --- | --- |
-| Theme engines | 33 |
+| Theme engines | 34 |
 | Theme packs | 132 |
 | `uitoolkit-settings`, one engine | 12.98 MB stripped |
-| `uitoolkit-settings`, every engine | 21.09 MB stripped |
-| The tour sample, the same two ways | 14.80 / 22.92 MB |
+| `uitoolkit-settings`, every engine | 21.25 MB stripped |
+| The tour sample, the same two ways | 14.95 / 23.23 MB |
 | Direct dependencies | paintengine2d, `golang.org/x/image`, `godbus` |
 | Platforms with a real backend | Wayland, X11, Win32, AppKit |
 | Seams each backend implements | window, frame, geometry, popups, clipboard, drag and drop, cursors, IME — asserted by `platform/seams_*.go` |

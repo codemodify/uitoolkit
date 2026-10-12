@@ -23,8 +23,8 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.22.1
-go get github.com/codemodify/paintengine2d@v0.11.0
+go get github.com/codemodify/uitoolkit@v0.23.5
+go get github.com/codemodify/paintengine2d@v0.12.0
 ```
 
 **Start here: [docs/building.md](docs/building.md)** — the path through the
@@ -77,7 +77,7 @@ hyphens, so the names use underscores. See
 
 ## Highlights
 
-- **Themes that change shapes, not just colours.** 33 engines (like Qt's
+- **Themes that change shapes, not just colours.** 34 engines (like Qt's
   QStyle) draw 132 packs spanning four decades: System 1 to macOS Tahoe's
   Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 1
   to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
@@ -136,7 +136,7 @@ hyphens, so the names use underscores. See
 ## Themes
 
 A theme is an **engine**, Go code that decides the shapes (like Qt's
-QStyle), plus a **pack** of colours, metrics and fonts. 31 engines draw 123
+QStyle), plus a **pack** of colours, metrics and fonts. 34 engines draw 132
 packs, from the 1984 Finder to VS Code's 2026 themes. An engine can hand a
 later era of its platform to code of its own, so macOS draws Big Sur and
 Tahoe, Breeze Plasma 5 and 6, Adwaita GNOME 42 and 48, Material 3 and 3
@@ -450,7 +450,7 @@ AppKit.
   frame and geometry, popups on surfaces of their own, the clipboard,
   drag and drop, pointer shapes and IME. `platform/seams_*.go` asserts
   that, so the compiler keeps the list true.
-- **33 theme engines** driving **132 packs**, from System 1 to macOS
+- **34 theme engines** driving **132 packs**, from System 1 to macOS
   Tahoe, that change a widget's *shapes* and not only its colours.
 - A retained widget tree with layout, focus and keyboard navigation, a
   full widget set (lists, trees, tables, rich text, MDI, wizards,

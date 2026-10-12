@@ -20,13 +20,18 @@ icon size stay independent `look.json` prefs.
 
 ## Built-in packs
 
-125 packs from 33 engines, by the year their original shipped. Each one was
-researched from published facts (design guides, SDK documentation, pixels
-measured from screenshots of the originals); no code or pixmaps were copied
-— with one exception, `hangar`, which reproduces no product at all: it is
-the genre every mission display, game HUD and avionics panel converged on,
-and it is here because a toolkit that can only dress as the past cannot
-dress as a console.
+132 packs from 34 engines, by the year their original shipped. Each one
+that names a product was researched from published facts (design guides,
+SDK documentation, pixels measured from screenshots of the originals); no
+code or pixmaps were copied.
+
+Eight reproduce nothing, and are the toolkit's own: `hangar`, the genre
+every mission display, game HUD and avionics panel converged on, here
+because a toolkit that can only dress as the past cannot dress as a
+console; the four `lumen` packs, this toolkit's glass rather than
+Apple's; and the three skins `nocturne`, `cassette` and `deck`, whose art
+`cmd/uitk-skingen` draws.
+
 Apps start in `metal-ocean` (`style.DefaultThemeName`) until the user picks
 one; `UITK_THEME=<id>` runs any app in any pack.
 
@@ -157,6 +162,13 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `vscode-night` | VS Code Dark 2026 | 2026 | VS Code | `web` | VS Code's Dark 2026: a #121314 editor in #191a1b chrome, #297aa0 buttons, the #3994bc line atop the active tab, white-alpha selections. |
 | `vscode` | VS Code Light 2026 | 2026 | VS Code | `web` | VS Code's Light 2026: #fafafd chrome around a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab. |
 | `hangar` | Hangar | 2026 | Console | `hangar` | A telemetry console, of no product: three corners cut off every window and panel, a gunmetal-to-shadow ground under a diagonal weave, one ember accent spent only on what is on, hairline boxes, chrome labels in capitals and segmented meters. |
+| `lumen` | Lumen | 2026 | uitoolkit | `macos` | The toolkit's own glass, in Apple's shape: every pane a capsule. Chrome you see the content through, frosted a little, bent at its edges, lit from wherever the pointer is. |
+| `lumen-night` | Lumen Dark | 2026 | uitoolkit | `macos` | Lumen over charcoal: capsules of glass, a third of an alpha of white over whatever scrolls beneath them. |
+| `lumen-square` | Lumen Square | 2026 | uitoolkit | `macos` | Lumen with the corner only taken off: the same glass, drawn as rectangles with a 3px hint rather than pills. |
+| `lumen-square-night` | Lumen Square Dark | 2026 | uitoolkit | `macos` | Lumen Square over charcoal: the same glass as the capsules, squared off to a hint. |
+| `nocturne` | Nocturne | 2026 | uitoolkit | `skin` | The toolkit's own skin: amber on charcoal, drawn from paths so every corner is exact at 1.75 as well as at 1 and 2. |
+| `cassette` | Cassette | 2026 | uitoolkit | `skin` | A pixel skin: six colours, two-pixel bevels and square corners, drawn at 1x and doubled exactly — the toolkit's test of the pixelated path. |
+| `deck` | Deck | 2026 | uitoolkit | `skin` | The toolkit's shaped skin: a window cut to a deck's outline, with the desktop beside it, and round buttons that take the pointer only on their ink. |
 
 Aliases (load-only, not listed twice): `classic95` → `light`,
 `classic95-dark` → `dark`, `luna-dark` → `luna-night`, and the other

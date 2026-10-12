@@ -1025,7 +1025,7 @@ say it.
 - **HiDPI.** Layout and text are exact at every scale because they are not
   pictures. The art chooses upward, or declares itself pixelated and stays
   crisp at whole multiples.
-- **The other 123 packs.** Every addition is optional and nothing about the
+- **The other 129 packs.** Every addition is optional and nothing about the
   existing engines changed. Remove the skin, pick Breeze or Luna or System 7,
   and the app still works.
 

@@ -38,8 +38,8 @@ the thing is a button. If the answer to "why doesn't that look like a
 button?" is "because it isn't one", you wanted `NewIconButton`.
 
 A latched button — a search that is on, a filter applied — sets
-`Checked` (and `Toggle`, so a screen reader calls it a toggle). 53 of the
-135 packs draw a checked button exactly as an ordinary one, so on those
+`Checked` (and `Toggle`, so a screen reader calls it a toggle). 49 of the
+132 packs draw a checked button exactly as an ordinary one, so on those
 it is drawn pressed instead, which is how Windows 3.1, Motif, CDE and
 OPEN LOOK drew a toggle anyway. You do not have to know which pack you
 are on.

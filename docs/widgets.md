@@ -664,7 +664,7 @@ somebody is meant to see that the thing is a button. That is why
 button?" is "because it isn't one", this is the one you wanted.
 
 A latched button — a search that is on, a filter applied — sets `Checked`
-and `Toggle`. **53 of the 135 packs draw a checked button exactly as an
+and `Toggle`. **49 of the 132 packs draw a checked button exactly as an
 ordinary one**, so on those it is drawn pressed instead, which is how
 Windows 3.1, Motif, CDE and OPEN LOOK drew a toggle anyway. Measured, not
 listed (`style.CheckedFaceOf`), so a caller never has to know which pack

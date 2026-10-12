@@ -1,11 +1,11 @@
 # Theme engines are opt-in
 
-132 theme packs are drawn by 33 engines, and an application that wants
+132 theme packs are drawn by 34 engines, and an application that wants
 three of them should not carry all of them. Engines are chosen at
 **build time**, with build tags.
 
-(33 is what `style.EngineIDs()` returns and what the About box in
-Settings prints. There are **34 tags**, because two engines are era
+(34 is what `style.EngineIDs()` returns and what the About box in
+Settings prints. There are **35 tags**, because two engines are era
 variants another engine hands off to — `breeze6` for a pack whose
 `plasma` parameter is 6 or more, `adwaita48` likewise — and each can be
 left out on its own without losing the engine it belongs to.)
@@ -35,8 +35,8 @@ Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 | --- | --- | --- |
 | default | 1 | **12.98 MB** |
 | `theme_engine_oxygen` | 1 | 12.91 MB |
-| three engines | 3 | 13.36 MB |
-| `theme_engine_all` | 36 | 21.24 MB |
+| three engines | 3 | 13.43 MB |
+| `theme_engine_all` | 34 | 21.25 MB |
 
 **8.3 MB**, 39% of the binary, for an application that wants one look.
 
