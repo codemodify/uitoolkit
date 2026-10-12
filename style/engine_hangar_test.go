@@ -400,8 +400,57 @@ func TestHangarBracketsAreBrighterThanTheFrame(t *testing.T) {
 		hangarBox(lk, ctx, b, lk.Palette().Surface, lk.Palette().Border)
 		hangarBrackets(lk, ctx, b, hangarCut(lk, b), c.bracket)
 	})
-	if n := diffPixels(plain, marked); n < 150 {
-		t.Errorf("the brackets changed %d pixels; they are meant to be seen", n)
+	// One bracket of two 20px arms and a chamfer: about 115 pixels. Half
+	// of that is still unmistakably a drawn mark rather than nothing.
+	if n := diffPixels(plain, marked); n < 60 {
+		t.Errorf("the bracket changed %d pixels; it is meant to be seen", n)
+	}
+
+	// **One corner, the bottom left.** The same mark at every corner
+	// stops being a mark and becomes a border drawn twice, and at the top
+	// left it lands in the title row under the words.
+	//
+	// Counted as the difference between the two shots above, which differ
+	// in nothing but the brackets. Matching the bracket's colour instead
+	// finds only the diagonal: the upright and level arms land on a half
+	// pixel and are two rows of half-strength blend, so no tolerance tight
+	// enough to exclude the frame's own line admits them.
+	region := func(x0, y0, x1, y1 int) int {
+		n := 0
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				if plain.NRGBAAt(x, y) != marked.NRGBAAt(x, y) {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	if got := region(0, h-45, 55, h); got < 60 {
+		t.Errorf("the bottom left carries %d bracket pixels; it is the one corner that wears the mark", got)
+	}
+	for _, q := range []struct {
+		name           string
+		x0, y0, x1, y1 int
+	}{
+		{"top left", 0, 0, 55, 45},
+		{"top right", w - 55, 0, w, 45},
+		{"bottom right", w - 55, h - 45, w, h},
+	} {
+		if got := region(q.x0, q.y0, q.x1, q.y1); got > 0 {
+			t.Errorf("the %s carries %d bracket pixels; the mark is the bottom left's alone", q.name, got)
+		}
+	}
+
+	// **And the arms meet at the chamfer, they do not cross.** Drawn as
+	// two lines from the inset — which is what this was — the level arm
+	// runs back through the diagonal and the corner comes out with an X
+	// in it. The square corner of the inset, a good eight pixels clear of
+	// the chamfer, is where that shows: it is ink only if the arms were
+	// drawn all the way to it.
+	in := int(snap(lk.S(lk.P("bracketInset", 5))))
+	if got := region(in-2, h-in-3, in+3, h-in+2); got > 0 {
+		t.Errorf("the bracket's inset corner carries %d pixels; the arms cross there instead of meeting at the chamfer", got)
 	}
 }
 

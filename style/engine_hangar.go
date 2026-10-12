@@ -234,45 +234,44 @@ func hangarCutRect(b paintengine2d.Rect, cut float32, s hangarSides) *paintengin
 	return p
 }
 
-// hangarBrackets draws the hairlines that sit just inside three corners,
-// parallel to the edges they follow.
+// hangarBrackets draws the one hairline bracket a box wears: inside its
+// bottom left corner, following the two edges and the chamfer between
+// them.
 //
-// They are the one piece of ornament this look has, and they are not
-// ornament: a flat box on a flat ground has no depth at all, and a second
-// line inside the first is how a technical drawing says "this is a panel
-// with an edge" without drawing a bevel. The corners are the three the cut
-// does *not* start from, so the eye gets a square mark and a cut mark at
-// opposite ends of each edge.
+// One corner, not three. A flat box on a flat ground has no depth at
+// all, and a second line inside the first is how a technical drawing
+// says "this is a panel with an edge" without drawing a bevel — but the
+// same mark at every corner stops being a mark and becomes a border
+// drawn twice. At the top left it also landed in the title row, under
+// the words.
+//
+// The three pieces are one stroke with corners, so they meet rather than
+// cross: down the left to where the chamfer starts, across the chamfer,
+// then right along the bottom. Drawn as separate lines from the inset —
+// which is what this was — the horizontal arm runs back *through* the
+// diagonal and the corner comes out with an X in it.
 func hangarBrackets(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, cut float32, col paintengine2d.Color) {
 	lw := hangarPx(l)
 	in := snap(l.S(l.P("bracketInset", 5)))
 	run := snap(l.S(l.P("bracketRun", 20)))
-	if b.Dx() < (in+run)*2.5 || b.Dy() < (in+run)*2.5 {
+	if b.Dx() < (in+cut+run)*1.6 || b.Dy() < (in+cut+run)*1.6 {
 		return
 	}
-	line := func(x, y, w, h float32) {
-		ctx.DrawRect(hangarSnap(paintengine2d.XYWH(x, y, w, h)), paintengine2d.Fill(col))
-	}
-	// Top left: a square corner, so both lines start at the inset.
-	line(b.Min.X+in, b.Min.Y+in, run, lw)
-	line(b.Min.X+in, b.Min.Y+in, lw, run)
-	// Bottom left and bottom right: the corner is cut, so each line stops
-	// short of the chamfer by the inset and the cut together, and a third
-	// runs parallel to the cut itself.
+	// Where the chamfer's own inset line begins and ends. With no cut the
+	// two points are the corner itself and the path is a plain L.
 	off := in + cut
-	line(b.Min.X+in, b.Max.Y-in-lw, run, lw)
-	line(b.Min.X+in, b.Max.Y-off-run, lw, run)
-	line(b.Max.X-in-run, b.Max.Y-in-lw, run, lw)
-	line(b.Max.X-in-lw, b.Max.Y-off-run, lw, run)
-	if cut <= 0 {
-		return
+	p := paintengine2d.NewPath()
+	p.MoveTo(b.Min.X+in, b.Max.Y-off-run)
+	p.LineTo(b.Min.X+in, b.Max.Y-off)
+	if cut > 0 {
+		p.LineTo(b.Min.X+off, b.Max.Y-in)
 	}
-	diag := paintengine2d.NewPath()
-	diag.MoveTo(b.Min.X+in, b.Max.Y-off)
-	diag.LineTo(b.Min.X+off, b.Max.Y-in)
-	diag.MoveTo(b.Max.X-off, b.Max.Y-in)
-	diag.LineTo(b.Max.X-in, b.Max.Y-off)
-	ctx.DrawPath(diag, paintengine2d.StrokePaint(col, lw))
+	p.LineTo(b.Min.X+off+run, b.Max.Y-in)
+	ctx.DrawPath(p, paintengine2d.Paint{
+		Color: col, Style: paintengine2d.StyleStroke, AntiAlias: true,
+		Stroke: paintengine2d.Stroke{Width: lw, Cap: paintengine2d.CapButt,
+			Join: paintengine2d.JoinMiter, MiterLimit: 4},
+	})
 }
 
 // hangarMark is the ember bar at the head of a caption: a short upright
