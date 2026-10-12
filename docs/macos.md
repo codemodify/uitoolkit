@@ -430,7 +430,7 @@ bundled faces makes those numbers a property of the toolkit.
 
 ## What has actually been run
 
-On a MacBook Pro running macOS 15.7.9 — **Intel, an i9-9980HK**, not
+On a MacBook Pro running macOS 15.8.1 — **Intel, an i9-9980HK**, not
 Apple silicon — at a backing scale of 2. The distinction matters and this
 page had it wrong: **darwin/arm64 compiles and has never been run**, here
 or anywhere, because there is no Apple silicon machine to run it on. What
@@ -439,10 +439,18 @@ follows was measured on amd64:
 - `cmd/uitk-smoke -exercise`: a window, the four-quadrant present, and
   every frame and geometry capability called and reported.
 - `tools/test-darwin.sh ./...`: **the whole suite, green**, with
-  `-tags theme_engine_all`.
-- The fifteen AppKit tests in `platform`: present, buffer size, mouse,
-  keyboard, Command-is-not-text, geometry round trip, fixed-window
-  caps, the refusals, maximize, and decorations off and back on.
+  `-tags theme_engine_all`. Last run 2026-10-12. Note the `./...`: with
+  no package named it runs the root package alone and takes half a
+  minute, which looks exactly like a pass.
+- The **40 AppKit tests** in `platform`: present, buffer size, mouse,
+  keyboard, Command-is-not-text, geometry round trip, fixed-window caps,
+  the refusals, maximize, decorations off and back on, keep-above, real
+  popups and their placement, the clipboard, the cursor shapes, drop
+  target and drag, the IME's compose, commit and cancel, a custom MIME
+  through its UTI, and the tray menu.
 
-Not run: anything with IME, the clipboard, drag and drop or a pointer
-shape, because none of them exists yet.
+Not run by hand: there is no human sitting at this machine during a
+suite, so anything that needs one — dragging between two applications,
+typing into the IME's candidate window, a pasteboard shared with a real
+Mac app — has only been exercised by the tests above, which drive AppKit
+from inside the process.
