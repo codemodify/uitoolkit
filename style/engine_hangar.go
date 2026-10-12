@@ -150,6 +150,130 @@ func hangarFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, c
 	ctx.DrawRect(hangarSnap(b).Inset(lw*0.5), paintengine2d.StrokePaint(col, lw))
 }
 
+// ---- the cut corner ----------------------------------------------------------
+
+// hangarSides says which of a box's corners are cut away.
+//
+// Three of them, and the top left is not one: it is where a panel's name
+// and its ember mark go, and the corner the eye starts from is the one
+// corner that should be whole. The other three being cut is what makes a
+// box read as a *panel on a console* rather than as a rectangle — the
+// cut is the genre's single most recognisable mark.
+type hangarSides struct{ TL, TR, BR, BL bool }
+
+// hangarPanelSides is the default: everything but the top left.
+var hangarPanelSides = hangarSides{TR: true, BR: true, BL: true}
+
+// hangarChamfer is the look's one chamfer, in device pixels: the length
+// every cut corner in a window takes off, whatever is being cut.
+//
+// One number, because two things cut at the same corner have to agree.
+// The close button sits in the window's top right and is cut with the
+// window; a button that worked its chamfer out from its own box took 9
+// pixels off where the frame took 12, and the three-pixel sliver of
+// caption band left between them reads as a smudge rather than as an
+// edge.
+func hangarChamfer(l *Classic) float32 { return snap(l.S(l.P("chamfer", 12))) }
+
+// hangarCut is hangarChamfer, kept inside a box that may be too small for
+// it: a 20-pixel control with a 12-pixel chamfer is a hexagon, not a
+// control, so a box that cannot spare it is left square.
+func hangarCut(l *Classic, b paintengine2d.Rect) float32 {
+	cut := hangarChamfer(l)
+	if lim := min(b.Dx(), b.Dy()) * 0.3; cut > lim {
+		cut = snap(lim)
+	}
+	// Below about four pixels a chamfer is not read as a cut corner, it
+	// is read as a bad corner — so a box that small keeps all four.
+	if cut < max(snap(l.S(4)), 3) {
+		return 0
+	}
+	return cut
+}
+
+// hangarCutRect is b with its cut corners taken off: the outline
+// everything in this look that is bigger than a control is drawn on.
+//
+// The two ends of a chamfer are on *different* edges — that is what makes
+// it a diagonal rather than a notch — so each corner is written out as
+// the point the path arrives at and the point it leaves from, walking
+// clockwise from the top left.
+func hangarCutRect(b paintengine2d.Rect, cut float32, s hangarSides) *paintengine2d.Path {
+	p := paintengine2d.NewPath()
+	if cut <= 0 {
+		p.AddRect(b)
+		return p
+	}
+	type corner struct {
+		on               bool
+		inX, inY         float32 // where the edge before it ends
+		outX, outY       float32 // where the edge after it starts
+		cornerX, cornerY float32
+	}
+	for i, c := range []corner{
+		{s.TL, b.Min.X, b.Min.Y + cut, b.Min.X + cut, b.Min.Y, b.Min.X, b.Min.Y},
+		{s.TR, b.Max.X - cut, b.Min.Y, b.Max.X, b.Min.Y + cut, b.Max.X, b.Min.Y},
+		{s.BR, b.Max.X, b.Max.Y - cut, b.Max.X - cut, b.Max.Y, b.Max.X, b.Max.Y},
+		{s.BL, b.Min.X + cut, b.Max.Y, b.Min.X, b.Max.Y - cut, b.Min.X, b.Max.Y},
+	} {
+		inX, inY, outX, outY := c.inX, c.inY, c.outX, c.outY
+		if !c.on {
+			inX, inY, outX, outY = c.cornerX, c.cornerY, c.cornerX, c.cornerY
+		}
+		if i == 0 {
+			p.MoveTo(inX, inY)
+		} else {
+			p.LineTo(inX, inY)
+		}
+		if c.on {
+			p.LineTo(outX, outY)
+		}
+	}
+	p.Close()
+	return p
+}
+
+// hangarBrackets draws the hairlines that sit just inside three corners,
+// parallel to the edges they follow.
+//
+// They are the one piece of ornament this look has, and they are not
+// ornament: a flat box on a flat ground has no depth at all, and a second
+// line inside the first is how a technical drawing says "this is a panel
+// with an edge" without drawing a bevel. The corners are the three the cut
+// does *not* start from, so the eye gets a square mark and a cut mark at
+// opposite ends of each edge.
+func hangarBrackets(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, cut float32, col paintengine2d.Color) {
+	lw := hangarPx(l)
+	in := snap(l.S(l.P("bracketInset", 5)))
+	run := snap(l.S(l.P("bracketRun", 20)))
+	if b.Dx() < (in+run)*2.5 || b.Dy() < (in+run)*2.5 {
+		return
+	}
+	line := func(x, y, w, h float32) {
+		ctx.DrawRect(hangarSnap(paintengine2d.XYWH(x, y, w, h)), paintengine2d.Fill(col))
+	}
+	// Top left: a square corner, so both lines start at the inset.
+	line(b.Min.X+in, b.Min.Y+in, run, lw)
+	line(b.Min.X+in, b.Min.Y+in, lw, run)
+	// Bottom left and bottom right: the corner is cut, so each line stops
+	// short of the chamfer by the inset and the cut together, and a third
+	// runs parallel to the cut itself.
+	off := in + cut
+	line(b.Min.X+in, b.Max.Y-in-lw, run, lw)
+	line(b.Min.X+in, b.Max.Y-off-run, lw, run)
+	line(b.Max.X-in-run, b.Max.Y-in-lw, run, lw)
+	line(b.Max.X-in-lw, b.Max.Y-off-run, lw, run)
+	if cut <= 0 {
+		return
+	}
+	diag := paintengine2d.NewPath()
+	diag.MoveTo(b.Min.X+in, b.Max.Y-off)
+	diag.LineTo(b.Min.X+off, b.Max.Y-in)
+	diag.MoveTo(b.Max.X-off, b.Max.Y-in)
+	diag.LineTo(b.Max.X-in, b.Max.Y-off)
+	ctx.DrawPath(diag, paintengine2d.StrokePaint(col, lw))
+}
+
 // hangarTick draws the short accent mark that starts a rule, a panel's top
 // edge or a status strip: the one piece of punctuation this look repeats.
 func hangarTick(l *Classic, ctx *paintengine2d.Context, at paintengine2d.Point, long float32, col paintengine2d.Color) {
@@ -305,15 +429,29 @@ func (e hangarEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painte
 	if raised {
 		fill = c.band
 	}
-	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(fill))
-	hangarFrame(l, ctx, b, c.line)
+	hangarBox(l, ctx, b, fill, c.line)
+	hangarBrackets(l, ctx, b, hangarCut(l, b), c.line)
 	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Min.Y), min(l.S(18), b.Dx()*0.25), c.accent)
+}
+
+// hangarBox fills and outlines a box with its corners cut: the shape every
+// panel, pane, menu and tip in this look is drawn on.
+func hangarBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, fill, line paintengine2d.Color) {
+	lw := hangarPx(l)
+	box := hangarSnap(b)
+	cut := hangarCut(l, box)
+	if !colorUnset(fill) && fill.A > 0.01 {
+		ctx.DrawPath(hangarCutRect(box, cut, hangarPanelSides), paintengine2d.Fill(fill))
+	}
+	if !colorUnset(line) && line.A > 0.01 {
+		ctx.DrawPath(hangarCutRect(box.Inset(lw*0.5), cut, hangarPanelSides),
+			paintengine2d.StrokePaint(line, lw))
+	}
 }
 
 func (e hangarEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := hangarColorsOf(l)
-	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(c.panel))
-	hangarFrame(l, ctx, b, c.line)
+	hangarBox(l, ctx, b, c.panel, c.line)
 }
 
 // DrawToolBar and DrawMenuBar are a rule, not a slab: the ground shows
@@ -390,7 +528,9 @@ func (e hangarEngine) DrawGroupBox(l *Classic, ctx *paintengine2d.Context, b pai
 	if title != "" {
 		top += l.body.Height() * 0.5
 	}
-	hangarFrame(l, ctx, paintengine2d.XYWH(b.Min.X, top, b.Dx(), b.Max.Y-top), c.line)
+	box := paintengine2d.XYWH(b.Min.X, top, b.Dx(), b.Max.Y-top)
+	ctx.DrawPath(hangarCutRect(hangarSnap(box).Inset(hangarPx(l)*0.5), hangarCut(l, box), hangarPanelSides),
+		paintengine2d.StrokePaint(c.line, hangarPx(l)))
 	if title == "" {
 		return
 	}
@@ -672,8 +812,7 @@ func (e hangarEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b painte
 
 func (e hangarEngine) DrawMenuFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := hangarColorsOf(l)
-	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(c.panel))
-	hangarFrame(l, ctx, b, c.line)
+	hangarBox(l, ctx, b, c.panel, c.line)
 }
 
 func (e hangarEngine) MenuHighlight(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, attachBottom bool) {
@@ -690,8 +829,7 @@ func (e hangarEngine) MenuTextColor(l *Classic, hot bool) paintengine2d.Color {
 
 func (e hangarEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := hangarColorsOf(l)
-	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(hangarOver(c.ground, c.band.WithAlpha(0.96))))
-	hangarFrame(l, ctx, b, c.line)
+	hangarBox(l, ctx, b, hangarOver(c.ground, c.band.WithAlpha(0.96)), c.line)
 	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Min.Y), l.S(12), c.accent)
 	ts := e.TooltipStyle(l)
 	l.drawFittedText(ctx, ts.Face, text, b.Inset(ts.Pad), c.text, AlignStart, 0)

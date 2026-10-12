@@ -5,6 +5,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
@@ -159,5 +160,51 @@ func TestAPopupIsStillAboveACover(t *testing.T) {
 	at := paintengine2d.Pt(pop.Bounds().Min.X+8, pop.Bounds().Min.Y+8)
 	if h := r.w.hit(at); h == nil || widget.LiveUnder(h, cover) {
 		t.Errorf("a press on the popup landed on %T, want something in the popup", h)
+	}
+}
+
+// **A Hangar window really is cut**: the three corners its look declares
+// away are transparent in the buffer, so the desktop shows through them,
+// and the fourth is not. A look can say anything about its silhouette;
+// this is the end of the chain, where the pixels either went or did not.
+func TestAHangarWindowsCornersAreCutOut(t *testing.T) {
+	p, ok := style.LoadTheme("hangar")
+	if !ok {
+		t.Skip("the hangar pack is not in this build")
+	}
+	t.Setenv(platform.EnvDecorations, "")
+	a := New(Options{Look: p.Look(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Console", Width: 600, Height: 400,
+		Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Close)
+	w.SetContent(widgets.NewLabel("x"))
+	w.SetTitleBar(widgets.NewTitleBar("Console", ""))
+	a.PumpOnce()
+	w.frame()
+	if !w.geom.framed {
+		t.Fatal("the window is not drawing its own frame")
+	}
+	img := w.surf.Buffer()
+	g := w.geom
+	alpha := func(dx, dy float32) uint8 {
+		return img.NRGBAAt(int(g.window.Min.X+dx), int(g.window.Min.Y+dy)).A
+	}
+	if a := alpha(2, 2); a < 250 {
+		t.Errorf("the top left is %d/255 opaque; it is the corner that stays square", a)
+	}
+	for _, c := range []struct {
+		name   string
+		dx, dy float32
+	}{
+		{"top right", g.window.Dx() - 3, 2},
+		{"bottom right", g.window.Dx() - 3, g.window.Dy() - 3},
+		{"bottom left", 2, g.window.Dy() - 3},
+	} {
+		if a := alpha(c.dx, c.dy); a > 40 {
+			t.Errorf("the %s is %d/255 opaque; the silhouette should have cut it away", c.name, a)
+		}
 	}
 }

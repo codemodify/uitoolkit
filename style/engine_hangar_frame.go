@@ -17,18 +17,45 @@ import "github.com/codemodify/paintengine2d"
 func (hangarEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	lw := hangarPx(l)
 	h := snap(max(l.S(30), l.body.Height()+l.S(12)))
-	side := snap(min(h-lw*2, l.S(26)))
+	// The buttons are the caption: full height, flush to the top and to
+	// the right corner, no gap between them and none around them. A
+	// console's controls are cut out of the band rather than resting on
+	// it, and a close button that is the whole corner is the one a hand
+	// can hit without looking.
 	return DecorationSpec{
 		Border:     Insets{Top: lw, Right: lw, Bottom: lw, Left: lw},
 		Caption:    h,
-		Button:     paintengine2d.Pt(side, side),
-		ButtonGap:  lw,
-		ButtonPad:  Insets{Top: snap((h - side) * 0.5), Right: snap((h-side)*0.5) - lw},
-		CloseGap:   snap(l.S(6)),
+		Button:     paintengine2d.Pt(snap(h*1.15), h),
+		ButtonGap:  0,
+		ButtonPad:  Insets{},
+		CloseGap:   0,
 		Layout:     ":minimize,maximize,close",
 		ButtonSide: ButtonsRight,
 		Shadow:     ShadowLayersReach(hangarWindowShadow(l, st)),
 	}
+}
+
+// WindowShape cuts three corners off the window: the top right, the
+// bottom right and the bottom left.
+//
+// It is a *silhouette*, not a painted corner — the desktop shows through
+// the cut, which is the whole point of it. The top left stays square
+// because that is where the title and its ember mark are, and a window
+// whose name started in a diagonal would read as a mistake.
+//
+// A path rather than a union of rectangles, so the diagonal is exact at
+// 1.75 as at 1 rather than a staircase of whole pixels.
+func (hangarEngine) WindowShape(l *Classic, f DecorationFrame, st DecorationState) *Silhouette {
+	if f.Window.Empty() {
+		return nil
+	}
+	// The frame's chamfer, not the box's: the close button cuts the same
+	// corner and the two have to be the same diagonal.
+	cut := hangarChamfer(l)
+	if cut <= 0 || min(f.Window.Dx(), f.Window.Dy()) < cut*3 {
+		return nil
+	}
+	return &Silhouette{Path: hangarCutRect(f.Window, cut, hangarPanelSides)}
 }
 
 // hangarWindowShadow is a plain dark drop, deeper for the active window:
@@ -61,14 +88,31 @@ func (hangarEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 		band = Mix(c.band, c.ground, 0.55)
 		line = Mix(c.line, c.ground, 0.45)
 	}
+	win := hangarSnap(f.Window)
+	cut := hangarChamfer(l)
 	if !bar.Empty() {
+		// The band is clipped to the window's outline so it cannot paint
+		// into the corner the silhouette cuts away.
+		ctx.Save()
+		ctx.ClipPath(hangarCutRect(win, cut, hangarPanelSides))
 		ctx.DrawRect(bar, paintengine2d.Fill(band))
 		ctx.DrawRect(hangarSnap(paintengine2d.XYWH(bar.Min.X, bar.Max.Y-lw, bar.Dx(), lw)), paintengine2d.Fill(line))
+		ctx.Restore()
 		if st.Active {
 			hangarTick(l, ctx, paintengine2d.Pt(bar.Min.X, bar.Min.Y), l.S(20), c.accent)
 		}
 	}
-	drawFrameBorder(ctx, f.Window, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, line, st)
+	if st.NoBorder {
+		return
+	}
+	// The border follows the cut rather than the rectangle, and the
+	// bracket hairlines sit inside it: the frame's own version of what
+	// every panel in this look wears.
+	ctx.DrawPath(hangarCutRect(win.Inset(lw*0.5), cut, hangarPanelSides),
+		paintengine2d.StrokePaint(line, lw))
+	if st.Active {
+		hangarBrackets(l, ctx, win, cut, c.grid)
+	}
 }
 
 func (hangarEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
@@ -100,7 +144,12 @@ func (hangarEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b 
 		case !st.Active:
 			fill = Mix(c.accent, c.ground, 0.45)
 		}
-		ctx.DrawRect(box, paintengine2d.Fill(fill))
+		// The close button is the window's top right corner, so it wears
+		// the same cut: the ember block ends in the diagonal the frame
+		// does, and the two read as one shape rather than as a square
+		// sitting in a cut corner.
+		ctx.DrawPath(hangarCutRect(box, hangarChamfer(l), hangarSides{TR: true}),
+			paintengine2d.Fill(fill))
 		fg = c.onAccent
 	} else if cs.Hovered() || cs.Pressed() {
 		ctx.DrawRect(box, paintengine2d.Fill(hangarLift(c.band, cs)))

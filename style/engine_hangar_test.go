@@ -224,3 +224,122 @@ func TestHangarPackDescribesItself(t *testing.T) {
 		t.Error("the pack names no typefaces, so the genre's face is left to the machine")
 	}
 }
+
+// **Three corners are cut and the fourth is not.** The cut is the
+// genre's most recognisable mark, and the top left is kept square
+// because that is where a panel's name and its ember tick go — a window
+// whose title started in a diagonal would read as a mistake.
+func TestHangarCutsThreeCornersAndKeepsTheFourth(t *testing.T) {
+	lk := hangarLook(t)
+	const w, h = 120, 80
+	img := hangarShot(t, lk, w, h, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+		lk.DrawPanel(ctx, b, false)
+	})
+	ground := lk.Palette().Background
+	corner := func(x, y int) bool { // is this corner still the ground?
+		c := img.NRGBAAt(x, y)
+		return hangarNear(paintengine2d.RGBA(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1), ground, 0.02)
+	}
+	if corner(2, 2) {
+		t.Error("the top left is cut; it is the corner the eye starts from")
+	}
+	for _, c := range []struct {
+		name string
+		x, y int
+	}{{"top right", w - 3, 2}, {"bottom right", w - 3, h - 3}, {"bottom left", 2, h - 3}} {
+		if !corner(c.x, c.y) {
+			t.Errorf("the %s is not cut", c.name)
+		}
+	}
+	// The chamfer is one length for everything big enough to take it,
+	// and a box that cannot spare it loses less rather than coming out a
+	// hexagon — a tiny one loses nothing at all.
+	full := hangarChamfer(lk)
+	if got := hangarCut(lk, paintengine2d.XYWH(0, 0, 400, 300)); got != full {
+		t.Errorf("a panel is cut by %g, want the look's %g", got, full)
+	}
+	if got := hangarCut(lk, paintengine2d.XYWH(0, 0, 18, 14)); got <= 0 || got >= full {
+		t.Errorf("an 18x14 box is cut by %g, want less than the %g a panel gets", got, full)
+	}
+	if got := hangarCut(lk, paintengine2d.XYWH(0, 0, 9, 9)); got != 0 {
+		t.Errorf("a 9x9 box is cut by %g, want left square", got)
+	}
+}
+
+// The window states that outline as its silhouette, so the desktop shows
+// through the cut rather than the look painting a triangle of its own
+// background there.
+func TestHangarWindowSaysItsOutline(t *testing.T) {
+	lk := hangarLook(t)
+	win := paintengine2d.XYWH(0, 0, 800, 600)
+	f := DecorationFrame{Window: win, Caption: paintengine2d.XYWH(0, 0, 800, 30)}
+	s := WindowShapeOf(lk, f, DecorationState{Active: true})
+	if s.Empty() {
+		t.Fatal("the look declares no silhouette, so its corners are painted and not cut")
+	}
+	if s.Path == nil {
+		t.Error("the silhouette is a mask; a chamfer should be a path, exact at every scale")
+	}
+	// A window too small for the cut is a rectangle rather than a lozenge.
+	tiny := paintengine2d.XYWH(0, 0, 20, 16)
+	if got := WindowShapeOf(lk, DecorationFrame{Window: tiny}, DecorationState{Active: true}); !got.Empty() {
+		t.Error("a 20x16 window was given a silhouette")
+	}
+}
+
+// **The close button is cut with the window, by the same diagonal.** It
+// sits in the corner the frame cuts; a button that worked its chamfer out
+// from its own box took nine pixels where the frame took twelve, and the
+// sliver of caption band between the two read as a smudge.
+func TestHangarCloseButtonSharesTheFramesChamfer(t *testing.T) {
+	lk := hangarLook(t)
+	spec := DecorationOf(lk, DecorationState{Active: true})
+	if spec.Button.Y != spec.Caption {
+		t.Errorf("a caption button is %g tall in a %g caption; it should be the whole height",
+			spec.Button.Y, spec.Caption)
+	}
+	if spec.ButtonPad != (Insets{}) || spec.ButtonGap != 0 || spec.CloseGap != 0 {
+		t.Errorf("the buttons are padded (%v, gap %g, close gap %g); they are cut out of the band",
+			spec.ButtonPad, spec.ButtonGap, spec.CloseGap)
+	}
+	// At 2x as well as at 1x: the two candidate rules — the look's one
+	// chamfer, or one worked out from the button's own box — differ by a
+	// pixel at 1x and by three at 2x, so a single scale cannot tell them
+	// apart and a test at one scale would pass either way.
+	for _, scale := range []float32{1, 2} {
+		hangarCloseCut(t, WithScale(lk, scale).(*Classic), scale)
+	}
+}
+
+func hangarCloseCut(t *testing.T, lk *Classic, scale float32) {
+	t.Helper()
+	spec := DecorationOf(lk, DecorationState{Active: true})
+	box := paintengine2d.XYWH(0, 0, spec.Button.X, spec.Button.Y)
+	img := hangarShot(t, lk, int(box.Dx()), int(box.Dy()), func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+		DrawCaptionButtonOf(lk, ctx, b, CaptionClose, StateNone, DecorationState{Active: true})
+	})
+	cut := hangarChamfer(lk)
+	ember := func(x, y int) bool {
+		c := img.NRGBAAt(x, y)
+		return hangarNear(paintengine2d.RGBA(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, 1), lk.Palette().Accent, 0.06)
+	}
+	if ember(int(box.Dx())-2, 2) {
+		t.Error("the close button's top right corner is square")
+	}
+	// Measure the diagonal rather than probe it: on the row y, the cut
+	// edge stands at x = width - chamfer + y, so the first ember pixel
+	// scanning in from the right says how long the chamfer is. A button
+	// that worked its own out of its own box would answer ten where the
+	// frame answers twelve, and the test would never know from one probe.
+	const y = 3
+	got := float32(-1)
+	for x := int(box.Dx()) - 1; x >= 0; x-- {
+		if ember(x, y) {
+			got = box.Dx() - float32(x) + y - 1
+			break
+		}
+	}
+	if got < cut-1.5 || got > cut+1.5 {
+		t.Errorf("at %gx the close button's chamfer measures %g, want the frame's %g", scale, got, cut)
+	}
+}

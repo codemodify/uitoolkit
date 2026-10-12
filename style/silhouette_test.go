@@ -94,15 +94,16 @@ func probeFrame(w, h, capW, capH float32) DecorationFrame {
 // silhouette frames a rectangle with a full-width caption, and nothing about
 // this feature changed that for any of them.
 //
-// Two packs say otherwise, on purpose and by name: BeOS, whose tab is its
-// window's real outline, and Deck, the skin drawn to demonstrate the format.
-// Nocturne and Cassette carry the hook (every skin does) and declare no
-// shape, which is the case worth pinning: having the hook is not having an
-// outline.
+// Three packs say otherwise, on purpose and by name: BeOS, whose tab is
+// its window's real outline; Deck, the skin drawn to demonstrate the
+// format; and Hangar, whose three cut corners are the console genre's
+// most recognisable mark. Nocturne and Cassette carry the hook (every
+// skin does) and declare no shape, which is the case worth pinning:
+// having the hook is not having an outline.
 func TestOnlyTheLooksThatMeanToDeclareASilhouette(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	shaped := map[string]bool{
-		"beos": true, "deck": true,
+		"beos": true, "deck": true, "hangar": true,
 	}
 	fitted := map[string]bool{"beos": true}
 	st := DecorationState{Active: true}

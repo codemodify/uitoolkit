@@ -156,7 +156,7 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `linear-night` | Linear Dark | 2026 | Linear | `web` | Linear's dark theme: #121213 content beside a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo. |
 | `vscode-night` | VS Code Dark 2026 | 2026 | VS Code | `web` | VS Code's Dark 2026: a #121314 editor in #191a1b chrome, #297aa0 buttons, the #3994bc line atop the active tab, white-alpha selections. |
 | `vscode` | VS Code Light 2026 | 2026 | VS Code | `web` | VS Code's Light 2026: #fafafd chrome around a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab. |
-| `hangar` | Hangar | 2026 | Console | `hangar` | A telemetry console, of no product: a gunmetal-to-shadow ground under a diagonal weave, one ember accent spent only on what is on, hairline square boxes, chrome labels in capitals and segmented meters. |
+| `hangar` | Hangar | 2026 | Console | `hangar` | A telemetry console, of no product: three corners cut off every window and panel, a gunmetal-to-shadow ground under a diagonal weave, one ember accent spent only on what is on, hairline boxes, chrome labels in capitals and segmented meters. |
 
 Aliases (load-only, not listed twice): `classic95` → `light`,
 `classic95-dark` → `dark`, `luna-dark` → `luna-night`, and the other
