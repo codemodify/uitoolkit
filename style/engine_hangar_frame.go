@@ -99,7 +99,7 @@ func (hangarEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 		ctx.DrawRect(hangarSnap(paintengine2d.XYWH(bar.Min.X, bar.Max.Y-lw, bar.Dx(), lw)), paintengine2d.Fill(line))
 		ctx.Restore()
 		if st.Active {
-			hangarTick(l, ctx, paintengine2d.Pt(bar.Min.X, bar.Min.Y), l.S(20), c.accent)
+			hangarMark(l, ctx, bar, c.accent)
 		}
 	}
 	if st.NoBorder {
@@ -111,7 +111,7 @@ func (hangarEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 	ctx.DrawPath(hangarCutRect(win.Inset(lw*0.5), cut, hangarPanelSides),
 		paintengine2d.StrokePaint(line, lw))
 	if st.Active {
-		hangarBrackets(l, ctx, win, cut, c.grid)
+		hangarBrackets(l, ctx, win, cut, c.bracket)
 	}
 }
 
@@ -121,7 +121,8 @@ func (hangarEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b p
 	if !st.Active {
 		col = c.dim
 	}
-	captionTitle(l, ctx, l.BoldFont(), b, hangarCaps(title), col, false, l.S(12))
+	// The title clears the ember mark at the head of the band.
+	captionTitle(l, ctx, l.BoldFont(), b, hangarCaps(title), col, false, l.S(18))
 }
 
 // DrawCaptionButton: close is a filled ember block, the other two are

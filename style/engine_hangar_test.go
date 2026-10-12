@@ -343,3 +343,101 @@ func hangarCloseCut(t *testing.T, lk *Classic, scale float32) {
 		t.Errorf("at %gx the close button's chamfer measures %g, want the frame's %g", scale, got, cut)
 	}
 }
+
+// **The surfaces are light enough to read.** The first draft of this
+// pack was about half the luminance of the thing it copies all the way
+// down — dark enough that the room can be dark is not the same as dark
+// enough that nothing can be seen — so the ramp is pinned here against
+// the colours a frame of the console actually quantises to.
+func TestHangarSurfacesAreTheConsolesOwn(t *testing.T) {
+	lk := hangarLook(t)
+	p := lk.Palette()
+	lum := func(c paintengine2d.Color) float32 { return 0.2126*c.R + 0.7152*c.G + 0.0722*c.B }
+	// The ramp, darkest first: a well is sunk into a panel, a panel sits
+	// on the window, a band is raised off it, and the hairline is
+	// lighter than all of them.
+	for _, step := range []struct {
+		name string
+		a, b paintengine2d.Color
+	}{
+		{"the field is darker than the window", p.Field, p.Background},
+		{"the window is darker than a panel", p.Background, p.Surface},
+		{"a panel is darker than a raised face", p.Surface, p.SurfaceAlt},
+		{"a raised face is darker than the hairline", p.SurfaceAlt, p.Border},
+	} {
+		if lum(step.a) >= lum(step.b) {
+			t.Errorf("%s: %.3f against %.3f", step.name, lum(step.a), lum(step.b))
+		}
+	}
+	// And the panel is in the measured range rather than half of it: the
+	// console's body quantises to #2b3a49, luminance about 0.215.
+	if got := lum(p.Surface); got < 0.17 || got > 0.27 {
+		t.Errorf("the panel's luminance is %.3f, want the console's ~0.215", got)
+	}
+	// Light ink on the ember, not dark: a dark mark on that orange reads
+	// as a hole punched in the block.
+	if lum(p.TextOnAccent) < 0.8 {
+		t.Errorf("the ink on the accent is %.3f, want the console's near-white", lum(p.TextOnAccent))
+	}
+}
+
+// The bracket hairlines are brighter than the frame's own line, because
+// they are the mark that says "panel" and a mark nobody can see is not
+// one.
+func TestHangarBracketsAreBrighterThanTheFrame(t *testing.T) {
+	lk := hangarLook(t)
+	c := hangarColorsOf(lk)
+	lum := func(x paintengine2d.Color) float32 { return 0.2126*x.R + 0.7152*x.G + 0.0722*x.B }
+	if lum(c.bracket) <= lum(c.line) {
+		t.Errorf("the brackets (%.3f) are no brighter than the frame's line (%.3f)", lum(c.bracket), lum(c.line))
+	}
+	// They are drawn, and inside the box rather than on its edge.
+	const w, h = 160, 110
+	plain := hangarShot(t, lk, w, h, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+		hangarBox(lk, ctx, b, lk.Palette().Surface, lk.Palette().Border)
+	})
+	marked := hangarShot(t, lk, w, h, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+		hangarBox(lk, ctx, b, lk.Palette().Surface, lk.Palette().Border)
+		hangarBrackets(lk, ctx, b, hangarCut(lk, b), c.bracket)
+	})
+	if n := diffPixels(plain, marked); n < 150 {
+		t.Errorf("the brackets changed %d pixels; they are meant to be seen", n)
+	}
+}
+
+// **One ember mark, at the head of a caption, and nowhere else.** The
+// first draft dashed every panel, tool bar and tip along its top edge,
+// which read as a scratch above the title and a stray line over the
+// first menu item — and is not in the thing being copied.
+func TestHangarMarksCaptionsAndNothingElse(t *testing.T) {
+	lk := hangarLook(t)
+	accent := lk.Palette().Accent
+	const w, h = 200, 90
+	ember := func(draw func(*paintengine2d.Context, paintengine2d.Rect)) int {
+		return hangarCount(hangarShot(t, lk, w, h, draw), accent, 0.06)
+	}
+	if n := ember(func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+		lk.DrawTitleBar(ctx, paintengine2d.XYWH(0, 0, w, 30), "Report", "")
+	}); n < 30 {
+		t.Errorf("a caption has %d pixels of ember; it should wear the mark", n)
+	}
+	for _, tc := range []struct {
+		name string
+		draw func(*paintengine2d.Context, paintengine2d.Rect)
+	}{
+		{"a panel", func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawPanel(ctx, b, false) }},
+		{"a tool bar", func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+			lk.DrawToolBar(ctx, paintengine2d.XYWH(0, 0, w, 30))
+		}},
+		{"a menu bar", func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+			lk.DrawMenuBar(ctx, paintengine2d.XYWH(0, 0, w, 30))
+		}},
+		{"a tip", func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+			lk.DrawTooltip(ctx, paintengine2d.XYWH(0, 0, w, 40), "a tip")
+		}},
+	} {
+		if n := ember(tc.draw); n > 10 {
+			t.Errorf("%s wears %d pixels of ember; the mark belongs to a caption alone", tc.name, n)
+		}
+	}
+}

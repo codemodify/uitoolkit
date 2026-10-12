@@ -80,7 +80,7 @@ type hangarColors struct {
 	text, dim, faint    paintengine2d.Color
 	accent, hot, press  paintengine2d.Color
 	onAccent, glow      paintengine2d.Color
-	field               paintengine2d.Color
+	field, bracket      paintengine2d.Color
 }
 
 func hangarColorsOf(l *Classic) hangarColors {
@@ -98,8 +98,9 @@ func hangarColorsOf(l *Classic) hangarColors {
 		hot:      p.AccentHover,
 		press:    p.AccentPress,
 		onAccent: p.TextOnAccent,
-		glow:     l.X("glow", p.Accent.WithAlpha(0.18)),
+		glow:     l.X("glow", p.Accent.WithAlpha(0.22)),
 		field:    p.Field,
+		bracket:  l.X("bracket", Mix(p.Border, p.Text, 0.3)),
 	}
 }
 
@@ -274,10 +275,23 @@ func hangarBrackets(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect
 	ctx.DrawPath(diag, paintengine2d.StrokePaint(col, lw))
 }
 
-// hangarTick draws the short accent mark that starts a rule, a panel's top
-// edge or a status strip: the one piece of punctuation this look repeats.
-func hangarTick(l *Classic, ctx *paintengine2d.Context, at paintengine2d.Point, long float32, col paintengine2d.Color) {
-	ctx.DrawRect(hangarSnap(paintengine2d.XYWH(at.X, at.Y, long, hangarPx(l)*2)), paintengine2d.Fill(col))
+// hangarMark is the ember bar at the head of a caption: a short upright
+// block at the left end of a title band, inside it.
+//
+// One mark, in one place. The first draft put a two-pixel dash along the
+// top edge of every panel, tool bar and tip as well, which was not in
+// the thing being copied and did not read as a mark at all — it read as
+// a scratch above the title and a stray line over the first menu item.
+// The console puts one bar at the start of the row that names the panel,
+// and that is the whole of it.
+func hangarMark(l *Classic, ctx *paintengine2d.Context, band paintengine2d.Rect, col paintengine2d.Color) {
+	if band.Dy() < l.S(10) {
+		return
+	}
+	w := max(snap(l.S(4)), 2)
+	in := snap(band.Dy() * 0.28)
+	ctx.DrawRect(hangarSnap(paintengine2d.XYWH(band.Min.X+w, band.Min.Y+in, w, band.Dy()-in*2)),
+		paintengine2d.Fill(col))
 }
 
 // ---- the window ground -------------------------------------------------------
@@ -430,8 +444,7 @@ func (e hangarEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b painte
 		fill = c.band
 	}
 	hangarBox(l, ctx, b, fill, c.line)
-	hangarBrackets(l, ctx, b, hangarCut(l, b), c.line)
-	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Min.Y), min(l.S(18), b.Dx()*0.25), c.accent)
+	hangarBrackets(l, ctx, b, hangarCut(l, b), c.bracket)
 }
 
 // hangarBox fills and outlines a box with its corners cut: the shape every
@@ -461,7 +474,6 @@ func (e hangarEngine) DrawToolBar(l *Classic, ctx *paintengine2d.Context, b pain
 	lw := hangarPx(l)
 	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(c.panel.WithAlpha(0.6)))
 	ctx.DrawRect(hangarSnap(paintengine2d.XYWH(b.Min.X, b.Max.Y-lw, b.Dx(), lw)), paintengine2d.Fill(c.line))
-	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Max.Y-lw*2), l.S(22), c.accent)
 }
 
 func (e hangarEngine) DrawMenuBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
@@ -510,8 +522,9 @@ func (e hangarEngine) DrawTitleBar(l *Classic, ctx *paintengine2d.Context, b pai
 	lw := hangarPx(l)
 	ctx.DrawRect(hangarSnap(b), paintengine2d.Fill(c.band))
 	ctx.DrawRect(hangarSnap(paintengine2d.XYWH(b.Min.X, b.Max.Y-lw, b.Dx(), lw)), paintengine2d.Fill(c.line))
-	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Min.Y), l.S(16), c.accent)
-	pad := l.S(12)
+	hangarMark(l, ctx, b, c.accent)
+	// Past the mark, not over it.
+	pad := l.S(18)
 	box := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()-lw)
 	if subtitle != "" {
 		w := l.muted.Advance(hangarCaps(subtitle)) + l.S(8)
@@ -830,7 +843,6 @@ func (e hangarEngine) MenuTextColor(l *Classic, hot bool) paintengine2d.Color {
 func (e hangarEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := hangarColorsOf(l)
 	hangarBox(l, ctx, b, hangarOver(c.ground, c.band.WithAlpha(0.96)), c.line)
-	hangarTick(l, ctx, paintengine2d.Pt(b.Min.X, b.Min.Y), l.S(12), c.accent)
 	ts := e.TooltipStyle(l)
 	l.drawFittedText(ctx, ts.Face, text, b.Inset(ts.Pad), c.text, AlignStart, 0)
 }
@@ -851,39 +863,72 @@ func hangarPacks() []ThemePack {
 	return []ThemePack{hangarPack()}
 }
 
+// The console's colours, read off the thing itself.
+//
+// They are measured rather than invented: the panel body, the raised
+// face, the hairline and the ember are the four colours a frame of the
+// genre actually quantises to, and the first draft of this pack was
+// about half their luminance all the way down — a console drawn in the
+// dark rather than one lit from inside. Dark enough that the room can be
+// dark is not the same as dark enough that nothing can be read.
+//
+// The ramp, lightest surface last: a well is darker than the panel it is
+// cut into, the panel is darker than a face raised off it, and the
+// hairline is lighter than all of them.
+const (
+	hangarEmber  = "#e85735"
+	hangarGround = "#243240" // the window
+	hangarPanel  = "#2b3a49" // a panel on it
+	hangarBand   = "#36495c" // a caption band, a header, a raised face
+	hangarWell   = "#222e3a" // a field, a track, anything sunk in
+	hangarLine   = "#4e5e6f" // the hairline that is meant to be seen
+	hangarGrid   = "#3d4c5c" // the one that is meant to be felt
+	hangarInk    = "#b9c8d6"
+	hangarInkDim = "#8ca0b1"
+	hangarInkOff = "#5f7183"
+)
+
 func hangarPack() ThemePack {
-	ember := Hex("#ef4e23")
-	ground := Hex("#0f141b")
-	panel := Hex("#151c25")
-	band := Hex("#1b2530")
-	line := Hex("#2b3845")
-	grid := Hex("#223040")
-	text := Hex("#c7d2db")
-	dim := Hex("#7c8b98")
+	ember := Hex(hangarEmber)
+	ground := Hex(hangarGround)
+	panel := Hex(hangarPanel)
+	band := Hex(hangarBand)
+	line := Hex(hangarLine)
+	grid := Hex(hangarGrid)
+	text := Hex(hangarInk)
+	dim := Hex(hangarInkDim)
 	pal := Palette{
 		Background: ground, Surface: panel, SurfaceAlt: band,
 		Border: line, Divider: grid,
-		Text: text, TextMuted: dim, TextOnAccent: Hex("#0f141b"),
-		Accent: ember, AccentHover: Hex("#ff6a3d"), AccentPress: Hex("#c33a17"),
-		Field: Hex("#0b1017"), FieldBorder: line,
-		Focus: Hex("#ff6a3d"), Selection: ember,
-		Track: grid, Thumb: Hex("#455767"),
-		Highlight: ember.WithAlpha(0.18),
-		Shadow:    paintengine2d.RGBA(0, 0, 0, 0.6),
-		MenuHover: ember, MenuHoverBorder: ember, MenuGutter: Hex("#111822"),
-		Danger: ember, Success: Hex("#4fb89a"), Warning: Hex("#e8a33d"),
-		Overlay:    paintengine2d.RGBA(3.0/255, 6.0/255, 10.0/255, 0.62),
-		BevelLight: line, BevelDark: Hex("#070b10"),
+		// Light on the ember, not dark. The console's own close button
+		// and its one filled button both carry a near-white mark; a dark
+		// one on that orange reads as a hole punched in the block.
+		Text: text, TextMuted: dim, TextOnAccent: Hex("#fff2ec"),
+		Accent: ember, AccentHover: Hex("#f1704f"), AccentPress: Hex("#c1452a"),
+		Field: Hex(hangarWell), FieldBorder: line,
+		Focus: Hex("#f1704f"), Selection: ember,
+		Track: Hex(hangarWell), Thumb: Hex(hangarInkOff),
+		Highlight: ember.WithAlpha(0.22),
+		Shadow:    paintengine2d.RGBA(0, 0, 0, 0.55),
+		MenuHover: ember, MenuHoverBorder: ember, MenuGutter: Hex("#26323e"),
+		Danger: ember, Success: Hex("#57c3a4"), Warning: Hex("#e8a33d"),
+		Overlay:    paintengine2d.RGBA(10.0/255, 16.0/255, 22.0/255, 0.58),
+		BevelLight: line, BevelDark: Hex("#19222c"),
 	}
 	tok := ThemeTokens{
 		Engine: "hangar", Bevel: BevelNone, Family: ThemeDark, Era: "Console",
 		Palette: pal,
 		Params:  map[string]float32{"caps": 1, "hatch": 1, "segments": 5},
 		Extra: map[string]paintengine2d.Color{
-			"grid":  grid,
-			"glow":  ember.WithAlpha(0.18),
-			"faint": Hex("#4a5866"),
-			"warm":  Hex("#241a14"),
+			"grid": grid,
+			"glow": ember.WithAlpha(0.22),
+			// The bracket hairlines are brighter than the frame's own
+			// line, not dimmer: they are the mark that says "panel", and
+			// a mark nobody can see is not one. On the console they read
+			// at a glance from across a room.
+			"bracket": Hex("#6b7f91"),
+			"faint":   Hex(hangarInkOff),
+			"warm":    Hex("#3b2b23"),
 			// A selected row keeps its own ink: the wash is a tint, not a
 			// fill, so white-on-ember would be wrong.
 			"selectionText": text,
