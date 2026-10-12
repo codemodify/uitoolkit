@@ -119,9 +119,29 @@ done < <(GOOS=windows go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportP
 echo "   $n packages"
 
 echo "== packing the source tree =="
-# For the tests that read files next to themselves. tools/atlas/out is
-# generated screenshots and is the only large thing excluded for size.
-tar czf "$work/src.tgz" --exclude=.git --exclude=tools/atlas/out --exclude='*.test.exe' .
+# For the tests that read files next to themselves.
+#
+# **What git ignores does not go.** A working tree has scratch
+# directories in it that have nothing to do with the tests and cannot
+# even be unpacked on Windows: the nested-KWin rig leaves tools/e2e/<N>/
+# behind, ninety megabytes of it, with fontconfig cache files whose
+# names Windows refuses ("Can't create ...cache-9: Invalid argument").
+# tar then exits non-zero and the run stops before a single test has
+# run. The .gitignore files already say which of the tree is scratch, so
+# that rule lives in one place instead of in a list here that goes
+# stale — and the tarball goes from 85 MB to 11 MB with it.
+#
+# Untracked files git does *not* ignore still go, which is why this
+# packs the tree rather than using `git archive`: a new test's testdata
+# works before it is committed.
+# (tar's own --exclude-vcs-ignores reads .gitignore but not the patterns
+# this repository actually uses — tools/e2e/.gitignore says "[0-9]*/" and
+# tar kept all of it — so git is asked directly.)
+git ls-files --others --ignored --exclude-standard --directory |
+  sed 's:/*$::; s:^:./:' > "$work/ignored.txt"
+tar czf "$work/src.tgz" --anchored -X "$work/ignored.txt" \
+  --exclude=./.git --exclude='*.test.exe' .
+echo "   $(( $(stat -c %s "$work/src.tgz") / 1024 / 1024 )) MB"
 
 cat > "$work/serve.py" <<'PY'
 import http.server, os, sys
