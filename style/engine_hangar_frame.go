@@ -106,8 +106,8 @@ func (hangarEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 		return
 	}
 	// The border follows the cut rather than the rectangle, and the
-	// bracket hairlines sit inside it: the frame's own version of what
-	// every panel in this look wears.
+	// bracket hairline sits inside its bottom left corner: the frame's
+	// own version of the mark every panel in this look wears.
 	ctx.DrawPath(hangarCutRect(win.Inset(lw*0.5), cut, hangarPanelSides),
 		paintengine2d.StrokePaint(line, lw))
 	if st.Active {
