@@ -497,20 +497,23 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 	}
 	ty := inner.Min.Y + (inner.Dy()-font.Height())*0.5
 	ox := inner.Min.X - scrollX
-	var selBox paintengine2d.Rect
+	// The selection is a *list* of boxes, not one: a selection that
+	// crosses a change of direction is one stretch of text and two
+	// stretches of screen (see [Font.SelectionSpans]). Text that reads
+	// one way — nearly all text, and all of it in a build without
+	// font_complex — gives one box, as it always did.
+	var selBoxes []paintengine2d.Rect
 	var selCol paintengine2d.Color
 	if selA != selB && text != "" {
-		if selA > selB {
-			selA, selB = selB, selA
-		}
-		x0 := ox + f.CaretX(text, selA)
-		x1 := ox + f.CaretX(text, selB)
 		sel := p.Selection
 		if !st.Focused() {
 			sel = p.Selection.WithAlpha(0.14)
 		}
-		selBox = paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2)
-		ctx.DrawRect(selBox, paintengine2d.Fill(sel))
+		for _, sp := range f.SelectionSpans(text, selA, selB) {
+			box := paintengine2d.XYWH(ox+sp[0], ty+1, sp[1]-sp[0], f.Height()-2)
+			selBoxes = append(selBoxes, box)
+			ctx.DrawRect(box, paintengine2d.Fill(sel))
+		}
 		selCol = l.selectedText(sel)
 	}
 	col := l.fieldText()
@@ -518,13 +521,19 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 		col = p.TextMuted
 	}
 	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), col)
-	if !selBox.Empty() && selCol != col {
+	if selCol != col {
 		// Selected text in the highlighted-text colour (Qt's
-		// HighlightedText): a dark selection hid black text.
-		ctx.Save()
-		ctx.ClipRect(selBox)
-		font.Draw(ctx, show, paintengine2d.Pt(ox, ty), selCol)
-		ctx.Restore()
+		// HighlightedText): a dark selection hid black text. Once per
+		// box, since each one is its own stretch of the line.
+		for _, box := range selBoxes {
+			if box.Empty() {
+				continue
+			}
+			ctx.Save()
+			ctx.ClipRect(box)
+			font.Draw(ctx, show, paintengine2d.Pt(ox, ty), selCol)
+			ctx.Restore()
+		}
 	}
 	if st.Focused() && blink && text == show {
 		cx := ox + f.CaretX(text, caret)
@@ -1508,25 +1517,39 @@ func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.R
 			for range line.Text {
 				n++
 			}
-			x0 := ox + f.CaretX(line.Text, col0)
-			x1 := ox + f.CaretX(line.Text, col1)
+			// One box per stretch the selection covers on screen,
+			// which is one box for text that reads one way; a line
+			// that turns round is covered in [Font.SelectionSpans].
+			var boxes []paintengine2d.Rect
+			for _, sp := range f.SelectionSpans(line.Text, col0, col1) {
+				boxes = append(boxes, paintengine2d.XYWH(ox+sp[0], y+1, sp[1]-sp[0], f.Height()-2))
+			}
+			// A selection that runs past this line's end takes the rest
+			// of the row: the newline is part of what was selected.
 			if col1 > n || selB > line.Start+n {
-				x1 = inner.Max.X
+				from := ox + f.CaretX(line.Text, min(col1, n))
+				if len(boxes) > 0 {
+					from = boxes[len(boxes)-1].Max.X
+				}
+				boxes = append(boxes, paintengine2d.XYWH(from, y+1, max(inner.Max.X-from, 0), f.Height()-2))
 			}
-			if x1 < x0 {
-				x1 = x0
+			for _, box := range boxes {
+				if box.Empty() {
+					continue
+				}
+				ctx.DrawRect(box, paintengine2d.Fill(p.Selection))
 			}
-			if x1-x0 < 3 && selB > line.End-1 {
-				x1 = inner.Max.X
-			}
-			selBox := paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2)
-			ctx.DrawRect(selBox, paintengine2d.Fill(p.Selection))
 			if line.Text != "" {
 				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())
-				ctx.Save()
-				ctx.ClipRect(selBox)
-				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.selectedText(p.Selection))
-				ctx.Restore()
+				for _, box := range boxes {
+					if box.Empty() {
+						continue
+					}
+					ctx.Save()
+					ctx.ClipRect(box)
+					f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.selectedText(p.Selection))
+					ctx.Restore()
+				}
 			}
 		} else if line.Text != "" {
 			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())

@@ -289,3 +289,79 @@ func TestARightToLeftRunCaretsRunBackwards(t *testing.T) {
 		t.Errorf("the caret past the last character is at %.2f, not at the left edge", s.xs[len(s.xs)-1])
 	}
 }
+
+// A selection that crosses a change of direction is one stretch of text
+// and two stretches of screen. This is the case a single box from the
+// first character to the last gets wrong: in "abc שלום abc" the three
+// characters either side of the Hebrew are not next to each other, and
+// the Hebrew between them is drawn where the box would not be.
+//
+// The Hebrew is *borrowed*: the interface face has none, so the shaper
+// asks the fallback list for it — which is why font_complex implies
+// font_fallback.
+func TestASelectionCrossingDirectionsIsSeveralBoxes(t *testing.T) {
+	path := scriptFontFile(t, "hebrew")
+	if path == "" {
+		t.Skip("no face on this machine covers Hebrew")
+	}
+	fakeFonts(t, "Noto Hebrew Test\t80\t0\t0\t"+path)
+	SetFallbackFamilies("Noto Hebrew Test")
+	t.Cleanup(func() { SetFallbackFamilies() })
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	const text = "abc שלום abc"
+	runes := []rune(text)
+	if sp := f.SelectionSpans(text, 0, 3); len(sp) != 1 {
+		t.Errorf("selecting the first %q gave %d boxes, want 1", "abc", len(sp))
+	}
+	// The whole line: the Latin before, the Hebrew, the Latin after —
+	// contiguous on screen, so one box.
+	if sp := f.SelectionSpans(text, 0, len(runes)); len(sp) != 1 {
+		t.Errorf("selecting the whole line gave %d boxes, want 1", len(sp))
+	}
+	// From the middle of the Hebrew into the Latin after it: two.
+	hebEnd := 8 // "abc " + "שלום"
+	sp := f.SelectionSpans(text, hebEnd-2, len(runes))
+	if len(sp) < 2 {
+		t.Errorf("a selection from inside the Hebrew into the Latin gave %d boxes, want at least 2: %v", len(sp), sp)
+	}
+	for _, s := range sp {
+		if s[1] < s[0] {
+			t.Errorf("box %v runs backwards", s)
+		}
+	}
+}
+
+// Clicking where a caret is must give back the index that caret is for,
+// in both directions. It is the round trip every text field makes on
+// every press, and a line that turns round breaks the walk-until-passed
+// search that answers it for text that does not.
+func TestClickingACaretGivesBackItsIndex(t *testing.T) {
+	path := scriptFontFile(t, "hebrew")
+	if path == "" {
+		t.Skip("no face on this machine covers Hebrew")
+	}
+	fakeFonts(t, "Noto Hebrew Test\t80\t0\t0\t"+path)
+	SetFallbackFamilies("Noto Hebrew Test")
+	t.Cleanup(func() { SetFallbackFamilies() })
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	for _, text := range []string{"abc", "שלום", "abc שלום abc"} {
+		n := len([]rune(text))
+		for i := 0; i <= n; i++ {
+			x := f.CaretX(text, i)
+			got := f.IndexAt(text, x)
+			if got == i {
+				continue
+			}
+			// A caret between two characters of the same width is two
+			// indices at one x — the end of one run and the start of
+			// the next. Taking either is right; taking a third is not.
+			if gx := f.CaretX(text, got); gx == x {
+				continue
+			}
+			t.Errorf("%q: the caret for rune %d is at %.2f, and a click there gave %d (at %.2f)",
+				text, i, x, got, f.CaretX(text, got))
+		}
+	}
+}

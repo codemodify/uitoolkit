@@ -2,6 +2,8 @@ package style
 
 import (
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"sync"
 
@@ -85,8 +87,37 @@ type shapedRun struct {
 	ink   float32
 	// xs is where each rune starts, kerning included, then where the run
 	// ends: carets, hit-testing and eliding read the layout Draw paints.
+	//
+	// "Starts" is the rune's *leading* edge, which is its left in text
+	// that reads left to right and its right in text that does not, so
+	// xs does not have to climb.
 	xs []float32
+	// ends is the other edge of each rune, and is nil for a layout that
+	// reads one way: then a rune ends where the next one starts, and
+	// xs[i+1] is that. A shaped layout fills it, because a right-to-left
+	// run's runes end to the left of where they start and a line can
+	// turn round in the middle.
+	ends []float32
 }
+
+// span is the x range rune i covers, lowest first.
+func (s shapedRun) span(i int) (lo, hi float32) {
+	if i < 0 || i+1 >= len(s.xs) {
+		return 0, 0
+	}
+	a, b := s.xs[i], s.xs[i+1]
+	if s.ends != nil {
+		b = s.ends[i]
+	}
+	if a > b {
+		return b, a
+	}
+	return a, b
+}
+
+// oneWay reports that the layout reads in one direction throughout, so
+// that x climbs with the index and a binary search is meaningful.
+func (s shapedRun) oneWay() bool { return s.ends == nil }
 
 func newShapeCache() *shapeCache {
 	return &shapeCache{m: make(map[string]shapedRun, 32)}
@@ -345,17 +376,123 @@ func (f *Font) InkWidth(text string) float32 {
 	return f.shapeOf(text).ink
 }
 
+// IndexAt is the rune index a click at x asks for: the caret position
+// nearest the point, which is before or after a character depending on
+// which half of it was hit.
 func (f *Font) IndexAt(text string, x float32) int {
-	if f == nil || x <= 0 || text == "" {
+	if f == nil || text == "" {
 		return 0
 	}
-	xs := f.shapeOf(text).xs
-	for i := 0; i+1 < len(xs); i++ {
-		if x < (xs[i]+xs[i+1])*0.5 {
-			return i
+	s := f.shapeOf(text)
+	if s.oneWay() {
+		if x <= 0 {
+			return 0
+		}
+		xs := s.xs
+		for i := 0; i+1 < len(xs); i++ {
+			if x < (xs[i]+xs[i+1])*0.5 {
+				return i
+			}
+		}
+		return max(len(xs)-1, 0)
+	}
+	return s.indexAtVisual(x)
+}
+
+// indexAtVisual is IndexAt for a line that turns round: the index cannot
+// be found by walking until x is passed, because x does not only grow.
+// The character the point is *on* decides, and its own direction says
+// whether the caret goes before or after it.
+func (s shapedRun) indexAtVisual(x float32) int {
+	n := len(s.xs) - 1
+	best, bestD := 0, float32(math.MaxFloat32)
+	note := func(at float32, i int) {
+		d := at - x
+		if d < 0 {
+			d = -d
+		}
+		if d < bestD {
+			bestD, best = d, i
 		}
 	}
-	return max(len(xs)-1, 0)
+	for i := 0; i < n; i++ {
+		lo, hi := s.span(i)
+		if x >= lo && x <= hi {
+			lead := s.xs[i]
+			if abs32(x-lead) <= abs32(x-s.ends[i]) {
+				return i
+			}
+			return i + 1
+		}
+		note(s.xs[i], i)
+		note(s.ends[i], i+1)
+	}
+	note(s.xs[n], n)
+	return best
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// SelectionSpans is the x ranges a selection of the runes [i, j) covers,
+// for a painter to fill behind the text.
+//
+// One range for text that reads one way, which is nearly all text. More
+// where the selection crosses a change of direction: a Hebrew phrase
+// selected together with the English on either side of it is drawn as
+// one stretch on screen, but the English before it and the English after
+// it are not next to each other, and a single box from the first
+// character to the last would cover the wrong half of the line.
+func (f *Font) SelectionSpans(text string, i, j int) [][2]float32 {
+	if f == nil || text == "" || i == j {
+		return nil
+	}
+	if i > j {
+		i, j = j, i
+	}
+	s := f.shapeOf(text)
+	n := len(s.xs) - 1
+	if n <= 0 {
+		return nil
+	}
+	i, j = max(i, 0), min(j, n)
+	if i >= j {
+		return nil
+	}
+	if s.oneWay() {
+		return [][2]float32{{s.xs[i], s.xs[j]}}
+	}
+	// Collected in logical order, which is not the order they are drawn
+	// in: the first character of a right-to-left run is the rightmost of
+	// it, so the pieces arrive scattered and have to be sorted before
+	// the ones that touch can be joined.
+	out := make([][2]float32, 0, j-i)
+	for k := i; k < j; k++ {
+		lo, hi := s.span(k)
+		out = append(out, [2]float32{lo, hi})
+	}
+	slices.SortFunc(out, func(a, b [2]float32) int {
+		switch {
+		case a[0] < b[0]:
+			return -1
+		case a[0] > b[0]:
+			return 1
+		}
+		return 0
+	})
+	merged := out[:0]
+	for _, sp := range out {
+		if m := len(merged); m > 0 && sp[0] <= merged[m-1][1]+0.01 {
+			merged[m-1][1] = max(merged[m-1][1], sp[1])
+			continue
+		}
+		merged = append(merged, sp)
+	}
+	return merged
 }
 
 // cellFor is the atlas cell for r, baking it on first use.

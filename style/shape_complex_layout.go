@@ -228,6 +228,7 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 		lay.atlas = f.ot.atlas()
 	}
 	caret := make([]float32, len(runes)+1)
+	ends := make([]float32, len(runes)+1)
 	seen := make([]bool, len(runes)+1)
 	var pen float32
 	for _, p := range parts {
@@ -249,16 +250,16 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 				}
 				x += g.Advance
 			}
-			markCluster(caret, seen, p, i, j, x-w, w, rtl)
+			markCluster(caret, ends, seen, p, i, j, x-w, w, rtl)
 			i = j
 		}
 		pen += p.width
 	}
-	fillCarets(caret, seen, parts, pen, base)
+	fillCarets(caret, ends, seen, pen, base)
 
 	s := lay.measure()
 	s.epoch = fallbackEpoch.Load()
-	s.adv, s.xs = pen, caret
+	s.adv, s.xs, s.ends = pen, caret, ends
 	if s.ink < pen {
 		s.ink = pen
 	}
@@ -270,7 +271,7 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 // left in a left-to-right run and its right in a right-to-left one, and
 // a cluster of several runes — a ligature, a syllable — divides its
 // width between them so a caret can still be put inside it.
-func markCluster(caret []float32, seen []bool, p part, i, j int, x, w float32, rtl bool) {
+func markCluster(caret, ends []float32, seen []bool, p part, i, j int, x, w float32, rtl bool) {
 	first := p.glyphs[i].Cluster
 	last := p.end
 	// The cluster runs to the next cluster's first rune; within one run
@@ -297,8 +298,10 @@ func markCluster(caret []float32, seen []bool, p part, i, j int, x, w float32, r
 		}
 		if rtl {
 			caret[idx] = x + w - float32(k)*step
+			ends[idx] = caret[idx] - step
 		} else {
 			caret[idx] = x + float32(k)*step
+			ends[idx] = caret[idx] + step
 		}
 		seen[idx] = true
 	}
@@ -306,12 +309,12 @@ func markCluster(caret []float32, seen []bool, p part, i, j int, x, w float32, r
 
 // fillCarets gives the runes no cluster named — and the one past the
 // end — a position, so that every index into the string has a caret.
-func fillCarets(caret []float32, seen []bool, parts []part, total float32, base di.Direction) {
+func fillCarets(caret, ends []float32, seen []bool, total float32, base di.Direction) {
 	end := total
 	if base == di.DirectionRTL {
 		end = 0
 	}
-	caret[len(caret)-1] = end
+	caret[len(caret)-1], ends[len(ends)-1] = end, end
 	seen[len(seen)-1] = true
 	last := float32(0)
 	for i := range caret {
@@ -319,7 +322,10 @@ func fillCarets(caret []float32, seen []bool, parts []part, total float32, base 
 			last = caret[i]
 			continue
 		}
-		caret[i] = last
+		// A rune no cluster named — one the shaper folded into its
+		// neighbour — sits where that neighbour does, with no width of
+		// its own, so a caret can still be put on either side of it.
+		caret[i], ends[i] = last, last
 	}
 }
 
