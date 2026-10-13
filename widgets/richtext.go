@@ -731,20 +731,39 @@ func (t *RichText) paintLine(ctx *paintengine2d.Context, ln *rtLine, x0, ly floa
 			ctx.DrawRect(paintengine2d.XYWH(lx+f.x, ly, w, ln.h), paintengine2d.Fill(f.st.Highlight))
 		}
 	}
-	var selBox paintengine2d.Rect
+	// One box per stretch of screen the selection covers. A line that
+	// reads one way has one; a line that changes direction has a box
+	// per piece, and a single box from the first character to the last
+	// would cover text that is not selected and miss text that is.
+	var selBoxes []paintengine2d.Rect
 	if sa >= 0 {
 		s0, s1 := max(sa, ln.start), min(sc, ln.end)
 		past := sc > blen && ln.end == blen && !ln.soft
 		if s0 < s1 || past && s0 <= ln.end {
-			xa := x0 + ln.caretX(s0)
-			xb := x0 + ln.caretX(min(s1, ln.end))
+			for _, sp := range ln.selectionSpans(s0, min(s1, ln.end)) {
+				selBoxes = append(selBoxes, paintengine2d.Rect{
+					Min: paintengine2d.Pt(x0+sp[0], ly),
+					Max: paintengine2d.Pt(x0+sp[1], ly+ln.h),
+				})
+			}
 			if past {
 				// The selection runs on past the block's end: show its
 				// newline as a sliver, as TextArea does.
-				xb = max(xb+t.dip(6), xb)
+				xb := x0 + ln.caretX(min(s1, ln.end))
+				if n := len(selBoxes); n > 0 {
+					xb = selBoxes[n-1].Max.X
+				}
+				selBoxes = append(selBoxes, paintengine2d.Rect{
+					Min: paintengine2d.Pt(xb, ly),
+					Max: paintengine2d.Pt(xb+t.dip(6), ly+ln.h),
+				})
 			}
-			selBox = paintengine2d.Rect{Min: paintengine2d.Pt(xa, ly), Max: paintengine2d.Pt(xb, ly+ln.h)}
-			ctx.DrawRect(selBox, paintengine2d.Fill(selCol))
+			for _, box := range selBoxes {
+				if box.Empty() {
+					continue
+				}
+				ctx.DrawRect(box, paintengine2d.Fill(selCol))
+			}
 		}
 	}
 	draw := func(override bool) {
@@ -828,9 +847,12 @@ func (t *RichText) paintLine(ctx *paintengine2d.Context, ln *rtLine, x0, ly floa
 		}
 	}
 	draw(false)
-	if !selBox.Empty() {
+	for _, box := range selBoxes {
+		if box.Empty() {
+			continue
+		}
 		ctx.Save()
-		ctx.ClipRect(selBox)
+		ctx.ClipRect(box)
 		draw(true)
 		ctx.Restore()
 	}

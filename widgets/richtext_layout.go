@@ -341,6 +341,10 @@ func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
 		if len(ln.frags) > 0 {
 			asc, desc = 0, 0
 		}
+		// In the order they are drawn before they are given an x: a
+		// line that changes direction is written in one order and read
+		// in another (widgets/richtext_bidi.go).
+		orderBidi(ln)
 		for j := range ln.frags {
 			f := &ln.frags[j]
 			f.x = fx
@@ -592,12 +596,18 @@ func (l *rtLayout) lineFor(off int, up bool) int {
 }
 
 // caretX is where character off sits on line ln, in block coordinates.
+// caretX is where the caret goes for a character offset.
+//
+// By offset, not by position in the slice: the fragments are in the
+// order they are *drawn*, which for a line that changes direction is
+// not the order they are written in, so the fragment holding an offset
+// has to be looked for rather than walked to.
 func (ln *rtLine) caretX(off int) float32 {
 	if off <= ln.start || len(ln.frags) == 0 {
 		return ln.x
 	}
 	for _, f := range ln.frags {
-		if off < f.end || off == f.end && f.end == ln.frags[len(ln.frags)-1].end {
+		if off >= f.start && off < f.end {
 			if f.img != nil {
 				if off <= f.start {
 					return ln.x + f.x
@@ -607,7 +617,17 @@ func (ln *rtLine) caretX(off int) float32 {
 			return ln.x + f.x + f.font.CaretX(f.text, off-f.start)
 		}
 	}
-	last := ln.frags[len(ln.frags)-1]
+	// Past the last character: the trailing edge of the fragment that
+	// holds it, which is the last one written, not the last one drawn.
+	last := &ln.frags[0]
+	for i := range ln.frags {
+		if ln.frags[i].end > last.end {
+			last = &ln.frags[i]
+		}
+	}
+	if last.img == nil && off >= last.end {
+		return ln.x + last.x + last.font.CaretX(last.text, last.end-last.start)
+	}
 	return ln.x + last.x + last.w
 }
 

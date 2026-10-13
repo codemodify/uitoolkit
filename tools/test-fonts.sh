@@ -11,6 +11,8 @@
 # everything, a rune it lacks is a box — and this runs the rest:
 #
 #   font_fallback   a rune the face lacks is borrowed from one that has it
+#   font_complex    the face's own tables choose the glyphs: shaping,
+#                   bidi, and the Unicode line breaking algorithm
 #
 # Both halves are tested, and they are tested against each other: the
 # default build has fontfallback_off_test.go pinning that nothing is
@@ -37,5 +39,16 @@ for a in "$@"; do
   esac
 done
 
+# The whole tree for font_complex, not just ./style/: it changes what
+# every string measures, so a window that moved would show up in the
+# widgets and in the samples rather than here.
+complex_pkgs=("${pkgs[@]}")
+if [ "${#pkgs[@]}" -eq 1 ] && [ "${pkgs[0]}" = "./style/" ]; then
+  complex_pkgs=(./...)
+fi
+
 echo "=== font_fallback"
-exec tools/testenv.sh go test -tags "theme_engine_all,font_fallback" "${args[@]}" "${pkgs[@]}"
+tools/testenv.sh go test -tags "theme_engine_all,font_fallback" "${args[@]}" "${pkgs[@]}"
+
+echo "=== font_complex"
+exec tools/testenv.sh go test -tags "theme_engine_all,font_complex" "${args[@]}" "${complex_pkgs[@]}"

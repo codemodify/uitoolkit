@@ -1,17 +1,9 @@
 //go:build font_complex
 
-// Shaping, behind the font_complex tag. A SPIKE: it proves what the real
-// thing costs and where it lands, and nothing in the toolkit calls it yet.
-//
-// What it is here to answer:
-//
-//  1. A shaper's output is glyph *indices*, not runes. Everything in this
-//     package keys the atlas by rune. How much has to change?
-//  2. Can the existing rasterizer draw a glyph the shaper chose — one with
-//     no rune of its own, like an Arabic medial form or a ligature?
-//  3. What does the binary weigh with it in?
-//
-// The answers are in docs/complex-text-spike.md.
+// Shaping, behind the font_complex tag: the pieces that talk to the
+// shaper. [complexLayout] in shape_complex_layout.go is what uses them,
+// and docs/complex-text.md is the whole picture — what the tag adds,
+// what it costs, and what is still missing.
 package style
 
 import (

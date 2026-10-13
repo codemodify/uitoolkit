@@ -71,6 +71,18 @@ is a different toolkit for that product — not a bitmap of the sentence.
 
 ## What is not supported
 
+Everything in this section describes the **default build**. Two of the
+limits below are build-time choices now, and one is not:
+
+| | the default build | `-tags font_complex` |
+| --- | --- | --- |
+| shaping, bidi, line breaking | not supported, as below | supported — [complex-text.md](complex-text.md) |
+| a mirrored *interface* | not supported | **still not supported** |
+
+A build with the tag draws Arabic, Hebrew, Devanagari and Japanese text
+correctly, and still lays its windows out left to right. Those are two
+different promises and only one of them is for sale.
+
 ### No complex text shaping
 
 The text stack shapes runs **rune by rune**, with pair kerning from
@@ -85,11 +97,20 @@ happens:
 | Contextual alternates, small caps, old-style figures | any `GSUB` feature |
 | Combining marks **positioned** by the face | `GPOS` mark attachment |
 
+Every row of that table is supported in a `font_complex` build, which
+reads the face's own `GSUB` and `GPOS` and lets the shaper pick the
+glyphs.
+
 ### No bidirectional layout
 
 There is no Unicode bidi algorithm. A string is laid out left to right in
 **logical order**, so Arabic and Hebrew come out reversed on screen even
 where the face can draw them.
+
+A `font_complex` build has UAX #9, and with it the caret, the hit test
+and the selection for a line that changes direction — and UAX #14, so a
+language without spaces wraps where it is allowed to rather than where
+the box ends.
 
 ### No right-to-left interface
 
@@ -191,14 +212,18 @@ need to line up.
 
 ## If you need more than this
 
-You need a toolkit with a shaping engine. Qt has HarfBuzz, GTK has Pango,
-and both do bidi and RTL mirroring properly. That is a real answer and
-this page would be dishonest without it:
+First reach for the build tag: `-tags font_complex` is a shaping engine,
+the bidirectional algorithm and the line breaking algorithm, and it is
+1.6 MB ([complex-text.md](complex-text.md)). What it does not do is
+mirror the interface, and for some of these that is the whole
+requirement:
 
-- **an Arabic, Hebrew, Persian or Urdu interface** — Qt or GTK;
-- **an Indic or Thai interface** — Qt or GTK;
-- **a CJK interface** — possible here if the pack resolves an installed
-  CJK face, but with no vertical text and no ruby;
+- **an Arabic, Hebrew, Persian or Urdu interface** — the *text* is right
+  with the tag; the window is still laid out left to right, so for an
+  interface that must mirror, Qt or GTK;
+- **an Indic or Thai interface** — right with the tag;
+- **a CJK interface** — right with the tag, where the machine has a CJK
+  face, but with no vertical text and no ruby;
 - **anything that must mirror for a locale** — Qt or GTK.
 
 Latin, Greek and Cyrillic *content* — as opposed to the interface — works

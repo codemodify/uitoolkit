@@ -186,7 +186,8 @@ func (f *Font) Wrap(text string, maxW float32) []string {
 	exact := func(runes []rune) float32 { return f.Advance(string(runes)) }
 	var out []string
 	for _, para := range strings.Split(text, "\n") {
-		out = append(out, wrapLine([]rune(para), maxW, adv, exact)...)
+		runes := []rune(para)
+		out = append(out, wrapLine(runes, maxW, adv, exact, lineBreaks(runes))...)
 	}
 	return out
 }
@@ -227,7 +228,10 @@ func CanBreakAfter(r rune) bool {
 // sum is resynced to it: the kerning slack has to accumulate again
 // before the next question, which keeps the exact measures to a handful
 // per line rather than one per rune.
-func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]rune) float32) []string {
+// breaks, when it is not nil, says before which runes the Unicode line
+// breaking algorithm allows a break (UAX #14). It is what lets a
+// Japanese paragraph — which has no spaces to break at — wrap at all.
+func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]rune) float32, breaks []bool) []string {
 	if len(runes) == 0 {
 		return []string{""}
 	}
@@ -237,6 +241,9 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 	// just after the last path or URL separator it has passed. Used only
 	// when there is no space to break at.
 	sep := -1
+	// uax is the last place Unicode allows a break, for the scripts
+	// whose words are not separated by anything a space rule can see.
+	uax := -1
 	var w float32
 	for i := 0; i < len(runes); i++ {
 		// The break point is the *first* space of a run, so a line that
@@ -253,6 +260,9 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 		// but "-".
 		if i > start && CanBreakAfter(runes[i-1]) {
 			sep = i
+		}
+		if breaks != nil && i > start && breaks[i] {
+			uax = i
 		}
 		w += adv(runes[i])
 		// The first rune of a line always stays on it: a single glyph
@@ -273,13 +283,18 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]r
 			for next < len(runes) && runes[next] == ' ' {
 				next++
 			}
+		case uax > start:
+			// No space, but Unicode allows a break here: between two
+			// Han characters, after a Thai word. Nothing is swallowed —
+			// there is no space to swallow.
+			cut, next = uax, uax
 		case sep > start:
 			// No space on the line: break after the separator rather than
 			// in the middle of a name.
 			cut, next = sep, sep
 		}
 		out = append(out, string(runes[start:cut]))
-		start, brk, sep, w = next, -1, -1, 0
+		start, brk, sep, uax, w = next, -1, -1, -1, 0
 		i = next - 1
 	}
 	if start < len(runes) || len(out) == 0 {

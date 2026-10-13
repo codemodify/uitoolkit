@@ -36,6 +36,10 @@ import (
 // scratch between calls. Both hold state across one call only.
 var segPool = sync.Pool{New: func() any { return &shaping.Segmenter{} }}
 
+// rtlDirection is di.DirectionRTL under a name the rest of the package
+// can use without importing the shaper's own packages.
+const rtlDirection = di.DirectionRTL
+
 // arabicIndicDigits are the one place where "the script is right-to-left"
 // is the wrong answer to "is this character strong": U+0660.. are Arabic
 // by script and bidi class AN, which P2 steps over.
@@ -329,37 +333,60 @@ func fillCarets(caret, ends []float32, seen []bool, total float32, base di.Direc
 	}
 }
 
-// reorderVisual is UAX #9 L2: from the highest level down to the lowest
-// odd one, reverse every run of parts at that level or above. It is what
-// puts a Hebrew phrase inside an English sentence the right way round,
-// and the quoted English inside *that* the right way round again.
-func reorderVisual(parts []part) {
-	if len(parts) < 2 {
-		return
+// visualOrder is UAX #9 L2: from the highest level down to the lowest
+// odd one, reverse every stretch at that level or above. It is what puts
+// a Hebrew phrase inside an English sentence the right way round, and
+// the quoted English inside *that* the right way round again.
+//
+// It answers with the order to draw the levels in — index 0 first —
+// rather than moving anything, so that a caller holding runs, glyphs or
+// styled fragments can put its own in that order.
+func visualOrder(levels []bidi.Level) []int {
+	order := make([]int, len(levels))
+	for i := range order {
+		order[i] = i
+	}
+	if len(levels) < 2 {
+		return order
 	}
 	var highest bidi.Level
 	lowestOdd := bidi.Level(127)
-	for _, p := range parts {
-		if p.level > highest {
-			highest = p.level
+	for _, l := range levels {
+		if l > highest {
+			highest = l
 		}
-		if p.level%2 != 0 && p.level < lowestOdd {
-			lowestOdd = p.level
+		if l%2 != 0 && l < lowestOdd {
+			lowestOdd = l
 		}
 	}
+	at := func(i int) bidi.Level { return levels[order[i]] }
 	for lvl := highest; lvl >= lowestOdd; lvl-- {
-		for i := 0; i < len(parts); i++ {
-			if parts[i].level < lvl {
+		for i := 0; i < len(order); i++ {
+			if at(i) < lvl {
 				continue
 			}
 			j := i
-			for j < len(parts) && parts[j].level >= lvl {
+			for j < len(order) && at(j) >= lvl {
 				j++
 			}
 			for a, b := i, j-1; a < b; a, b = a+1, b-1 {
-				parts[a], parts[b] = parts[b], parts[a]
+				order[a], order[b] = order[b], order[a]
 			}
 			i = j
 		}
 	}
+	return order
+}
+
+// reorderVisual puts shaped runs in the order they are drawn.
+func reorderVisual(parts []part) {
+	levels := make([]bidi.Level, len(parts))
+	for i, p := range parts {
+		levels[i] = p.level
+	}
+	out := make([]part, len(parts))
+	for i, from := range visualOrder(levels) {
+		out[i] = parts[from]
+	}
+	copy(parts, out)
 }

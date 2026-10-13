@@ -1,0 +1,129 @@
+# Complex text: shaping, direction and line breaking
+
+`-tags font_complex` makes the toolkit read the font's own tables
+instead of looking each character up by itself. Leave the tag off and
+nothing here applies: the toolkit is exactly what [the text
+contract](contracts.md) describes, which is what every build before this
+one was.
+
+    go build -tags font_complex ./...
+    tools/test-fonts.sh                 # the suite in this build and in font_fallback
+
+It implies `font_fallback`: shaping chooses the *face* for each run of
+text, and the fallback list is where the faces it may choose from are.
+
+## What it does
+
+| | without the tag | with it |
+| --- | --- | --- |
+| glyphs | one per rune, by code point | the face's GSUB: ligatures, joining forms, Indic reordering |
+| spacing | the `kern` table, pairs only | GPOS: pair kerning, mark attachment |
+| direction | left to right | UAX #9: a line that changes direction is ordered for reading |
+| caret, click, selection | one rule for the whole line | per character, in its own direction |
+| line breaking | at spaces | UAX #14: between Han characters, after a Thai word, and *not* before a closing bracket |
+| the lending face | per rune | per run, through the segmenter |
+
+Arabic سلام is the case worth stating plainly. Without the tag its four
+runes are four isolated letters, each drawn as if alone. With it they are
+four joining forms — four glyphs that *no rune maps to*, which is why
+this needs the shaper and not a bigger table.
+
+## What an application has to do
+
+Nothing. Every widget that draws text goes through `style.Font`, and
+that is where this lives. Two pieces of it are exported for an
+application — or a widget — that places text itself:
+
+```go
+// The stretches of screen a stretch of text covers: one, nearly always.
+spans := font.SelectionSpans(text, from, to)
+
+// The runs of a string that read one way, in the order they are drawn.
+// nil when the string reads one way, which is nearly every string.
+runs := style.DirectionRuns(text)
+```
+
+`DirectionRuns` is for a line assembled from *several* strings, each
+drawn by a call of its own: that is how [RichText](../widgets/richtext.go)
+draws a line of styled fragments, and why it has to put its own
+fragments in the order the rule gives
+([widgets/richtext_bidi.go](../widgets/richtext_bidi.go)). Text drawn in
+one call is already ordered by `Font.Draw`.
+
+## How it fits together
+
+    the paragraph's direction (UAX #9 P2, P3)
+      → Segmenter.Split — bidi runs, then script, then face
+        → harfbuzz per run — GSUB, GPOS, the glyphs and where they go
+          → the runs ordered for display (UAX #9 L2)
+            → one atlas group per face, and a caret table per rune
+
+Two details are worth knowing if you work on it.
+
+**The atlas key carries a bit.** A sheet is keyed by
+`paintengine2d.GlyphID`, which the toolkit filled with runes and a shaper
+fills with glyph indices — where 65 is whatever glyph the font put at
+index 65, not `'A'`. Runes stop at `0x10FFFF`, so the top bit says which
+numbering a key is in and one sheet holds both. It has to: a cluster the
+shaper has no glyph for is handed *back* to the rune path, which has a
+drawn star for `★` and a box for everything else.
+
+**`xs` holds leading edges.** The caret table has one entry per rune plus
+one, and an entry is where that rune *starts* — its left edge in text
+that reads left to right and its right edge in text that does not. So
+the table does not have to climb, and "where does this rune end" is no
+longer "where the next one starts": the shaped layout fills a second
+table, `ends`, and a layout that reads one way leaves it nil. That nil
+is what every fast path tests.
+
+## What it costs
+
+Measured on this machine, stripped (`-ldflags "-s -w"`), each binary
+linking what the row says:
+
+| | size | delta |
+| --- | --- | --- |
+| hello world (the Go floor) | 1.44 MB | |
+| `x/image/font/sfnt`, parse + rasterize | 1.77 MB | +0.33 |
+| **a** — `style`, as the toolkit is without the tag | 5.19 MB | |
+| **c** — a + go-text's OpenType parser | 6.26 MB | **+1.07** |
+| **b** — c + harfbuzz + `language` | 7.09 MB | **+0.83** |
+| **f** — b + the line/word segmenter | 7.14 MB | +0.05 |
+| `cmd/uitoolkit-settings`, default | 13.04 MB | |
+| the same, `-tags font_complex` | 13.12 MB | +0.08 |
+
+So **+1.9 MB** as it stands, and **+1.6 MB** once go-text replaces
+`x/image/font/sfnt` rather than sitting beside it — every face is parsed
+twice today, once by each. The shaper itself is the cheap half: harfbuzz
+and its script tables are 0.83 MB, and go-text's *font parser* is 1.07.
+Bidi and segmentation are rounding errors.
+
+The rule from [fonts.md](fonts.md) is unchanged, and this is the proof of
+it: supporting every script on earth costs 1.6 MB of *code*. One Noto
+Sans CJK family is 18.6 MB of font data. The faces stay the machine's.
+
+## What is still missing
+
+- **Vertical text** (UAX #50). The segmenter can resolve the
+  orientation; nothing above it would know what to do with the answer.
+- **Colour glyphs** (COLR/CPAL, CBDT, sbix). go-text parses them;
+  `paintengine2d`'s sheet is one premultiplied RGBA image and could hold
+  them, but nothing maps the one to the other. See the emoji note in
+  [fonts.md](fonts.md).
+- **Caret affinity.** At a change of direction one text position is two
+  places on screen. The toolkit picks one: the leading edge of the
+  character the index names.
+- **Arrow keys move logically**, not visually: Left in a right-to-left
+  run moves to the next character in the *string*, which is to the
+  right. Both behaviours exist in the wild; this one is the one the
+  toolkit already had.
+- **One parser.** Keeping `sfnt` costs the 1.07 MB above and parses
+  every face twice.
+
+## The dependency
+
+`github.com/go-text/typesetting v0.3.5` — Unlicense OR BSD-3-Clause,
+with the harfbuzz port under MIT. It moved `golang.org/x/image` from
+v0.18.0 to v0.23.0 and `golang.org/x/text` from v0.16.0 to v0.21.0 for
+every build, with the tag or without. That upgrade renders every bundled
+face pixel for pixel as before, which was checked rather than assumed.

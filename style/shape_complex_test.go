@@ -365,3 +365,100 @@ func TestClickingACaretGivesBackItsIndex(t *testing.T) {
 		}
 	}
 }
+
+// Japanese has no spaces, so a paragraph of it wrapped by the space rule
+// is one line as wide as the paragraph is long — it runs out of the box
+// and is simply not read. The Unicode line breaking algorithm (UAX #14)
+// is what says where it may break instead, and font_complex is the build
+// that has it.
+//
+// No Japanese face is needed to show it: the characters measure as the
+// .notdef box when the machine has none, and the wrap is about where the
+// line may break, not about what the characters look like.
+func TestJapaneseWrapsWithoutSpaces(t *testing.T) {
+	t.Setenv("UITK_SYSTEM_FONTS", "0")
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	const para = "本日は晴天なり、きょうは(とても)いいてんきです。あしたもはれるでしょう。"
+	full := f.Advance(para)
+	if full <= 0 {
+		t.Fatal("the paragraph measured nothing")
+	}
+
+	// Breaking *somewhere* is not the point: with no spaces in it, text
+	// broken wherever the line ends wraps too, and looks right until
+	// you read it. The algorithm is what keeps the closing bracket with
+	// what it closes and the full stop with the sentence it ends, so no
+	// line may open with one — and every width is a chance to get that
+	// wrong.
+	for box := full / 12; box < full; box += full / 20 {
+		lines := f.Wrap(para, box)
+		if got := strings.Join(lines, ""); got != para {
+			t.Fatalf("at width %.0f the lines do not add up to the paragraph:\n got %q\nwant %q", box, got, para)
+		}
+		for i, ln := range lines {
+			if w := f.Advance(ln); w > box+0.5 {
+				t.Errorf("at width %.0f line %q is %.1f wide", box, ln, w)
+			}
+			if i > 0 {
+				switch []rune(ln)[0] {
+				case '。', '、', ')', '」':
+					t.Errorf("at width %.0f a line opens with %q: %q", box, []rune(ln)[0], lines)
+				}
+			}
+			if r := []rune(ln); len(r) > 0 && i < len(lines)-1 {
+				if last := r[len(r)-1]; last == '(' || last == '「' {
+					t.Errorf("at width %.0f a line ends with %q: %q", box, last, lines)
+				}
+			}
+		}
+	}
+	if n := len(f.Wrap(para, full/3)); n < 3 {
+		t.Errorf("a paragraph three times its box wrapped into %d lines", n)
+	}
+}
+
+// The other half of UAX #14: where a line may *not* break. A closing
+// bracket belongs to what it closes and a line may not open with one —
+// which matters exactly where the breaks are not spaces, since a space
+// rule would never have broken there anyway.
+func TestTheBreakTableForbidsWhatItShould(t *testing.T) {
+	breaks := func(text string) []bool { return lineBreaks([]rune(text)) }
+
+	t.Run("between two Han characters", func(t *testing.T) {
+		b := breaks("本日は晴天")
+		if b == nil {
+			t.Fatal("no break table for a paragraph with no spaces in it")
+		}
+		found := 0
+		for i := 1; i < len(b)-1; i++ {
+			if b[i] {
+				found++
+			}
+		}
+		if found < 3 {
+			t.Errorf("only %d of the four places between five characters may break", found)
+		}
+	})
+
+	t.Run("not before a closing bracket or a full stop", func(t *testing.T) {
+		const text = "日本語の本(とても良い)です。"
+		rs := []rune(text)
+		b := breaks(text)
+		if b == nil {
+			t.Fatal("no break table")
+		}
+		for i, r := range rs {
+			if i == 0 || !b[i] {
+				continue
+			}
+			switch r {
+			case ')', '。', '、':
+				t.Errorf("a line may open with %q (rune %d of %q)", r, i, text)
+			}
+			if rs[i-1] == '(' {
+				t.Errorf("a line may end with an opening bracket (rune %d of %q)", i-1, text)
+			}
+		}
+	})
+}
