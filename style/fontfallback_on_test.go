@@ -150,3 +150,108 @@ func TestTheApplicationNamesTheLendingFaces(t *testing.T) {
 		t.Error("naming none did not put the built-in list back")
 	}
 }
+
+// **Changing the families changes what is drawn, at once.**
+//
+// Both the remembered decisions and the laid-out runs were kept across
+// a change to the list, so a rune cached as "nobody has it" stayed a
+// box after a face that has it was named, and one already borrowed went
+// on being borrowed from a face no longer in the list.
+// media-player-video and media-player-music found the two directions
+// independently.
+func TestChangingTheFamiliesTakesEffectAtOnce(t *testing.T) {
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+	if f.covers('Δ') {
+		t.Skip("the bundled interface face has grown Greek")
+	}
+	t.Cleanup(func() { SetFallbackFamilies() })
+
+	// Nobody lends: the rune is a box, and that answer is remembered.
+	SetFallbackFamilies("Acme Nothing At All")
+	if fb := fallbackFor(f, 'Δ'); fb != nil {
+		t.Fatalf("something lent a glyph from %q", fb.Family)
+	}
+	boxed := f.shapeOf("Δ")
+	if len(boxed.runs) != 1 {
+		t.Fatalf("%d runs with nothing lending", len(boxed.runs))
+	}
+
+	// Now name one that has it: both the decision and the shaped run
+	// have to be made again.
+	SetFallbackFamilies(FamilyMono)
+	if fb := fallbackFor(f, 'Δ'); fb == nil {
+		t.Error("a newly named face was not asked, because the old answer was remembered")
+	}
+	if got := f.shapeOf("Δ"); len(got.runs) != 2 {
+		t.Errorf("%d runs after naming a face that has the rune; the laid-out run was cached", len(got.runs))
+	}
+
+	// And the other way: take the face away and the glyph goes back to
+	// being a box.
+	SetFallbackFamilies("Acme Nothing At All")
+	if fb := fallbackFor(f, 'Δ'); fb != nil {
+		t.Errorf("%q still lends after it was taken off the list", fb.Family)
+	}
+	if got := f.shapeOf("Δ"); len(got.runs) != 1 {
+		t.Errorf("%d runs after the lender was taken away; the borrowed glyph was kept", len(got.runs))
+	}
+}
+
+// **A lender has to cover the rune, not the alphabet.**
+//
+// `bakeFaceAscent` refuses a face that cannot draw an 'A', which is
+// right for the face that draws the interface — an unreadable window is
+// worse than the wrong typeface — and wrong for one lending a single
+// glyph. It kept every symbol and emoji face from ever lending
+// (comms-mail item 58).
+func TestALenderNeedNotDrawLatin(t *testing.T) {
+	// A face that is installed and has no Latin at all is what the
+	// check exists for, and what the fix is about. There may be none
+	// on this machine.
+	var found string
+	for _, name := range []string{"Noto Color Emoji", "Noto Emoji", "Noto Sans Arabic", "Noto Naskh Arabic", "Noto Sans CJK SC", "Symbola"} {
+		fam := ResolveFont([]string{name})
+		if fam == "" {
+			continue
+		}
+		f, err := bakeFaceAscent(fam, WeightRegular, 16, 18)
+		if err != nil {
+			t.Fatalf("%q was refused as a lender: %v — a lender has to cover a rune, not the alphabet", fam, err)
+		}
+		if !f.covers('A') {
+			found = fam
+			break
+		}
+	}
+	if found == "" {
+		t.Skip("no installed face without Latin to check this with")
+	}
+	// And the interface path keeps the check, which is the half that
+	// stops an unreadable window.
+	if _, err := bakeFaceAscent(found, WeightRegular, 16, 0); err == nil {
+		t.Errorf("%q was accepted as the interface face, and it cannot draw Latin", found)
+	}
+}
+
+// **A script that needs shaping is not borrowed for.**
+//
+// The toolkit has no shaping and no bidi, so a borrowed Arabic glyph
+// would draw unjoined and in logical order — legibly wrong, where a box
+// is honestly illegible. Those scripts stay boxes until shaping lands.
+func TestAScriptThatNeedsShapingIsNotBorrowedFor(t *testing.T) {
+	SetFallbackFamilies(FamilyMono, "Noto Sans", "DejaVu Sans", "Noto Naskh Arabic", "Noto Sans Arabic")
+	t.Cleanup(func() { SetFallbackFamilies() })
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	for _, r := range []rune{'ا', 'ب', 'א', 'अ', 'ก'} {
+		if fb := fallbackFor(f, r); fb != nil {
+			t.Errorf("%c was borrowed from %q; it needs shaping the toolkit has not got", r, fb.Family)
+		}
+	}
+	// And the ones a glyph at a time is the truth for are unaffected.
+	for _, r := range []rune{'Δ', 'д', '✓'} {
+		if fb := fallbackFor(f, r); fb == nil {
+			t.Errorf("%c was not borrowed, and one glyph per rune is right for it", r)
+		}
+	}
+}

@@ -3,6 +3,8 @@ package style
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
+	"unicode"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -41,6 +43,14 @@ var defaultFallbackFamilies = []string{
 	"WenQuanYi Zen Hei", "Droid Sans Fallback",
 	// Everything else a Latin face is likely to be short of.
 	"Noto Sans", "DejaVu Sans", "FreeSans", "Arial Unicode MS", "Segoe UI Symbol",
+	// Marks and emoji, where a face draws them as outlines. A colour
+	// emoji face (Noto Color Emoji's CBDT bitmaps, Apple Color Emoji's
+	// sbix, Segoe UI Emoji's COLR) is not named here and would not help
+	// if it were: nothing in this build can draw a colour glyph, and
+	// doing it properly means shaping as well, because a family, a skin
+	// tone and a flag are all sequences the *font* composes (UTS #51).
+	// comms-mail item 58, deferred to that work.
+	"Noto Emoji", "Symbola", "Noto Sans Symbols 2", "Noto Sans Symbols",
 }
 
 var fallback = struct {
@@ -71,7 +81,20 @@ func SetFallbackFamilies(names ...string) {
 		}
 	}
 	fallback.names, fallback.set = out, len(out) > 0
+	// Everything decided under the old list is now wrong in both
+	// directions: a rune remembered as "nobody has it" must be looked
+	// for again, and one already borrowed must be given back if the
+	// face that lent it is no longer named. media-player-video and
+	// media-player-music both found this by changing the list at
+	// runtime and watching nothing change.
+	fallbackEpoch.Add(1)
+	fallbackChanged()
 }
+
+// fallbackEpoch counts changes to the list. A shaped run remembers the
+// epoch it was laid out under, so a cached one is discarded rather than
+// drawn with glyphs from a face that is no longer lending.
+var fallbackEpoch atomic.Uint64
 
 // FallbackFamilies is the list in force: the application's, or the
 // built-in one.
@@ -82,6 +105,40 @@ func FallbackFamilies() []string {
 		return append([]string(nil), defaultFallbackFamilies...)
 	}
 	return append([]string(nil), fallback.names...)
+}
+
+// borrowable reports whether a glyph for r may honestly be borrowed at
+// all.
+//
+// One glyph per rune is the truth for CJK, Cyrillic, Greek, symbols and
+// emoji, and a lie for the scripts that need shaping or reordering: a
+// face lending Arabic letterforms draws them unjoined and in logical
+// order, which is legibly wrong where a box is honestly illegible. The
+// toolkit has no shaping and no bidi ([docs/contracts.md]), so it does
+// not pretend here either — these scripts stay boxes until it does.
+//
+// Checked against Go's own script tables, which are the Unicode ones.
+func borrowable(r rune) bool {
+	for _, t := range unshapedScripts {
+		if unicode.Is(t, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// unshapedScripts are the writing systems a glyph at a time cannot
+// honestly draw: the cursive ones that join, the Indic ones that
+// reorder, and the right-to-left ones that would come out in the wrong
+// order without [UAX #9].
+var unshapedScripts = []*unicode.RangeTable{
+	unicode.Arabic, unicode.Syriac, unicode.Thaana, unicode.Nko,
+	unicode.Hebrew, unicode.Samaritan, unicode.Mandaic, unicode.Adlam,
+	unicode.Devanagari, unicode.Bengali, unicode.Gurmukhi, unicode.Gujarati,
+	unicode.Oriya, unicode.Tamil, unicode.Telugu, unicode.Kannada,
+	unicode.Malayalam, unicode.Sinhala, unicode.Khmer, unicode.Myanmar,
+	unicode.Thai, unicode.Lao, unicode.Tibetan, unicode.Mongolian,
+	unicode.Javanese, unicode.Balinese, unicode.Tifinagh,
 }
 
 // covers reports whether this face draws r itself, rather than pointing

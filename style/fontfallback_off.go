@@ -12,3 +12,6 @@ package style
 // faces the machine has, which is why it is a choice and not the
 // default.
 func fallbackFor(*Font, rune) *Font { return nil }
+
+// fallbackChanged has nothing to throw away: nothing was decided.
+func fallbackChanged() {}

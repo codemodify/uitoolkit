@@ -76,8 +76,13 @@ type shapedRun struct {
 	// for each face a fallback borrowed a glyph from. Positions are
 	// absolute within the run, so the groups may be drawn in any order.
 	runs []paintengine2d.GlyphRun
-	adv  float32
-	ink  float32
+	// epoch is the fallback list this was laid out against. A change to
+	// that list makes the layout stale — a rune that was a box may now
+	// be borrowed, and one borrowed from a face no longer named must go
+	// back to being a box — and a cache that did not notice kept both.
+	epoch uint64
+	adv   float32
+	ink   float32
 	// xs is where each rune starts, kerning included, then where the run
 	// ends: carets, hit-testing and eliding read the layout Draw paints.
 	xs []float32
@@ -419,7 +424,7 @@ func (f *Font) shapeOf(text string) shapedRun {
 			f.shaped.mu.Lock()
 			hit, ok := f.shaped.m[text]
 			f.shaped.mu.Unlock()
-			if ok && hit.primary() == cur {
+			if ok && hit.primary() == cur && hit.epoch == fallbackEpoch.Load() {
 				return hit
 			}
 		}
@@ -434,7 +439,7 @@ func (f *Font) shapeOf(text string) shapedRun {
 	}
 	f.shaped.mu.Lock()
 	defer f.shaped.mu.Unlock()
-	if hit, ok := f.shaped.m[text]; ok {
+	if hit, ok := f.shaped.m[text]; ok && hit.epoch == fallbackEpoch.Load() {
 		// Re-point a run shaped against an earlier snapshot: cells are only
 		// ever added, so the positions still hold, and the superseded sheet
 		// stops being pinned by the cache. Only this font's own sheet —
@@ -500,6 +505,7 @@ func (f *Font) layout(text string, atlas *paintengine2d.FontAtlas) shapedRun {
 	}
 	xs = append(xs, x)
 	s := lay.measure()
+	s.epoch = fallbackEpoch.Load()
 	// The advance is where the layout ends; snapping each glyph onto the
 	// pixel grid moves ink, not the layout.
 	s.adv, s.xs = x, xs
@@ -860,6 +866,9 @@ func bakeFace(family string, weight Weight, size float32) (*Font, error) {
 // the top of the line box, so a face lending a glyph to another face has
 // to be baked against *that* face's ascent or its glyphs hang below the
 // line they are on. Nothing else wants this.
+//
+// A baseline is also what says this face is a *lender*, which is the
+// one case where the Latin check below does not apply.
 func bakeFaceAscent(family string, weight Weight, size, baseline float32) (*Font, error) {
 	face, err := faceFor(family, weight)
 	if err != nil {
@@ -875,9 +884,18 @@ func bakeFaceAscent(family string, weight Weight, size, baseline float32) (*Font
 	if err != nil {
 		return nil, err
 	}
-	cell, ok := atlas.Cell(paintengine2d.GlyphID('A'))
-	if !ok || cell.Src.Empty() || (ot.hasNotdef && cell.Src == ot.notdef.Src) {
-		return nil, fmt.Errorf("style: %s cannot draw Latin", family)
+	// A face that cannot draw Latin cannot draw the interface, so one
+	// asked for by name falls through to the next on the list rather
+	// than making an unreadable window. It is the wrong test for a face
+	// that is only lending a glyph — Noto Emoji, Noto Sans Symbols, a
+	// script face — which has to cover one rune and nothing else, and
+	// the check kept every one of them from ever lending (comms-mail
+	// item 58).
+	if baseline == 0 {
+		cell, ok := atlas.Cell(paintengine2d.GlyphID('A'))
+		if !ok || cell.Src.Empty() || (ot.hasNotdef && cell.Src == ot.notdef.Src) {
+			return nil, fmt.Errorf("style: %s cannot draw Latin", family)
+		}
 	}
 	return &Font{
 		Size:    size,

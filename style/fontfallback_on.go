@@ -40,7 +40,7 @@ type fallbackKey struct {
 // fallbackFor is the face that lends f the glyph for r, or nil for none
 // — which is every rune f draws itself, and every rune nobody has.
 func fallbackFor(f *Font, r rune) *Font {
-	if f == nil || r == ' ' || r == '\t' || r == '\n' {
+	if f == nil || r == ' ' || r == '\t' || r == '\n' || !borrowable(r) {
 		return nil
 	}
 	key := fallbackKey{r: r, family: f.Family, size: quantFont(f.Size),
@@ -111,3 +111,11 @@ func bakeFallbackFace(family string, weight Weight, size, ascent float32) *Font 
 }
 
 func quantFont(v float32) int { return int(v*4 + 0.5) }
+
+// fallbackChanged throws away every remembered decision, because the
+// list they were made against has been replaced.
+func fallbackChanged() {
+	fallbackMemo.mu.Lock()
+	clear(fallbackMemo.m)
+	fallbackMemo.mu.Unlock()
+}
