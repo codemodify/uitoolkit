@@ -6,6 +6,10 @@ thirty-four of them, and one that never shows Arabic does not carry a
 shaper. The cost of that is this page: **three choices, made with a
 build tag, and nobody else can make them for you.**
 
+This page is about *size*: what each choice weighs, so you can decide
+what to ship. [features.md](features.md) is the other half — every
+feature and the tag, variable or call that switches it on.
+
 Everything below is measured on `cmd/uitoolkit-settings` — a real
 application, not a benchmark — built as `go build` builds it on Linux
 (cgo enabled) and stripped with `-ldflags "-s -w"`. There is a fourth

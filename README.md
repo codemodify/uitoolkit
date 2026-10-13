@@ -64,10 +64,15 @@ the escape hatch. Build tags cannot contain hyphens, so the names use
 underscores. See **[docs/engines.md](docs/engines.md)**.
 
 Text is the other build-time choice: `font_fallback` borrows a rune the
-face has not got (+0.01 MB) and `font_complex` adds shaping, bidi and
-Unicode line breaking (+2.16 MB, and no font data). Every tag, what it
-gains and what it costs, on one page:
-**[docs/build-tags.md](docs/build-tags.md)**.
+face has not got (+0.01 MB), `font_complex` adds shaping, bidi and
+Unicode line breaking (+2.16 MB, and no font data), and `font_emoji`
+draws the machine's colour emoji (+0.01 MB).
+
+**[docs/features.md](docs/features.md)** is every feature and how to
+switch it on — the tags, the environment variables and the calls, with
+the build commands for each platform.
+**[docs/build-tags.md](docs/build-tags.md)** weighs the tags in
+megabytes.
 
 | | |
 | --- | --- |
