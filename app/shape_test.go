@@ -762,3 +762,41 @@ func TestShapedWindowKeepsAResizeBand(t *testing.T) {
 		})
 	}
 }
+
+// **A look keeps its silhouette when the application's bar is the
+// caption**, unless the silhouette is made of the caption.
+//
+// Every look lost it: `WindowShapeOf` dropped the outline for anything
+// merged, so a window with tabs in its title bar — Files, the tour, any
+// application doing what Chromium and VS Code do — was a plain rectangle
+// in Hangar and in Deck both. The rule belongs to BeOS alone, whose tab
+// is only as wide as its title and whose outline leaves the rest of the
+// top edge to the desktop: merged, the bar runs the full width and the
+// tab is no silhouette at all. BeOS still refuses, here by its own
+// arithmetic rather than a rule imposed on every look.
+func TestAMergedCaptionKeepsTheLooksSilhouette(t *testing.T) {
+	for _, pack := range []struct {
+		name  string
+		keeps bool
+	}{{"hangar", true}, {"deck", true}, {"beos", false}} {
+		t.Run(pack.name, func(t *testing.T) {
+			r := framedRig(t, pack.name, 500, 360)
+			if r.w.sysFrame.Shape == nil {
+				t.Fatal("no silhouette before the caption merged")
+			}
+			r.w.SetTitleBar(widgets.NewTitleBar("Console", ""))
+			r.w.SetCaptionStyle(style.CaptionMerged)
+			r.a.PumpOnce()
+			r.w.frame()
+			if !r.w.caption.DecorationState().Merged {
+				t.Fatal("the caption did not merge; this test is not testing what it says")
+			}
+			switch got := r.w.sysFrame.Shape != nil; {
+			case pack.keeps && !got:
+				t.Error("the look lost its silhouette to a bar as wide as the window either way")
+			case !pack.keeps && got:
+				t.Error("a tab narrower than the window survived a caption that fills it")
+			}
+		})
+	}
+}

@@ -208,3 +208,60 @@ func TestAHangarWindowsCornersAreCutOut(t *testing.T) {
 		}
 	}
 }
+
+// **And it cuts them when the application's own bar is the caption.** A
+// window with tabs in its title bar (`CaptionMerged`, which is what Files
+// and the tour do) came out square: the silhouette was dropped for every
+// look the moment a bar was merged.
+//
+// That rule belongs to BeOS, whose caption is a tab only as wide as its
+// title and whose silhouette leaves the rest of the top edge to the
+// desktop — merged, the bar runs the full width and would be drawn
+// outside the window. A look that only takes the corners off has no such
+// trouble: the bar is as wide as the window either way, and the corner it
+// loses is the corner the look says is not there.
+func TestAHangarWindowCutsItsCornersUnderAMergedCaption(t *testing.T) {
+	p, ok := style.LoadTheme("hangar")
+	if !ok {
+		t.Skip("the hangar pack is not in this build")
+	}
+	t.Setenv(platform.EnvDecorations, "")
+	a := New(Options{Look: p.Look(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Console", Width: 600, Height: 400,
+		Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Close)
+	w.SetContent(widgets.NewLabel("x"))
+	w.SetTitleBar(widgets.NewTitleBar("Console", ""))
+	w.SetCaptionStyle(style.CaptionMerged)
+	a.PumpOnce()
+	w.frame()
+	if !w.geom.framed {
+		t.Fatal("the window is not drawing its own frame")
+	}
+	if !w.caption.DecorationState().Merged {
+		t.Fatal("the caption did not merge; this test is not testing what it says")
+	}
+	img := w.surf.Buffer()
+	g := w.geom
+	alpha := func(dx, dy float32) uint8 {
+		return img.NRGBAAt(int(g.window.Min.X+dx), int(g.window.Min.Y+dy)).A
+	}
+	if a := alpha(2, 2); a < 250 {
+		t.Errorf("the top left is %d/255 opaque; it is the corner that stays square", a)
+	}
+	for _, c := range []struct {
+		name   string
+		dx, dy float32
+	}{
+		{"top right", g.window.Dx() - 3, 2},
+		{"bottom right", g.window.Dx() - 3, g.window.Dy() - 3},
+		{"bottom left", 2, g.window.Dy() - 3},
+	} {
+		if a := alpha(c.dx, c.dy); a > 40 {
+			t.Errorf("the %s is %d/255 opaque under a merged caption; the silhouette should have cut it away", c.name, a)
+		}
+	}
+}

@@ -126,6 +126,18 @@ type WindowShapeEngine interface {
 // gaps the user cannot click and the desktop did not expect. (A full-screen
 // window has no toolkit frame at all, so it never gets this far.)
 //
+// A **merged caption is not one of those rules**, and used to be: the
+// outline was dropped for every look the moment the application's bar
+// became the caption, so a window with tabs in its title bar lost every
+// corner Hangar takes off. The look that cannot survive a merged bar is
+// the one whose outline is made *of* the caption — BeOS's tab is as wide
+// as its title and buttons and leaves the rest of the top edge to the
+// desktop — and that look refuses here on its own: merged, DecorationOf
+// drops its CaptionFits, its tab is then the window's full width, and a
+// tab that fills the width is no silhouette at all. A look that only
+// takes its corners off has no such trouble, because its bar is as wide
+// as the window either way.
+//
 // An uncomposited screen keeps its silhouette, unlike the corners and the
 // shadow beside it: X11's bounding shape still cuts the window there, which
 // is the one case where cutting is the *only* thing that works — per-pixel
@@ -133,12 +145,7 @@ type WindowShapeEngine interface {
 // hard-edged version of the same outline, exactly as docs/shapes.md promises
 // for an app's own shape.
 func WindowShapeOf(lk LookAndFeel, f DecorationFrame, st DecorationState) *Silhouette {
-	// Merged for the same reason as maximized: a look whose outline
-	// leaves part of the top edge to the desktop (BeOS's tab) cannot keep
-	// it when the application's bar runs the window's full width — the
-	// bar would be drawn outside the window. DecorationOf drops the other
-	// half, CaptionFits, on the same condition.
-	if lk == nil || f.Window.Empty() || st.Maximized || st.Tiled != 0 || st.Merged {
+	if lk == nil || f.Window.Empty() || st.Maximized || st.Tiled != 0 {
 		return nil
 	}
 	c, e := decorationFor(lk)
