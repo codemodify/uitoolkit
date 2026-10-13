@@ -246,13 +246,32 @@ func (w *Window) turnWholeWindow() {
 	// the moment that picture goes. ShowNow rather than a motion
 	// setting, because UITK_ANIMATIONS=1 beats a setting — and then the
 	// content would turn inside the picture of itself turning.
-	w.flip.ShowNow(!w.flip.Showing())
-	back := w.windowShot()
-	if back == nil {
+	toBack := !w.flip.Showing()
+	w.flip.ShowNow(toBack)
+	after := w.windowShot()
+	if after == nil {
 		return
 	}
 
-	p := widgets.NewFlipPanel(newFlipShot(front), newFlipShot(back))
+	// **The way round matters.** A card turns one way to its back and
+	// the other way coming home, so that it retraces its turn rather
+	// than spinning on through a second half-turn — which is what the
+	// panel's own `dir` is for. The stand-in panel was built fresh each
+	// time with the picture before as its front and `Flip` called on
+	// it, so every turn went the same way, to the back and back again
+	// alike (secretvault item 91).
+	//
+	// So the pictures are put in the places the real faces are in, and
+	// the stand-in is asked to make the same move: front to back, or
+	// back to front.
+	before, now := newFlipShot(front), newFlipShot(after)
+	var p *widgets.FlipPanel
+	if toBack {
+		p = widgets.NewFlipPanel(before, now)
+	} else {
+		p = widgets.NewFlipPanel(now, before)
+		p.ShowNow(true)
+	}
 	p.Perspective, p.Strips = w.flip.Perspective, w.flip.Strips
 	// The decision was taken above, by the panel this one stands in for.
 	p.SetMotion(style.MotionAlways)
@@ -260,7 +279,11 @@ func (w *Window) turnWholeWindow() {
 	p.OnFrame = w.followWindowTurn
 	w.turn = p
 	w.arrangeTurn()
-	p.Flip()
+	if toBack {
+		p.ShowBack()
+	} else {
+		p.ShowFront()
+	}
 	w.fullInvalidate()
 }
 

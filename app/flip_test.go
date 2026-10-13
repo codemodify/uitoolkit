@@ -489,3 +489,62 @@ func TestTheWindowsPhotographsAreWipedWhenTheTurnEnds(t *testing.T) {
 		t.Errorf("%d bytes of the window's two photographs are still set after the turn", left)
 	}
 }
+
+// **A framed window comes back the way it went.**
+//
+// A card turns one way to its back and the other way home, so it
+// retraces its turn rather than spinning on through a second half-turn
+// — the panel's own `dir`. The window's stand-in panel was built fresh
+// each time with the picture before as its front and `Flip` called on
+// it, so every turn went round the same way (secretvault item 91).
+//
+// The direction shows in where the card sits part way through: turning
+// to the back, the near edge is on one side; coming home, the other.
+func TestAFramedWindowComesBackTheWayItWent(t *testing.T) {
+	_, win, _ := framedFlipWindow(t)
+
+	// Part way through a turn, which side of the window the card's
+	// bounding box is pushed towards.
+	side := func() float32 {
+		deadline := time.Now().Add(10 * time.Second)
+		var at float32 = -1
+		for win.Turning() {
+			if time.Now().After(deadline) {
+				t.Fatal("the turn was still running after ten seconds")
+			}
+			win.Capture()
+			p := win.turn
+			if p == nil || p.CardOutline() == nil {
+				continue
+			}
+			b := p.CardOutline().Bounds()
+			if w := win.windowBox().Dx(); at < 0 && b.Dx() < w*0.85 && b.Dx() > w*0.4 {
+				// The middle of the card against the middle of the window.
+				at = (b.Min.X + b.Max.X) / 2 / w
+			}
+		}
+		return at
+	}
+
+	win.Flip()
+	toBack := side()
+	win.Capture()
+	if !win.ShowingBack() {
+		t.Fatal("the window did not turn to its back")
+	}
+	win.Flip()
+	home := side()
+	win.Capture()
+	if win.ShowingBack() {
+		t.Fatal("the window did not come home")
+	}
+	if toBack < 0 || home < 0 {
+		t.Skip("neither turn was caught part way; the clock beat the painter")
+	}
+	// Turning one way leans the card to one side of the window and the
+	// other way to the other, so the two are on opposite sides of the
+	// middle. The same way twice puts them on the same side.
+	if (toBack-0.5)*(home-0.5) > 0 {
+		t.Errorf("both turns leaned the same way (%.3f and %.3f of the window): the card does not retrace", toBack, home)
+	}
+}
