@@ -1026,8 +1026,17 @@ func ToolButtonChromeFor(lk LookAndFeel, h float32) (pad, iconSide, iconGap floa
 	pad = 10
 	iconGap = 8
 	iconSide = IconSizePixels(LookIconSize(lk))
+	// All three scale, or the strip a mark takes shrinks as the display
+	// grows: the icon was multiplied by the scale and the pad and the
+	// gap round it were not, so a marked button was 32 logical pixels
+	// wider than a plain one at 1x and 28 at 2x — and a row of four of
+	// them came out 17 pixels narrower at 2x, which is what secretvault
+	// measured in a consent question that is the same size at every
+	// scale (item 80).
 	if s := LookScale(lk); s > 1.01 {
 		iconSide *= s
+		pad *= s
+		iconGap *= s
 	}
 	max := h - 8
 	if max < 8 {
