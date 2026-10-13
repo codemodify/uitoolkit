@@ -807,6 +807,31 @@ func (t *TableView) indexAt(y float32) int {
 	return i
 }
 
+// rowAtView is the row at a point in view space, or -1 for a point that
+// is not on a row: on both axes, within the view width and off either
+// scroll bar, the way the list and the tree are.
+//
+// A bar runs beside the rows, so every point on it has a row at its
+// height; asking for the height alone answered "this row" for a press
+// or a drag that was meant for the bar.
+func (t *TableView) rowAtView(v paintengine2d.Point) int {
+	if v.Y >= t.inner().Dy() {
+		return -1
+	}
+	if v.X < 0 || v.X >= t.viewW() {
+		return -1
+	}
+	if sp := t.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(v) {
+		return -1
+	}
+	if t.Horizontal {
+		if sp := t.hparts(); !sp.Bar.Empty() && sp.Bar.Contains(v) {
+			return -1
+		}
+	}
+	return t.indexAt(v.Y)
+}
+
 func (t *TableView) rowRect(i int) paintengine2d.Rect {
 	if i < 0 {
 		return paintengine2d.Rect{}
@@ -960,10 +985,7 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		t.Invalidate()
 		return true
 	}
-	i := t.indexAt(p.Y)
-	if p.Y >= t.inner().Dy() {
-		i = -1
-	}
+	i := t.rowAtView(p)
 	if i >= 0 {
 		changed := false
 		if t.Mode != SelectSingle {

@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/codemodify/uitoolkit/style"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -254,4 +255,173 @@ func TestBrowserTabsDropOnATab(t *testing.T) {
 	if tabs.dropTab != -1 {
 		t.Fatal("the highlight goes with the drop")
 	}
+}
+
+// **A press on the scroll bar scrolls; it does not drag a row.**
+//
+// Reported from using the toolkit: grabbing a view's scroll bar dragged
+// an item out of the view instead of scrolling it. The press itself is
+// taken by the bar in MousePress — that part was right — but `DragAt`
+// is asked on its own once the pointer has moved past the threshold,
+// and it asked only "is there a row at this *height*". A bar runs down
+// the rows, so every point on it has one.
+func TestAPressOnTheScrollBarDoesNotDragARow(t *testing.T) {
+	lk := style.DarkLook()
+
+	t.Run("list", func(t *testing.T) {
+		l := NewListView(40, func(i int) string { return "row" }, nil)
+		l.SetLook(lk)
+		l.OnDrag = func([]int) *widget.Drag { return &widget.Drag{Types: []string{"text/plain"}} }
+		l.Selected = 0
+		l.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+
+		sp := l.vparts()
+		if sp.Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		// The middle of the bar, in the list's own coordinates.
+		on := fromView(sp.Bar, l.pad())
+		at := paintengine2d.Pt(on.Min.X+on.Dx()/2, on.Min.Y+on.Dy()/2)
+		if d := l.DragAt(at); d != nil {
+			t.Errorf("a drag started from the scroll bar at %v", at)
+		}
+		// And a point on the rows still drags, or the test proves nothing.
+		if d := l.DragAt(paintengine2d.Pt(20, 20)); d == nil {
+			t.Error("a drag from the rows was refused")
+		}
+	})
+
+	t.Run("tree", func(t *testing.T) {
+		var roots []*TreeNode
+		for i := 0; i < 40; i++ {
+			roots = append(roots, &TreeNode{Label: "node"})
+		}
+		tv := NewTreeView(roots...)
+		tv.SetLook(lk)
+		tv.OnDrag = func(*TreeNode) *widget.Drag { return &widget.Drag{Types: []string{"text/plain"}} }
+		tv.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+
+		sp := tv.vparts()
+		if sp.Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		on := fromView(sp.Bar, tv.frame())
+		at := paintengine2d.Pt(on.Min.X+on.Dx()/2, on.Min.Y+on.Dy()/2)
+		if d := tv.DragAt(at); d != nil {
+			t.Errorf("a drag started from the tree's scroll bar at %v", at)
+		}
+		if d := tv.DragAt(paintengine2d.Pt(20, 20)); d == nil {
+			t.Error("a drag from the tree's nodes was refused")
+		}
+	})
+
+	t.Run("table", func(t *testing.T) {
+		tb := NewTableView([]TableColumn{{Title: "A", Width: 80}, {Title: "B", Width: 80}}, 40,
+			func(r, c int) string { return "cell" }, nil)
+		tb.SetLook(lk)
+		tb.OnDrag = func([]int) *widget.Drag { return &widget.Drag{Types: []string{"text/plain"}} }
+		tb.Selected = 0
+		tb.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+
+		sp := tb.vparts()
+		if sp.Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		on := fromView(sp.Bar, tb.frame())
+		at := paintengine2d.Pt(on.Min.X+on.Dx()/2, on.Min.Y+on.Dy()/2)
+		if d := tb.DragAt(at); d != nil {
+			t.Errorf("a drag started from the table's scroll bar at %v", at)
+		}
+		if d := tb.DragAt(paintengine2d.Pt(20, tb.headerH()+10)); d == nil {
+			t.Error("a drag from the table's rows was refused")
+		}
+	})
+}
+
+// A press anywhere from the row width to the view's own edge belongs to
+// the scroll bar — the bar itself and the gutter either side of it — and
+// not to the row it happens to be level with.
+//
+// The list asked `rowAtView`, which tests both axes, and refused all of
+// it. The tree and the table asked for a height alone, so the two-pixel
+// margins either side of the bar selected the row beside them: a press
+// that visibly missed every row still moved the selection, and the drag
+// it started carried that row away.
+func TestAPressBesideTheScrollBarSelectsNothing(t *testing.T) {
+	lk := style.DarkLook()
+
+	t.Run("list", func(t *testing.T) {
+		l := NewListView(40, func(i int) string { return "row" }, nil)
+		l.SetLook(lk)
+		l.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if l.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		press := func(x float32) {
+			l.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(x, 70), Button: platform.ButtonLeft})
+		}
+		press(20)
+		if l.Selected < 0 {
+			t.Fatal("a press on the rows selected nothing; the test proves nothing")
+		}
+		for x := l.rowsW(); x < l.inner().Dx(); x++ {
+			l.Selected = -1
+			press(x)
+			if l.Selected >= 0 {
+				t.Errorf("a press at x=%v, beside the bar, selected row %d", x, l.Selected)
+			}
+		}
+	})
+
+	t.Run("tree", func(t *testing.T) {
+		var roots []*TreeNode
+		for i := 0; i < 40; i++ {
+			roots = append(roots, &TreeNode{Label: "node"})
+		}
+		tv := NewTreeView(roots...)
+		tv.SetLook(lk)
+		tv.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if tv.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		press := func(x float32) {
+			tv.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(x, 70), Button: platform.ButtonLeft})
+		}
+		press(100)
+		if tv.Selected == nil {
+			t.Fatal("a press on the nodes selected nothing; the test proves nothing")
+		}
+		for x := tv.rowsW(); x < tv.inner().Dx(); x++ {
+			tv.Selected = nil
+			press(x)
+			if tv.Selected != nil {
+				t.Errorf("a press at x=%v, beside the bar, selected a node", x)
+			}
+		}
+	})
+
+	t.Run("table", func(t *testing.T) {
+		tb := NewTableView([]TableColumn{{Title: "A", Width: 80}, {Title: "B", Width: 80}}, 40,
+			func(r, c int) string { return "cell" }, nil)
+		tb.SetLook(lk)
+		tb.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if tb.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		y := tb.headerH() + tb.rowH()*1.5
+		press := func(x float32) {
+			tb.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(x, y), Button: platform.ButtonLeft})
+		}
+		press(20)
+		if tb.Selected < 0 {
+			t.Fatal("a press on the rows selected nothing; the test proves nothing")
+		}
+		for x := tb.viewW(); x < tb.inner().Dx(); x++ {
+			tb.Selected = -1
+			press(x)
+			if tb.Selected >= 0 {
+				t.Errorf("a press at x=%v, beside the bar, selected row %d", x, tb.Selected)
+			}
+		}
+	})
 }

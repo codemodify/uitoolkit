@@ -141,7 +141,12 @@ func (t *TableView) DragAt(local paintengine2d.Point) *widget.Drag {
 		return nil
 	}
 	p := toView(local, t.frame())
-	if i := t.indexAt(p.Y); i < 0 || p.Y >= t.inner().Dy() {
+	// The same hit test the press makes (rowAtView): on both axes and
+	// off either bar. DragAt is asked on its own once the pointer has
+	// passed the threshold, and a bar runs down beside the rows, so a
+	// height alone said "a row" for every point on it — and dragging
+	// the bar dragged the row beside it instead of scrolling.
+	if i := t.rowAtView(p); i < 0 {
 		return nil
 	}
 	rows := t.SelectedRows()
@@ -159,7 +164,13 @@ func (l *ListView) DragAt(local paintengine2d.Point) *widget.Drag {
 	if l.OnDrag == nil || !l.Enabled() {
 		return nil
 	}
-	if i := l.indexAt(toView(local, l.frame()).Y); i < 0 {
+	// The same hit test the press uses, on both axes and off the bar
+	// (rowAtView), and from the same origin: `pad`, which is where the
+	// rows are when a skin has placed them, rather than `frame`, which
+	// is zero then. Asking `indexAt` for a y alone said "a row" for
+	// every point on the scroll bar, so dragging the bar dragged the
+	// row beside it instead of scrolling.
+	if i := l.rowAtView(toView(local, l.pad())); i < 0 {
 		return nil
 	}
 	rows := l.SelectedRows()
@@ -289,14 +300,20 @@ func rowDropTypes(takes bool, mimes []string) []string {
 }
 
 // DragAt drags the node under the press out of the tree.
+//
+// On both axes and off the scroll bar, as the list and the table are:
+// asking `nodeAt` for a height alone said "a node" for every point on
+// the bar, so grabbing the bar dragged the node beside it instead of
+// scrolling.
 func (t *TreeView) DragAt(local paintengine2d.Point) *widget.Drag {
 	if t.OnDrag == nil || !t.Enabled() {
 		return nil
 	}
-	n := t.nodeAt(toView(local, t.frame()).Y)
-	if n == nil {
+	i := t.rowAtView(toView(local, t.frame()))
+	if i < 0 {
 		return nil
 	}
+	n := t.flatten()[i].node
 	return t.OnDrag(n)
 }
 

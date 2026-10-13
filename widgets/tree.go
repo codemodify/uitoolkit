@@ -234,6 +234,27 @@ func (t *TreeView) rowsW() float32 {
 	return t.inner().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
 }
 
+// rowAtView is the flattened-row index at a point in view space, or -1
+// for a point that is not on a row: the same test the list makes, on
+// both axes, within the row width and off the scroll bar.
+//
+// Both axes is the point. A vertical bar runs down beside the rows, so
+// every point on it — and every point in the gutter either side of it —
+// has a row at its *height*, and asking for the height alone answered
+// "this row" for a press or a drag that was meant for the bar.
+func (t *TreeView) rowAtView(v paintengine2d.Point) int {
+	if v.Y < 0 || v.Y >= t.inner().Dy() {
+		return -1
+	}
+	if v.X < 0 || v.X >= t.rowsW() {
+		return -1
+	}
+	if sp := t.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(v) {
+		return -1
+	}
+	return t.rowAt(v.Y)
+}
+
 func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	sp := t.vparts()
 	in := t.frame()
@@ -635,8 +656,8 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		t.Invalidate()
 		return true
 	}
-	i := t.rowAt(p.Y)
-	if i < 0 || p.Y < 0 || p.Y >= t.inner().Dy() {
+	i := t.rowAtView(p)
+	if i < 0 {
 		t.resetClicks()
 		return true
 	}
