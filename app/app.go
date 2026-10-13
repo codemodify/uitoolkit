@@ -289,7 +289,6 @@ func New(opts Options) *Application {
 	// had its device closed with nobody told. media-player-video
 	// reproduced both. A window's device can close whenever the window
 	// can, which is for as long as the application exists.
-	platform.SetGPUClosing(a.surfaceClosingGPU)
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.
 	a.watchDesktop()()
@@ -943,20 +942,4 @@ func (a *Application) remove(w *Window) {
 		}
 	}
 	a.windows = out
-}
-
-// surfaceClosingGPU runs the before-close callback of whichever window
-// owns surf. It is called from inside a backend's teardown, on this
-// goroutine, with the dying context still current
-// ([Window.OnPaintDeviceClosing]).
-func (a *Application) surfaceClosingGPU(surf platform.Surface) {
-	if a == nil || surf == nil {
-		return
-	}
-	for _, w := range a.Windows() {
-		if w != nil && w.surf == surf {
-			w.deviceClosing()
-			return
-		}
-	}
 }

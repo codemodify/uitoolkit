@@ -97,6 +97,33 @@ func (w *Window) OnPaintDeviceClosing(fn func()) {
 		return
 	}
 	w.onDeviceClosing = fn
+	w.registerDeviceClosing()
+}
+
+// registerDeviceClosing tells the backend which window this surface
+// belongs to, so a device closing on it reaches this window and no
+// other.
+//
+// Keyed by the surface rather than by "the application that is
+// running", which is what it used to be: the process-wide hook was
+// installed when an Application was made, so constructing a second one
+// took the first one's windows off it and their callbacks stopped
+// firing. media-player-music reproduced it against real GPU windows.
+// Called where the window is made and wherever its surface is replaced
+// — an X11 window moving to another visual is a new surface.
+func (w *Window) registerDeviceClosing() {
+	if w == nil || w.surf == nil {
+		return
+	}
+	platform.SetSurfaceGPUClosing(w.surf, w.deviceClosing)
+}
+
+// forgetDeviceClosing drops that registration, so a closed window's
+// surface is not held by the map.
+func (w *Window) forgetDeviceClosing(surf platform.Surface) {
+	if surf != nil {
+		platform.SetSurfaceGPUClosing(surf, nil)
+	}
 }
 
 // deviceClosing runs the window's before-close callback.

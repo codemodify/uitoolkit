@@ -1,6 +1,10 @@
 package platform
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"sync"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // A window's paint device is not forever.
 //
@@ -76,19 +80,65 @@ func (n *paintDeviceNotice) paintDeviceEvent(dev paintengine2d.Device) []Event {
 // backends should not each grow their own callback plumbing.
 var closingGPU func(Surface)
 
-// SetGPUClosing registers that hook, and nil clears it. The app package
-// sets it; it is not for applications, which use
-// Window.OnPaintDeviceClosing.
+// SetGPUClosing registers that hook, and nil clears it. It is the
+// process-wide one, and a window's own ([SetSurfaceGPUClosing]) is
+// preferred over it.
 func SetGPUClosing(fn func(Surface)) { closingGPU = fn }
 
 // GPUClosing is the hook installed now, for a program that installs one
 // of its own and wants to chain to what was there.
 func GPUClosing() func(Surface) { return closingGPU }
 
+// surfaceClosing is the callback each surface's owner registered, which
+// is where this really belongs.
+//
+// The process-wide hook above cannot answer for more than one owner: the
+// app package installed it when an [app.Application] was made, so
+// constructing a second one took the first one's windows off it and
+// their closing callbacks stopped firing. media-player-music reproduced
+// that against real GPU windows — v0.23.6 answered 1,1 and v0.23.7
+// answered 1,0 — and it is the whole reason this map exists. A surface
+// has exactly one owner for as long as it lives, so that is what the
+// entry is keyed by.
+var surfaceClosing sync.Map // Surface -> func()
+
+// SetSurfaceGPUClosing registers what to run immediately before s's GPU
+// device is closed, with that device's context current; nil forgets it,
+// which a window does when it closes.
+func SetSurfaceGPUClosing(s Surface, fn func()) {
+	if s == nil {
+		return
+	}
+	if fn == nil {
+		surfaceClosing.Delete(s)
+		return
+	}
+	surfaceClosing.Store(s, fn)
+}
+
+// NotifyGPUClosing runs the closing callback for s: the surface's own
+// ([SetSurfaceGPUClosing]) where it has one, else the process-wide hook.
+//
+// A backend calls this immediately before it closes a GPU device, with
+// that device's context current, and never after. It is exported
+// because it is the published half of the seam — [SetSurfaceGPUClosing]
+// registers, this delivers — and because the layers above it are then
+// testable on a machine with no GPU.
+func NotifyGPUClosing(s Surface) { noteGPUClosing(s) }
+
 // noteGPUClosing runs the hook for s. A backend calls it as the last
 // thing before it closes a GPU device, never after.
 func noteGPUClosing(s Surface) {
-	if closingGPU != nil && s != nil {
+	if s == nil {
+		return
+	}
+	if fn, ok := surfaceClosing.Load(s); ok {
+		if f, _ := fn.(func()); f != nil {
+			f()
+			return
+		}
+	}
+	if closingGPU != nil {
 		closingGPU(s)
 	}
 }

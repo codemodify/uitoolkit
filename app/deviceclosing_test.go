@@ -33,9 +33,9 @@ func TestTheClosingCallbackRunsBeforeTheDeviceGoes(t *testing.T) {
 	})
 	win.OnPaintDeviceChange(func() { order = append(order, "changed") })
 
-	// The hook the backends call, routed by the application exactly as
-	// a real teardown routes it.
-	a.surfaceClosingGPU(win.surf)
+	// What a backend calls immediately before it closes the device,
+	// routed by the surface exactly as a real teardown routes it.
+	platform.NotifyGPUClosing(win.surf)
 	if win.onPaintDevice != nil {
 		win.onPaintDevice()
 	}
@@ -63,7 +63,7 @@ func TestTheClosingCallbackReachesOnlyItsOwnWindow(t *testing.T) {
 	one.OnPaintDeviceClosing(func() { hits = append(hits, "one") })
 	two.OnPaintDeviceClosing(func() { hits = append(hits, "two") })
 
-	a.surfaceClosingGPU(two.surf)
+	platform.NotifyGPUClosing(two.surf)
 	if len(hits) != 1 || hits[0] != "two" {
 		t.Errorf("closing the second window's device ran %v", hits)
 	}
@@ -77,31 +77,27 @@ func TestTheClosingHookIsQuietWithNothingRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.surfaceClosingGPU(win.surf) // no callback registered
-	a.surfaceClosingGPU(nil)
+	platform.NotifyGPUClosing(win.surf) // no callback registered
+	platform.NotifyGPUClosing(nil)
 }
 
-// **The callback outlives the run loop.**
+// **The callback outlives the run loop, and belongs to its own window.**
 //
-// `Run` installed the hook the backends call and cleared it on the way
-// out, so a window closed after the loop returned had its GPU device
-// closed with nobody told — and an application that pumps instead of
-// running was never told at all. media-player-video reproduced both:
-// its own `main` defers `Player.Close`, which runs after `a.Run()`
-// returns, and that is exactly where a GPU renderer would be released.
+// Two reports, one cause: the process-wide hook could only answer for
+// one owner. `Run` installed it and cleared it on the way out, so a
+// window closed after the loop — `defer player.Close()`, which is
+// exactly where a renderer is released — told nobody
+// (media-player-video); and making a *second* Application took the
+// first one's windows off it, so their callbacks stopped firing, which
+// media-player-music reproduced on real GPU windows as 1,1 under
+// v0.23.6 and 1,0 under v0.23.7.
 //
-// A window's device can close whenever the window can, which is for as
-// long as the application exists; so the hook is installed when the
-// application is made.
-func TestTheClosingCallbackOutlivesTheRunLoop(t *testing.T) {
+// A surface has one owner for as long as it lives, so that is what the
+// callback is registered against.
+func TestTheClosingCallbackOutlivesTheRunLoopAndOtherApplications(t *testing.T) {
 	platform.SetGPUClosing(nil)
-	a := New(Options{Headless: true, Scale: 1})
 	t.Cleanup(func() { platform.SetGPUClosing(nil) })
-
-	hook := platform.GPUClosing()
-	if hook == nil {
-		t.Fatal("making an application installed no closing hook; a window closed outside Run tells nobody")
-	}
+	a := New(Options{Headless: true, Scale: 1})
 	win, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 120, Headless: true})
 	if err != nil {
 		t.Fatal(err)
@@ -112,15 +108,29 @@ func TestTheClosingCallbackOutlivesTheRunLoop(t *testing.T) {
 	// A run loop that starts and stops, as an application's does.
 	a.Post(a.Quit)
 	a.Run()
-
-	// The backend closes the window's device now, after the loop: the
-	// hook is still there and still finds the window.
-	hook2 := platform.GPUClosing()
-	if hook2 == nil {
-		t.Fatal("the hook was cleared when Run returned; this is the gap that was reported")
-	}
-	hook2(win.surf)
+	platform.NotifyGPUClosing(win.surf)
 	if told != 1 {
 		t.Errorf("the window was told %d times after Run returned, want once", told)
+	}
+
+	// And an unrelated Application, made while the first window is
+	// still live, does not take it off them.
+	b := New(Options{Headless: true, Scale: 1})
+	other, err := b.NewWindow(platform.WindowOptions{Width: 120, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(other.Close)
+	platform.NotifyGPUClosing(win.surf)
+	if told != 2 {
+		t.Errorf("the window was told %d times in all; a second Application took its callback", told)
+	}
+
+	// A closed window lets go of its surface, so the map does not hold
+	// what the window system has dropped.
+	win.Close()
+	platform.NotifyGPUClosing(win.surf)
+	if told != 2 {
+		t.Errorf("a closed window was told again (%d in all)", told)
 	}
 }

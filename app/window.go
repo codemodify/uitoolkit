@@ -273,6 +273,11 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()
 	w.applyIcon()
+	// Which window this surface belongs to, for a GPU device closing on
+	// it (app/paintdevice.go). Registered here rather than when a
+	// callback is set, so the answer is this window's for as long as the
+	// surface is.
+	w.registerDeviceClosing()
 	return w
 }
 
@@ -2580,6 +2585,7 @@ func (w *Window) Close() {
 	if w == nil || !w.closed.CompareAndSwap(false, true) {
 		return
 	}
+	w.forgetDeviceClosing(w.surf)
 	w.app.owesTrim()
 	if w.app != nil && w.app.statusMenu == w {
 		w.app.statusMenu = nil
