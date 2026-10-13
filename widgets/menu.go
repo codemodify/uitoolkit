@@ -803,6 +803,23 @@ func (p *PopupMenu) rowAt(y float32) int {
 	return -1
 }
 
+// rowAtPoint is the item at a point, or -1 for a point that is on no
+// item: within the item width and off the scroll bar.
+//
+// The height alone answered "this item" for every point in the gutter a
+// visible bar runs in, and the menu acts on a *release* — so a click
+// that visibly missed every item ran the command level with it.
+func (p *PopupMenu) rowAtPoint(pt paintengine2d.Point) int {
+	ch := p.chrome()
+	if pt.X < ch.PadL || pt.X >= ch.PadL+p.innerWidth() {
+		return -1
+	}
+	if sp := p.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(pt) {
+		return -1
+	}
+	return p.rowAt(pt.Y)
+}
+
 func (p *PopupMenu) rowBounds(i int) paintengine2d.Rect {
 	if i < 0 || i >= len(p.Items) {
 		return paintengine2d.Rect{}
@@ -958,13 +975,28 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 		return false
 	}
 	if handled, dirty := p.vbar.move(p, e.Pos, p.vaxis()); handled {
+		// The bar has the pointer, so no item has it: the item the
+		// pointer last crossed stayed lit for the whole of a drag,
+		// promising a release would run it. An open cascade keeps its
+		// own parent lit, the way MouseExit does.
+		want := -1
+		if p.cascade != nil {
+			want = p.cascadeIdx
+		}
+		if p.hover != want {
+			old := p.hover
+			p.hover = want
+			p.invalidateRow(old)
+			p.invalidateRow(want)
+			dirty = true
+		}
 		if dirty {
 			p.Invalidate()
 		}
 		return true
 	}
 	p.keyNav = false
-	i := p.rowAt(e.Pos.Y)
+	i := p.rowAtPoint(e.Pos)
 	if i != p.hover {
 		old := p.hover
 		p.hover = i
@@ -1007,7 +1039,7 @@ func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
 		p.Invalidate()
 		return true
 	}
-	p.press = p.rowAt(e.Pos.Y)
+	p.press = p.rowAtPoint(e.Pos)
 	p.Invalidate()
 	return true
 }
@@ -1021,7 +1053,7 @@ func (p *PopupMenu) MouseRelease(e widget.MouseEvent) bool {
 		p.Invalidate()
 		return true
 	}
-	i := p.rowAt(e.Pos.Y)
+	i := p.rowAtPoint(e.Pos)
 	p.press = -1
 	p.Invalidate()
 	if i >= 0 && i < len(p.Items) {

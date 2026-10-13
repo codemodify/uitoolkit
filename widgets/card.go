@@ -389,6 +389,33 @@ func (l *CardList) indexAt(y float32) int {
 	return i
 }
 
+// cardAtView is the card at a point, or -1 for a point that is on no card:
+// on both axes, within the card width and off the scroll bar, the way
+// the list is. The height alone answered "this card" for every point on
+// the bar, so a press meant for the bar selected the card beside it.
+func (l *CardList) cardAtView(p paintengine2d.Point) int {
+	if p.Y < 0 || p.Y >= l.LocalBounds().Dy() {
+		return -1
+	}
+	if p.X < 0 || p.X >= l.rowsW() {
+		return -1
+	}
+	if sp := l.vparts(); !sp.Bar.Empty() && sp.Bar.Contains(p) {
+		return -1
+	}
+	return l.indexAt(p.Y)
+}
+
+// unhoverCard drops the card highlight and leaves the bar's own alone.
+func (l *CardList) unhoverCard() {
+	if l.hovered < 0 {
+		return
+	}
+	old := l.hovered
+	l.hovered = -1
+	l.invalidateRow(old)
+}
+
 func (l *CardList) rowRect(i int) paintengine2d.Rect {
 	if i < 0 {
 		return paintengine2d.Rect{}
@@ -419,10 +446,12 @@ func (l *CardList) MouseMove(e widget.MouseEvent) bool {
 			l.Invalidate()
 		}
 		if handled {
+			// The bar has the pointer, so no card has it.
+			l.unhoverCard()
 			return true
 		}
 	}
-	h := l.indexAt(e.Pos.Y)
+	h := l.cardAtView(e.Pos)
 	if h != l.hovered {
 		old := l.hovered
 		l.hovered = h
@@ -464,7 +493,7 @@ func (l *CardList) MousePress(e widget.MouseEvent) bool {
 		l.Invalidate()
 		return true
 	}
-	i := l.indexAt(e.Pos.Y)
+	i := l.cardAtView(e.Pos)
 	if i >= 0 {
 		changed := false
 		if l.Mode != SelectSingle {

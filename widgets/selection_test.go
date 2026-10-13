@@ -88,7 +88,13 @@ func TestCardListExtendedSelection(t *testing.T) {
 	cl := NewCardList(10, func(i int) CardContent { return CardContent{Title: fmt.Sprint(i)} }, nil)
 	cl.Mode = SelectExtended
 	cl.SetHost(&fakeWindow{look: style.DarkLook()})
-	cl.Arrange(paintengine2d.XYWH(0, 0, 300, 600))
+	// Tall enough to show all ten: a card is as tall as this look's
+	// density makes it — a hundred points here, not the sixty-eight
+	// CardHeight asks for — and in a 600-point box the sixth card is
+	// below the bottom edge. A press there is on no card, and the list
+	// says so now; it used to answer with the card that would have been
+	// there had the box gone on.
+	cl.Arrange(paintengine2d.XYWH(0, 0, 300, 1200))
 	at := func(i int) paintengine2d.Point { return paintengine2d.Pt(40, (float32(i)+0.5)*cl.rowH()-cl.OffsetY) }
 	cl.MousePress(widget.MouseEvent{Pos: at(1)})
 	cl.MousePress(widget.MouseEvent{Pos: at(4), Mods: platform.ModCtrl})
