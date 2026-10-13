@@ -60,6 +60,10 @@ set -euo pipefail
 #
 #   UITK_WIN_TAGS=theme_engine_all,font_complex tools/test-windows.sh
 TAGS=${UITK_WIN_TAGS:-theme_engine_all}
+
+# Resolved here and written into the guest's batch file: the suite is
+# about the bundled faces, not about whatever Windows has installed.
+fonts=${UITK_SYSTEM_FONTS:-0}
 cd "$(dirname "$0")/.."
 
 MON=${UITK_WIN_VM_MON:-}
@@ -173,6 +177,12 @@ sleep 1
 {
   echo '@echo off'
   echo "set SRC=http://10.0.2.2:$PORT"
+  # The same pinned fonts as every other runner (tools/test.sh says
+  # why). Without it the guest measured text in *its own* installed
+  # faces: harmless while one face drew everything, and wrong the
+  # moment a build borrows, since Windows has Segoe UI Symbol and a
+  # CJK face and the tests are written about the two bundled ones.
+  echo "set UITK_SYSTEM_FONTS=$fonts"
   echo 'set D=%TEMP%\uitkwin'
   echo 'if exist "%D%" rd /s /q "%D%"'
   echo 'mkdir "%D%"'
