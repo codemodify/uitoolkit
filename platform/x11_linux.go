@@ -2957,6 +2957,14 @@ func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) bool {
 	c.keep = c.ownClip || c.ownPrim
 	C.ui_flush(c.dpy)
 	c.startSelectionServiceLocked()
+	if secret && !c.ownClip {
+		// Refused: nothing will ever be served from this, and the
+		// portable half ends the copy — but the passphrase copied in
+		// here sat in the connection until the next copy or clear
+		// (secretvault item 86). Only for a secret, and a secret gives
+		// PRIMARY up above, so there is nothing else left to serve.
+		c.wipeClipLocked()
+	}
 	return c.ownClip
 }
 

@@ -4418,7 +4418,19 @@ func uitkWlDataCancelled(id C.uintptr_t) {
 	// The copy that was on the selection when it was cancelled, named
 	// now: by the time the goroutine runs the program may have copied
 	// something else, and ending whatever is held would end that instead.
+	//
+	// And nothing held is nothing to end. forgetHeldSecretIf takes a nil
+	// to mean "whichever is held *then*", so a cancel handled while this
+	// process holds no secret — an ordinary copy's source cancelled, or
+	// one arriving during a secret copy — ended a secret copied in
+	// between: wiped, its timer stopped, reported gone, with the
+	// passphrase still on the clipboard and nothing left to clear it.
+	// X11's endLostSecret has always returned on nil; this is the same
+	// check (secretvault item 85).
 	lost := heldSecret()
+	if lost == nil {
+		return
+	}
 	go func() {
 		if x11StillServesTheSecret() {
 			return

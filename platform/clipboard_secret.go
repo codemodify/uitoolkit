@@ -101,12 +101,12 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 	// here, and the one it was not about is not on the clipboard yet.
 	secretHeld = nil
 	secretMu.Unlock()
-	// A previous secret is dropped rather than left for its own timer:
-	// it is no longer on the clipboard, so there is nothing to clear,
-	// only a buffer to wipe.
-	if prev != nil {
-		prev.forget()
-	}
+	// The one being replaced is let go *after* the copy is made, below:
+	// it is only then that it is off the clipboard and there is nothing
+	// left to clear. Let go here and refused after, it stayed on the
+	// clipboard with its timer stopped and nobody holding it — not
+	// cleared at its time, nor at the vault's lock, nor at the quit
+	// (secretvault item 86).
 
 	// The in-memory fallback must not hold it as a string: nothing is
 	// put in `clip`, and a paste in this process goes through
@@ -129,7 +129,19 @@ func ClipboardSetSecret(data []byte, clearAfter time.Duration) *SecretClip {
 		// out, since OnCleared on a copy that has already gone calls back
 		// straight away.
 		c.forget()
+		// And the copy this one was replacing is still on the clipboard,
+		// because nothing took it off: clearing it is the only thing
+		// that gets that passphrase off. Not merely forgetting it —
+		// that is for a copy the clipboard no longer holds.
+		if prev != nil {
+			prev.Clear()
+		}
 		return c
+	}
+	// The new copy is on the clipboard, so the old one is off it: a
+	// buffer to wipe and a timer to stop, with nothing left to clear.
+	if prev != nil {
+		prev.forget()
 	}
 
 	secretMu.Lock()
