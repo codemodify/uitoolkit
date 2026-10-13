@@ -576,6 +576,11 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 			l.Invalidate()
 		}
 		if handled {
+			// The bar has the pointer, so no row has it. Returning
+			// here left the last row the pointer crossed highlighted
+			// for as long as the bar was used: a row lit up as the
+			// one about to be acted on, beside a bar being dragged.
+			l.unhoverRow()
 			return true
 		}
 	}
@@ -587,6 +592,16 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 		l.invalidateRow(h)
 	}
 	return true
+}
+
+// unhoverRow drops the row highlight and leaves the bar's own alone.
+func (l *ListView) unhoverRow() {
+	if l.hovered < 0 {
+		return
+	}
+	old := l.hovered
+	l.hovered = -1
+	l.invalidateRow(old)
 }
 
 func (l *ListView) MouseExit() {

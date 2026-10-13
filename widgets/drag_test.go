@@ -425,3 +425,149 @@ func TestAPressBesideTheScrollBarSelectsNothing(t *testing.T) {
 		}
 	})
 }
+
+// The hover highlight stops where the rows do. The pointer crossing the
+// scroll bar is not over the row level with it, and highlighting that
+// row promised it was about to be acted on — when a press there would
+// scroll instead.
+//
+// The same y-only hit test as the press and the drag, and the same
+// three views; the list was right already.
+func TestHoverStopsWhereTheRowsDo(t *testing.T) {
+	lk := style.DarkLook()
+
+	t.Run("list", func(t *testing.T) {
+		l := NewListView(40, func(i int) string { return "row" }, nil)
+		l.SetLook(lk)
+		l.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if l.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		move := func(x float32) {
+			l.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(x, 70)})
+		}
+		move(20)
+		if l.hovered < 0 {
+			t.Fatal("the pointer on the rows hovered nothing; the test proves nothing")
+		}
+		for x := l.rowsW(); x < l.inner().Dx(); x++ {
+			move(x)
+			if l.hovered >= 0 {
+				t.Errorf("x=%v, beside the bar, hovered row %d", x, l.hovered)
+			}
+			move(20)
+		}
+	})
+
+	t.Run("tree", func(t *testing.T) {
+		var roots []*TreeNode
+		for i := 0; i < 40; i++ {
+			roots = append(roots, &TreeNode{Label: "node"})
+		}
+		tv := NewTreeView(roots...)
+		tv.SetLook(lk)
+		tv.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if tv.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		move := func(x float32) {
+			tv.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(x, 70)})
+		}
+		move(100)
+		if tv.hover == nil {
+			t.Fatal("the pointer on the nodes hovered nothing; the test proves nothing")
+		}
+		for x := tv.rowsW(); x < tv.inner().Dx(); x++ {
+			move(x)
+			if tv.hover != nil {
+				t.Errorf("x=%v, beside the bar, hovered a node", x)
+			}
+			move(100)
+		}
+	})
+
+	t.Run("table", func(t *testing.T) {
+		tb := NewTableView([]TableColumn{{Title: "A", Width: 80}, {Title: "B", Width: 80}}, 40,
+			func(r, c int) string { return "cell" }, nil)
+		tb.SetLook(lk)
+		tb.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		if tb.vparts().Bar.Empty() {
+			t.Skip("this look draws no scroll bar")
+		}
+		y := tb.headerH() + tb.rowH()*1.5
+		move := func(x float32) {
+			tb.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(x, y)})
+		}
+		move(20)
+		if tb.hovered < 0 {
+			t.Fatal("the pointer on the rows hovered nothing; the test proves nothing")
+		}
+		for x := tb.viewW(); x < tb.inner().Dx(); x++ {
+			move(x)
+			if tb.hovered >= 0 {
+				t.Errorf("x=%v, beside the bar, hovered row %d", x, tb.hovered)
+			}
+			move(20)
+		}
+	})
+}
+
+// A skin can place the rows anywhere inside the list's box, and then the
+// list's own frame is zero: `pad` is the inset to the rows and `frame`
+// is not. Every pointer question has to be asked from `pad`.
+//
+// Asked from `frame`, a placed list read a drop as being as many rows
+// lower as the skin's chrome above the rows is tall — a file dropped on
+// the first row landed on the third — and a drag could be started from
+// the chrome, where there is no row at all.
+func TestAPlacedListAsksFromTheRowsItWasGiven(t *testing.T) {
+	const top, left, rowH = 24, 8, 20
+
+	newPlaced := func() *ListView {
+		l := NewListView(40, func(i int) string { return "row" }, nil)
+		l.SetLook(style.DarkLook())
+		l.RowGeo = func(style.LookAndFeel) *RowGeometry {
+			return &RowGeometry{
+				Rows:      paintengine2d.XYWH(left, top, 200, 100),
+				RowHeight: rowH,
+			}
+		}
+		l.Arrange(paintengine2d.XYWH(0, 0, 220, 140))
+		return l
+	}
+
+	t.Run("a drop lands on the row it was dropped on", func(t *testing.T) {
+		l := newPlaced()
+		got := -1
+		l.OnDropRow = func(row int, e widget.DropEvent) bool { got = row; return true }
+		// The middle of the first row, in the list's own coordinates.
+		at := paintengine2d.Pt(left+20, top+rowH/2)
+		if !l.Drop(widget.DropEvent{Pos: at}) {
+			t.Fatalf("the drop at %v was refused", at)
+		}
+		if got != 0 {
+			t.Errorf("a drop on the first row landed on row %d", got)
+		}
+	})
+
+	t.Run("the indicator marks that row too", func(t *testing.T) {
+		l := newPlaced()
+		l.OnDropRow = func(int, widget.DropEvent) bool { return true }
+		l.DragOver(paintengine2d.Pt(left+20, top+rowH/2))
+		if l.dropRow != 0 {
+			t.Errorf("the drag over the first row marked row %d", l.dropRow)
+		}
+	})
+
+	t.Run("no drag starts above the rows", func(t *testing.T) {
+		l := newPlaced()
+		l.Selected = 0
+		l.OnDrag = func([]int) *widget.Drag { return &widget.Drag{Types: []string{"text/plain"}} }
+		if d := l.DragAt(paintengine2d.Pt(left+20, top/2)); d != nil {
+			t.Error("a drag started from the skin's own chrome, above the first row")
+		}
+		if d := l.DragAt(paintengine2d.Pt(left+20, top+rowH/2)); d == nil {
+			t.Error("a drag from the first row was refused")
+		}
+	})
+}

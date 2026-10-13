@@ -884,6 +884,9 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 			t.Invalidate()
 		}
 		if handled {
+			// The bar has the pointer, so no row and no column
+			// heading has it.
+			t.unhoverRow()
 			return true
 		}
 	}
@@ -899,10 +902,10 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		}
 		return true
 	}
-	h := t.indexAt(p.Y)
-	if p.Y >= t.inner().Dy() {
-		h = -1
-	}
+	// On the point, not the height: the pointer on the scroll bar is
+	// not on the row level with it, and lighting that row up said it
+	// was about to be acted on when a press there would scroll.
+	h := t.rowAtView(p)
 	if h != t.hovered || t.hoverCol != -1 {
 		oldRow, oldCol := t.hovered, t.hoverCol
 		t.hovered = h
@@ -920,6 +923,20 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 func (t *TableView) FocusLost() {
 	t.resetClicks()
 	t.Base.FocusLost()
+}
+
+// unhoverRow drops the row and heading highlights and leaves the bars'
+// own alone.
+func (t *TableView) unhoverRow() {
+	if t.hovered < 0 && t.hoverCol < 0 {
+		return
+	}
+	oldRow, hadCol := t.hovered, t.hoverCol >= 0
+	t.hovered, t.hoverCol = -1, -1
+	t.invalidateRow(oldRow)
+	if hadCol {
+		t.invalidateHeader()
+	}
 }
 
 func (t *TableView) MouseExit() {

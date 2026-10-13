@@ -597,17 +597,20 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 			t.Invalidate()
 		}
 		if handled {
+			// The bar has the pointer, so no node has it.
+			t.unhoverNode()
 			return true
 		}
 	}
 	var n *TreeNode
 	exp := false
-	if p.Y >= 0 && p.Y < t.inner().Dy() {
-		if i := t.rowAt(p.Y); i >= 0 {
-			row := t.flatten()[i]
-			n = row.node
-			exp = t.expanderHit(p.X, n, row.depth)
-		}
+	// On the point, not the height: the pointer on the scroll bar is
+	// not on the node level with it, and lighting that node up said it
+	// was about to be acted on when a press there would scroll.
+	if i := t.rowAtView(p); i >= 0 {
+		row := t.flatten()[i]
+		n = row.node
+		exp = t.expanderHit(p.X, n, row.depth)
 	}
 	if n != t.hover || exp != t.hoverExp {
 		old := t.hover
@@ -626,6 +629,16 @@ func (t *TreeView) resetClicks() { t.lastClick, t.lastAt = nil, time.Time{} }
 func (t *TreeView) FocusLost() {
 	t.resetClicks()
 	t.Base.FocusLost()
+}
+
+// unhoverNode drops the node highlight and leaves the bar's own alone.
+func (t *TreeView) unhoverNode() {
+	if t.hover == nil && !t.hoverExp {
+		return
+	}
+	old := t.hover
+	t.hover, t.hoverExp = nil, false
+	t.invalidateNode(old)
 }
 
 func (t *TreeView) MouseExit() {

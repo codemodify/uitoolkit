@@ -189,8 +189,12 @@ func (l *ListView) DropTypes() []string {
 }
 
 // Drop hands the drop to the row under it, or to the gap it landed in.
+//
+// From `pad`, which is where the rows are when a skin has placed them —
+// `frame` is zero then, and a drop was credited to the row the skin's
+// own chrome above the rows is as tall as.
 func (l *ListView) Drop(e widget.DropEvent) bool {
-	row, at := l.dropSpotAt(toView(e.Pos, l.frame()).Y)
+	row, at := l.dropSpotAt(toView(e.Pos, l.pad()).Y)
 	l.markDrop(-1, -1)
 	switch {
 	case at >= 0 && l.OnDropAt != nil:
@@ -204,7 +208,7 @@ func (l *ListView) Drop(e widget.DropEvent) bool {
 // DragOver marks the row a drag is over, or the gap between two rows a
 // reorderable list would insert it into.
 func (l *ListView) DragOver(pos paintengine2d.Point) {
-	l.markDrop(l.dropSpotAt(toView(pos, l.frame()).Y))
+	l.markDrop(l.dropSpotAt(toView(pos, l.pad()).Y))
 }
 
 func (l *ListView) DragLeave() { l.markDrop(-1, -1) }
