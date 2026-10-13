@@ -137,6 +137,8 @@ build-time choice and not the default, and why it is off under
 It is fallback and nothing more: no shaping, so Arabic stays unjoined
 and Indic unreordered, and no bidi, so Hebrew stays in logical order.
 Scripts that need neither — CJK, Cyrillic, Greek — are what it is for.
+[fonts.md](fonts.md) has the whole picture: what ships, how a face is
+chosen, and where the megabytes are.
 
 A face that cannot draw Latin at all — Noto Sans Arabic, Noto Sans CJK,
 Noto Color Emoji, and about thirty families the chooser offers on an

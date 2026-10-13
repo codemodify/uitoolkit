@@ -153,9 +153,9 @@ Measured in this repository at the version in [version.go](../version.go):
 | --- | --- |
 | Theme engines | 34 |
 | Theme packs | 132 |
-| `uitoolkit-settings`, one engine | 12.98 MB stripped |
-| `uitoolkit-settings`, every engine | 21.25 MB stripped |
-| The tour sample, the same two ways | 14.95 / 23.23 MB |
+| `uitoolkit-settings`, one engine | 13.03 MB stripped |
+| `uitoolkit-settings`, every engine | 21.31 MB stripped |
+| The tour sample, the same two ways | 15.02 / 23.30 MB |
 | Direct dependencies | paintengine2d, `golang.org/x/image`, `godbus` |
 | Platforms with a real backend | Wayland, X11, Win32, AppKit |
 | Seams each backend implements | window, frame, geometry, popups, clipboard, drag and drop, cursors, IME — asserted by `platform/seams_*.go` |

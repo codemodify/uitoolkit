@@ -33,10 +33,10 @@ Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 
 | build | engines | size |
 | --- | --- | --- |
-| default | 1 | **12.98 MB** |
-| `theme_engine_oxygen` | 1 | 12.91 MB |
-| three engines | 3 | 13.43 MB |
-| `theme_engine_all` | 34 | 21.25 MB |
+| default | 1 | **13.03 MB** |
+| `theme_engine_oxygen` | 1 | 12.97 MB |
+| three engines | 3 | 13.48 MB |
+| `theme_engine_all` | 34 | 21.31 MB |
 
 **8.3 MB**, 39% of the binary, for an application that wants one look.
 

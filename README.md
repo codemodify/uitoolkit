@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.6
+go get github.com/codemodify/uitoolkit@v0.23.7
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -539,11 +539,12 @@ And two applications that grew up here and moved out:
 | [toolkits.md](docs/toolkits.md) | **next to Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI and AppKit** — what it does differently, what it does not do, and when to choose something else |
 | [tour.md](docs/tour.md) | the sample that shows what the toolkit is, page by page |
 | [running.md](docs/running.md) | every screenshot in these docs, how each was made, and how to regenerate them |
-| [contracts.md](docs/contracts.md) | **the text contract**: a mark is an icon and a word is not a picture; no shaping, no bidi, no right-to-left interface, no font fallback — and what you *can* rely on |
+| [contracts.md](docs/contracts.md) | **the text contract**: a mark is an icon and a word is not a picture; no shaping, no bidi, no right-to-left interface, and no font fallback unless you build with it ([fonts.md](docs/fonts.md)) — and what you *can* rely on |
 | [widgets.md](docs/widgets.md) | every widget, mapped by name to the nearest control in other toolkits |
 | [recipes.md](docs/recipes.md) | **doing it right**: the situations where the obvious way is wrong — a mark on a button, shipping your own icons, a passphrase, sizing something that wraps, a check that has to ask a server |
 | [compare.md](docs/compare.md) | the behaviour map: how chrome is expected to act, and which test fails when it stops |
 | [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 132 packs, how an engine draws an era, and why engines are opt-in at build time |
+| [fonts.md](docs/fonts.md) | **what ships, what comes from the machine, and where the megabytes are**: the two embedded faces, how a pack's typeface is chosen, borrowing a glyph the face lacks (`-tags font_fallback`), and how to make a binary smaller |
 | [skins.md](docs/skins.md) · [shapes.md](docs/shapes.md) | art-driven looks, and windows that are not rectangles |
 | [platform.md](docs/platform.md) | the backend seam: what each window system does and what it refuses |
 | [windows.md](docs/windows.md) · [macos.md](docs/macos.md) | the two newer ports — what each does differently, and what it cost to find out |
@@ -927,6 +928,21 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.7** — **Everything three applications found in 0.23.6**, reported
+within hours of it: two regressions in what it shipped (the GPU closing
+callback ran with the wrong context and was cleared when `Run` returned),
+eleven items from a password manager's audit, and the one gap a music
+player had carried from the start. Two of them left a passphrase on the
+clipboard and one left a copy of a password in memory. `Window.Flip` now
+turns a window **with its frame**, so the resize edges, the minimise and
+the maximise are no longer the price of the turn. An application says
+which of its motion is the thing itself (`style.Motion`) rather than
+losing a card's turn to a reduce-motion preference. And a rune the chosen
+face lacks can be **borrowed from one that has it** —
+`go build -tags font_fallback`, ten kilobytes, no embedded fonts — so two
+different CJK titles stop drawing as the same row of boxes; see the new
+[docs/fonts.md](docs/fonts.md).
 
 **0.23.6** — **What the toolkit draws as itself.** Two looks that
 reproduce no product: Lumen, a glass material of the toolkit's own in two

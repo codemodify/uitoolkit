@@ -7,6 +7,194 @@ about the problem it solved.
 
 ---
 
+## 0.23.7
+
+**Everything three applications found in 0.23.6, and the font rule that
+had stood since the beginning.** Thirteen changes: two regressions in
+what 0.23.6 shipped, eleven items from a password manager's audit of it,
+and the one gap a music player had been carrying since it started — all
+reported within hours of the release, which is the fastest this has ever
+gone round.
+
+Two of them left a passphrase on the clipboard, and one left a copy of a
+password in memory. They are first.
+
+New: `style.Motion` with `SetMotion` on any widget and on a window;
+`style.SetFallbackFamilies` and `FallbackFamilies` (with
+`-tags font_fallback`); `style.DecorationOverEngine`;
+`widgets.FlipPanel.ShowNow` and `Wipe`; `widgets.Crumb.Tip` and `Opens`;
+`Panel.MinWidth`; `Window.Turning`; `platform.GPUClosing`.
+
+### A passphrase could be left on the clipboard, twice
+
+**A Wayland cancel handled while nothing was held ended the next
+secret.** The cancel names the copy it ends as whatever is held when it
+is *handled*, and where that was nothing it passed a nil —
+`forgetHeldSecretIf` reads nil as "whichever is held when the goroutine
+runs". So a cancel arriving while no secret was held — an ordinary
+copy's source cancelled, or one during a secret copy — ended a secret
+copied in between: wiped, its timer stopped, the application told it had
+gone, while the Wayland source went on serving it. X11's `endLostSecret`
+has always returned on nil; the cancel does now.
+
+**A refused copy left the one before it on the clipboard.** The copy
+being replaced was let go before the new one was tried, so where another
+program held the clipboard open for every try — and nothing on it
+changed — the previous secret stayed there with its timer stopped and
+nobody holding it: not cleared at its time, nor at the vault's lock, nor
+at the quit. The old copy is let go only once the new one is made now,
+and *cleared* rather than forgotten when the new one is refused. X11's
+served buffer is wiped on a refused ownership too, where it sat until
+the next copy.
+
+### A turn's pictures of the faces are wiped
+
+A flip paints both faces into pictures at its first frame and dropped
+them at its end without zeroing them. A picture of a face is a copy of
+what that face showed, and a password manager turns its window over with
+an item open and its password on the front — so these were copies of a
+passphrase it wipes everywhere it can reach, and could not reach here.
+The panel zeroes them wherever a turn ends, `FlipPanel.Wipe` is there for
+an application taking the panel down itself, and a framed window wipes
+the two photographs of itself as well: 1.5 MB, in that case.
+
+### A framed window turns over with its frame
+
+`Window.Flip` worked only on a window with no frame of the toolkit's,
+and the frame is what supplies the resize edges, the minimise and the
+maximise — so an application that wanted the turn gave up all three and
+drew a caption of its own on each face, with close and move only.
+
+The panel could not do otherwise: it is the window's content, every
+component is clipped to its own box, and the frame is drawn outside that
+box. A framed window turns as a *picture of itself* instead —
+photographed with each face up, the two turned over everything it draws,
+the card's silhouette worn by the window every frame. The live content
+under the picture is already the face being turned to, so when the
+picture goes there is nothing to swap. Nothing under it takes the
+pointer while it runs, and a maximized window — which cannot wear a
+silhouette — is not drawn under its own picture, where it used to stand
+there flat behind the turning one.
+
+### An application says which of its motion is the thing itself
+
+Reported from an application whose window would not turn: the user's
+`look.json` had `reduceMotion: true`. That preference is right for the
+motion that decorates — a hover fading in, a scroll bar fading out — and
+wrong for the motion that *is* the thing. A card that turns over to show
+it has a back, switched off, simply shows the back: the one cue that
+said "this is the same object, seen from behind" is gone, and the
+application had nothing it could say about it.
+
+```go
+win.SetMotion(style.MotionAlways)   // this window's turn is the thing
+dlg.SetMotion(style.MotionAlways)   // and everything in this dialog
+card.SetMotion(style.MotionNever)   // this one stays still
+```
+
+`widget.MotionOf` reads the nearest word — the component's own, else an
+ancestor's, else the window's — so a dialog says it once and everything
+inside is covered. The preference stays the default, and
+`UITK_ANIMATIONS=0` still beats everything, because reproducible
+screenshots need one switch nothing overrides.
+
+### A rune the face lacks can be borrowed from one that has it
+
+Two different CJK song titles drew as the same row of `.notdef` boxes,
+pixel for pixel — a playlist showing two identical rows for two
+different songs, with the accessible names correctly distinct, which is
+how it was noticed at all.
+
+```sh
+go build -tags font_fallback ./...
+```
+
+borrows the glyph from the first family in `style.FallbackFamilies()`
+that has it, baked to the borrowing face's baseline so it sits on the
+line. `style.SetFallbackFamilies` replaces the built-in list for an
+application that knows which of SC, TC, JP and KR its readers want — the
+Han glyphs differ and a Go string carries no language to choose by.
+
+**It costs ten kilobytes.** The faces are the machine's own: the toolkit
+embeds two Latin faces, 0.65 MB, and one CJK family is 18.6 MB, which is
+why it never will. What it costs instead is that text measurement then
+depends on what is installed, which is why it is a build-time choice and
+off under `UITK_SYSTEM_FONTS=0` with everything else about installed
+fonts. It is fallback and nothing else: no shaping, no bidi.
+[docs/fonts.md](docs/fonts.md) is new and says what ships, how a face is
+chosen, and where the megabytes are.
+
+### The GPU closing callback, twice wrong
+
+0.23.6 added `OnPaintDeviceClosing` for exactly this purpose and got two
+things wrong, both reported with an EGL reproducer.
+
+**The context was whoever painted last.** The hook promises the closing
+device's context is current; what was actually current was whatever the
+last thing painted left there, which in a process with two GPU windows
+is the other window's. That is the one thing libmpv's render API
+refuses. The device is bound before the hook runs now.
+
+**The callback was cleared when `Run` returned.** `Run` installed the
+process hook and dropped it in its return defer, so a window closed
+after the loop — `defer player.Close()`, which is exactly where a
+renderer is released — had its device closed with nobody told, and an
+application that pumps rather than runs was never told at all. A
+window's device can close whenever the window can, so the hook is
+installed when the application is made.
+
+### The rest
+
+- **A window keeps its look's outline when its own bar is the caption.**
+  The outline was dropped for every look the moment a bar was merged, so
+  a window with tabs in its title bar lost every corner Hangar takes
+  off, and Deck lost its whole silhouette. That rule belongs to BeOS
+  alone, whose tab is only as wide as its title.
+- **A cut corner's hairline is drawn over the content.** A rectangular
+  border lies outside the content's box; a chamfer crosses it, so
+  content that filled the corner buried Hangar's hairline and its
+  bracket. `style.DecorationOverEngine` is the seam, because only the
+  engine knows where its chamfer is.
+- **Words fitted to the width they were measured with are not cut
+  short.** A widget measures its words, is given a box that holds them,
+  and fits them into what is left — and float32 does not survive the
+  round trip, so `Font.Fit` put an ellipsis on words that fit. A
+  breadcrumb row drew `Vault › personal › About this vault › Grants` as
+  `GRAN…`. Fit allows a thirty-second of a pixel now, which covers every
+  caller of that shape.
+- **A breadcrumb step says its own tip and marks what it opens.**
+  `Crumb.Tip` is the step's, not the row's — a path whose steps are a
+  vault, an item and a tab has something different to say at each — and
+  a step with a `Menu`, or with `Opens` set, wears a chevron.
+- **A mark's strip is the same width in logical pixels at every scale.**
+  The icon was multiplied by the display scale and the pad and the gap
+  round it were not, so a marked button was 32 logical pixels wider than
+  a plain one at 1x and 28 at 2x. One side effect, visible in every
+  screenshot here: the number all three are multiplied by is the look's
+  *font* ratio rather than the display's scale — the same number at 2x,
+  but 1.07 for a pack whose face is 15px at 1x — so the chrome round a
+  mark is now a pixel or so wider in those packs, where before only the
+  icon inside it grew.
+- **A panel's floor holds the chrome it draws.** Without one of its own
+  the floor came out *too large*, not too small: `MinWidthOf` fell back
+  to a splitter's fixed unbounded measure, so a window could not be made
+  as narrow as its content allows.
+- `Window.Turning` answers for both kinds of turn, and `tools/test-fonts.sh`
+  runs the suite in the font configuration the default run cannot cover.
+
+### Known
+
+- **Printing** is still not in the toolkit; it is the one item pinned
+  across the four applications that report against it.
+- **No shaping and no bidi.** Arabic stays unjoined and Hebrew in
+  logical order whatever is installed; `font_fallback` is missing-glyph
+  fallback and nothing more.
+- **A tree still picks one node.** The password manager's items are a
+  list, which picks several, so this is recorded rather than needed.
+- **arm64 has never been run**, on any of the three platforms.
+
+---
+
 ## 0.23.6
 
 **What the toolkit draws as itself.** Almost every pack until now
