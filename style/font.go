@@ -429,11 +429,19 @@ func (f *Font) shapeOf(text string) shapedRun {
 			}
 		}
 	}
-	atlas := f.ensure(text)
-	if atlas == nil {
-		return shapedRun{}
+	// Shaped first, where the build has a shaper: it chooses the glyphs
+	// from the face's own tables and bakes them by index, so the sheet
+	// never holds the rune-keyed cells the rune path would have baked.
+	shape := func() shapedRun {
+		if s, ok := complexLayout(f, text); ok {
+			return s
+		}
+		atlas := f.ensure(text)
+		if atlas == nil {
+			return shapedRun{}
+		}
+		return f.layout(text, atlas)
 	}
-	shape := func() shapedRun { return f.layout(text, atlas) }
 	if f.shaped == nil {
 		return shape()
 	}
@@ -445,8 +453,8 @@ func (f *Font) shapeOf(text string) shapedRun {
 		// stops being pinned by the cache. Only this font's own sheet —
 		// a borrowed one belongs to the face it came from, which
 		// republishes on its own account.
-		if hit.primary() != atlas && len(hit.runs) > 0 {
-			hit.runs[0].Atlas = atlas
+		if cur := f.GlyphAtlas(); cur != nil && hit.primary() != cur && len(hit.runs) > 0 {
+			hit.runs[0].Atlas = cur
 			f.shaped.m[text] = hit
 		}
 		return hit

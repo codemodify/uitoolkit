@@ -43,6 +43,20 @@ type shapedGlyph struct {
 	Advance float32
 	X, Y    float32 // offset from the pen, y down
 	Cluster int
+	// byRune says GID holds a rune, not a glyph index: the shaper had
+	// nothing for this cluster and the rune path's own answers — the
+	// drawn star or arrow of symbols.go, or the .notdef box — are
+	// better than an empty cell. They are baked and keyed by rune, as
+	// they always were.
+	byRune bool
+}
+
+// key is where this glyph lives in a sheet.
+func (g shapedGlyph) key() paintengine2d.GlyphID {
+	if g.byRune {
+		return paintengine2d.GlyphID(g.GID)
+	}
+	return shapedGIDBit | paintengine2d.GlyphID(g.GID)
 }
 
 // gotextFaces parses each otFace's bytes a second time, for the shaper.
