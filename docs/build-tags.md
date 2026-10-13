@@ -37,7 +37,7 @@ together: `font_complex` is +2.16 MB on the default build and +2.18 on
 `theme_engine_all`, +2.16 again with cgo off. Add them up rather than
 measuring every pair.
 
-## Three builds people actually ship
+## The builds people actually ship
 
 ```sh
 # A tool that looks like its desktop and speaks one language.
@@ -54,8 +54,8 @@ go build -tags "theme_engine_all,font_complex" -ldflags "-s -w" ./... # 23.50 MB
 ```
 
 If you are not sure, ship the first and add a tag when something is
-wrong. Each of them is additive and none of them changes an API: the
-same program compiles under all three.
+wrong. Each one is additive and none of them changes an API: the same
+program compiles under all of them.
 
 ## What each one is
 
