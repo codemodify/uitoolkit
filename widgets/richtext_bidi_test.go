@@ -119,3 +119,48 @@ func TestARichTextSelectionJoinsTouchingPieces(t *testing.T) {
 		t.Errorf("an empty selection gave %v", sp)
 	}
 }
+
+// A text editor wraps with a wrapper of its own — it has to keep the
+// offsets of every line it makes — so it needs the same rule about
+// where a line may break, or Japanese typed into a TextArea wraps
+// anywhere while the same text in a label does not.
+func TestATextAreaWrapsJapaneseWhereItMay(t *testing.T) {
+	const para = "本日は晴天なり、きょうは(とても)いいてんきです。あしたもはれるでしょう。"
+	if style.LineBreaks([]rune(para)) == nil {
+		t.Skip("this build has no line breaking algorithm (font_complex)")
+	}
+	ta := NewTextArea(para, "", nil)
+	ta.SetLook(style.DarkLook())
+	ta.SetHost(&host{})
+	ta.Wrap = true
+	full := ta.font().Advance(para)
+	// Wide enough to hold a few characters: a box that fits one has no
+	// legal break to take, and Unicode says to break anywhere rather
+	// than to overflow.
+	one := ta.font().Advance("本")
+	pad := full / 10
+
+	// Half a character at a time: the break the table forbids is the one
+	// the box happens to end just before, so the widths have to be swept
+	// rather than sampled.
+	for w := one*5 + pad; w < full; w += one / 2 {
+		ta.Arrange(paintengine2d.XYWH(0, 0, w, 200))
+		lines := ta.Lines()
+		if len(lines) < 2 {
+			continue
+		}
+		var joined string
+		for _, ln := range lines {
+			joined += ln.Text
+			if r := []rune(ln.Text); len(r) > 0 {
+				switch r[0] {
+				case '。', '、', ')', '」':
+					t.Errorf("at width %.0f a line opens with %q", w, r[0])
+				}
+			}
+		}
+		if joined != para {
+			t.Errorf("at width %.0f the lines do not add up:\n got %q\nwant %q", w, joined, para)
+		}
+	}
+}

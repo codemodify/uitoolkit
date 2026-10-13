@@ -1204,6 +1204,12 @@ func layoutAreaMax(f *style.Font, text string, maxW float32, wrap bool) ([]style
 	var maxAdv float32
 	start := 0
 	acc := float32(0)
+	// Where Unicode allows a break, for the scripts whose words are not
+	// separated by anything the space rule can see. Nil in a build
+	// without font_complex, and nil for text the space rule covers
+	// anyway — computed once for the whole text, since lastWrap is
+	// asked once per line and would otherwise rebuild it each time.
+	breaks := style.LineBreaks(runes)
 	flush := func(end int, includeNL bool) {
 		if end < start {
 			end = start
@@ -1236,7 +1242,7 @@ func layoutAreaMax(f *style.Font, text string, maxW float32, wrap bool) ([]style
 		}
 		if wrap {
 			if acc+advance(runes[i]) > maxW && i > start {
-				brk := lastWrap(runes, start, i)
+				brk := lastWrap(runes, start, i, breaks)
 				flush(brk, false)
 				i = start
 				continue
@@ -1254,17 +1260,30 @@ func layoutAreaMax(f *style.Font, text string, maxW float32, wrap bool) ([]style
 	return out, maxAdv
 }
 
-func lastWrap(runes []rune, start, i int) int {
+func lastWrap(runes []rune, start, i int, breaks []bool) int {
 	for j := i; j > start; j-- {
 		if runes[j-1] == ' ' || runes[j-1] == '\t' {
 			return j
 		}
 	}
-	// No space on the line, so the "word" is longer than the line: a path, a
-	// URL, a key. Break after its last separator rather than in the middle of
-	// a name — a file name cut after its slash still reads as a file name,
-	// where one cut through the middle reads as two words that are not there.
-	// The rule is [style.CanBreakAfter], shared with the wrapper labels use.
+	// No space on the line. Unicode may still allow a break — between
+	// two Han characters, after a Thai word — and it also says where
+	// one may *not* go, which is the half a search for separators
+	// cannot know: a line must not open with a closing bracket or a
+	// full stop.
+	if breaks != nil {
+		for j := i; j > start; j-- {
+			if j < len(breaks) && breaks[j] {
+				return j
+			}
+		}
+	}
+	// No space and nothing Unicode allows, so the "word" is longer than the
+	// line: a path, a URL, a key. Break after its last separator rather than
+	// in the middle of a name — a file name cut after its slash still reads
+	// as a file name, where one cut through the middle reads as two words
+	// that are not there. The rule is [style.CanBreakAfter], shared with the
+	// wrapper labels use.
 	for j := i; j > start; j-- {
 		if style.CanBreakAfter(runes[j-1]) {
 			return j
