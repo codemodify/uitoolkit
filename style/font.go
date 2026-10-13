@@ -263,6 +263,21 @@ func (f *Font) runeAdvances() func(rune) float32 {
 }
 
 // Fit returns text, or a prefix plus an ellipsis, that fits in maxW.
+// fitSlack is how much a text may overrun the width it is being fitted
+// to and still count as fitting: a thirty-second of a pixel.
+//
+// Measuring and then fitting is the common pattern — a widget measures
+// its words, is given a box that holds them, and fits them into what is
+// left of it — and float32 does not survive the round trip. A step of a
+// breadcrumb row some hundreds of pixels along was given 57.046844 for
+// words whose advance is 57.046875, so the words it was measured to
+// hold came out with an ellipsis on them (secretvault item 82, and the
+// same arithmetic as the whole-pixel rounding layout already does).
+//
+// A thirty-second of a pixel is far below anything that can be seen and
+// far above the error, which is parts in a million.
+const fitSlack = 1.0 / 32
+
 func (f *Font) Fit(text string, maxW float32) string {
 	if f == nil || text == "" {
 		return ""
@@ -270,7 +285,7 @@ func (f *Font) Fit(text string, maxW float32) string {
 	if maxW <= 0 {
 		return ""
 	}
-	if f.Advance(text) <= maxW {
+	if f.Advance(text) <= maxW+fitSlack {
 		return text
 	}
 	const ell = "…"

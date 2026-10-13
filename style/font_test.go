@@ -182,3 +182,46 @@ func TestUISymbolFallbacksPaint(t *testing.T) {
 		}
 	}
 }
+
+// **Words measured and then fitted at the same width are not cut short.**
+//
+// It is the common pattern: a widget measures its words, is given a box
+// that holds them, and fits them into what is left of it. float32 does
+// not survive the round trip — a step's box is the difference of two
+// large coordinates — so what comes back is a hair under the advance it
+// was made of, and Fit, which allowed nothing, put an ellipsis on words
+// that fit. secretvault reported `Vault › personal › About this vault ›
+// Grants` drawn as `GRAN…`; which steps it hit depended on where they
+// fell in the row. The shortfall it measured was 57.046844 for
+// 57.046875: three parts in ten million.
+func TestWordsFittedToTheWidthTheyWereMeasuredWithAreWhole(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	for _, text := range []string{"Grants", "About this vault", "personal"} {
+		adv := f.Advance(text)
+		// The error the arithmetic makes, at the scale it makes it.
+		for _, short := range []float32{adv * 1e-7, adv * 1e-6, 3.1e-5, 1.0 / 64} {
+			room := adv - short
+			if got := f.Fit(text, room); got != text {
+				t.Errorf("%q has an advance of %.6f and was given %.6f — short by %g — and came back %q",
+					text, adv, room, short, got)
+			}
+		}
+	}
+}
+
+// And Fit still cuts what genuinely does not fit: the slack is a
+// thirty-second of a pixel, not a licence to overflow.
+func TestFitStillCutsWhatDoesNotFit(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	const text = "About this vault"
+	adv := f.Advance(text)
+	if got := f.Fit(text, adv*0.6); got == text {
+		t.Error("words at six tenths of their advance came back whole")
+	}
+	if got := f.Fit(text, adv-1); got == text {
+		t.Errorf("words a whole pixel too wide came back whole: %q", got)
+	}
+	if got := f.Fit(text, adv-1.0/16); got == text {
+		t.Errorf("words a sixteenth of a pixel too wide came back whole: %q", got)
+	}
+}
