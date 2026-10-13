@@ -4,7 +4,7 @@
 **four window backends** — Wayland and X11 on Linux, Win32 on Windows,
 AppKit on macOS. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.11.0). Each theme reads in its era's typeface when it is installed
+(v0.12.2). Each theme reads in its era's typeface when it is installed
 (Tahoma for XP, Segoe UI for Windows 10, Cantarell for GNOME, Geneva for
 Platinum…) — found without fontconfig on Windows and macOS too; the bundled
 **Titillium Web** and **JetBrains Mono** (OFL, embedded) stand in otherwise.
@@ -129,6 +129,19 @@ megabytes.
     (`xdg-toplevel-drag-v1` on Wayland, the client's own window placement
     on X11, and a window made at the drop where a compositor has neither).
   - Offers system-tray items.
+- **Text, as much of it as you want to carry.** Two faces are embedded
+  and every script beyond them comes from the machine, so the binary
+  grows with *code* and never with font data. Three opt-in tags, each
+  additive: `font_fallback` borrows a rune the chosen face has not got
+  (**+0.01 MB**); `font_complex` reads the face's own tables — GSUB and
+  GPOS, so Arabic joins and Devanagari reorders, UAX #9 so a line that
+  changes direction is ordered, caret, hit-test and selection to match,
+  and UAX #14 so Japanese wraps where it may (**+2.16 MB**);
+  `font_emoji` draws 👀 from the machine's colour face (**+0.01 MB**).
+  None of them mirrors the *interface* for a right-to-left locale, which
+  is a different promise — [docs/contracts.md](docs/contracts.md) is
+  honest about that, and
+  [docs/complex-text.md](docs/complex-text.md) about the rest.
 - **Accessibility.** An accessibility tree for every window, an audit
   (`a11y.Check`) for app tests, and an AT-SPI2 bridge, so Orca and other
   assistive technology read and drive the apps. See
