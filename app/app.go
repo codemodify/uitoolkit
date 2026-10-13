@@ -279,6 +279,17 @@ func New(opts Options) *Application {
 		hideMenuBtn: hideMenuBtn,
 		renderPref:  renderPref,
 	}
+	// The one thing only this package can answer: which window a surface
+	// belongs to, so a backend about to close a GPU device can give that
+	// window a moment with its own context current.
+	//
+	// Here and not in [Application.Run], which is where it was: Run
+	// cleared it on the way out, so a window closed after the loop
+	// returned — or by an application that pumps instead of running —
+	// had its device closed with nobody told. media-player-video
+	// reproduced both. A window's device can close whenever the window
+	// can, which is for as long as the application exists.
+	platform.SetGPUClosing(a.surfaceClosingGPU)
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.
 	a.watchDesktop()()
@@ -651,13 +662,8 @@ func (a *Application) Run() error {
 	// work nothing will ever drain would be a passphrase left on the
 	// clipboard (platform.SetLoopPoster).
 	platform.SetLoopPoster(a.Post)
-	// And the other thing only this package can answer: which window a
-	// surface belongs to, so a backend about to close a GPU device can
-	// give that window a moment with its context still current.
-	platform.SetGPUClosing(a.surfaceClosingGPU)
 	defer func() {
 		platform.SetLoopPoster(nil)
-		platform.SetGPUClosing(nil)
 		a.mu.Lock()
 		a.looping = false
 		a.mu.Unlock()

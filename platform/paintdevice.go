@@ -81,6 +81,10 @@ var closingGPU func(Surface)
 // Window.OnPaintDeviceClosing.
 func SetGPUClosing(fn func(Surface)) { closingGPU = fn }
 
+// GPUClosing is the hook installed now, for a program that installs one
+// of its own and wants to chain to what was there.
+func GPUClosing() func(Surface) { return closingGPU }
+
 // noteGPUClosing runs the hook for s. A backend calls it as the last
 // thing before it closes a GPU device, never after.
 func noteGPUClosing(s Surface) {
@@ -89,17 +93,35 @@ func noteGPUClosing(s Surface) {
 	}
 }
 
-// gpuCloser is what a backend's GPU device offers here: closing it.
+// gpuCloser is what a backend's GPU device offers here: closing it, and
+// — for a device that has a context to bind — making that context
+// current.
 type gpuCloser interface{ Close() error }
 
-// closeGPUDevice tells the application and then closes dev, in that
-// order — which is the whole of this: an application holding a renderer
-// on the device gets its moment while the context is still current.
+type gpuBinder interface{ MakeCurrent() error }
+
+// closeGPUDevice binds the device, tells the application and then closes
+// it, in that order — which is the whole of this: an application holding
+// a renderer on the device gets its moment while the device's own
+// context is current.
+//
+// **The binding is not a formality.** The hook promises the closing
+// device's context, and a process with two GPU windows had whatever was
+// current from the last thing painted: media-player-video reproduced the
+// callback running with the *other* window's context, which is exactly
+// the case libmpv's render API refuses — its renderer must be destroyed
+// against the context it was made against. Binding first costs one
+// eglMakeCurrent on a path that happens once per window.
 //
 // Both backends go through it so the order is written once. Doing it by
 // hand in each was how the order came to be wrong in the first place,
 // and nothing about a hand-written sequence can be tested without a GPU.
 func closeGPUDevice(s Surface, dev gpuCloser) {
+	if b, ok := dev.(gpuBinder); ok {
+		// A device that cannot be made current is a device whose context
+		// has already gone; the application still gets its notice.
+		_ = b.MakeCurrent()
+	}
 	noteGPUClosing(s)
 	if dev != nil {
 		_ = dev.Close()

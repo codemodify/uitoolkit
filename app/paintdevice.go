@@ -59,7 +59,15 @@ func (w *Window) UsesGPU() bool {
 }
 
 // OnPaintDeviceClosing is called immediately *before* this window's GPU
-// device is closed, while its context is still current.
+// device is closed, with that device's own context made current.
+//
+// **Its own**, since 0.23.7: the context current when a device closes is
+// whatever the last thing painted left there, which in a process with
+// two GPU windows is the other window's. media-player-video reproduced
+// the callback running against it, and that is the one thing libmpv's
+// render API refuses. The device is bound before the callback now
+// (`platform.closeGPUDevice`), so what the callback is promised is what
+// it gets.
 //
 // [Window.OnPaintDeviceChange] is the other half and says what happened;
 // this one is the moment to do something about it. An application that
@@ -78,6 +86,12 @@ func (w *Window) UsesGPU() bool {
 // that went away mid-run takes its context with it and there is no
 // moment to run in. OnPaintDeviceChange still reports that, which is why
 // an application needs both.
+//
+// It is called whenever the window's device closes, which is for as long
+// as the application exists: after [Application.Run] has returned, and
+// in an application that pumps rather than runs. It used to be installed
+// by Run and cleared on the way out, so a `defer win.Close()` — where a
+// renderer is released — told nobody.
 func (w *Window) OnPaintDeviceClosing(fn func()) {
 	if w == nil {
 		return

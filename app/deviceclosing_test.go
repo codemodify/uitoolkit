@@ -80,3 +80,47 @@ func TestTheClosingHookIsQuietWithNothingRegistered(t *testing.T) {
 	a.surfaceClosingGPU(win.surf) // no callback registered
 	a.surfaceClosingGPU(nil)
 }
+
+// **The callback outlives the run loop.**
+//
+// `Run` installed the hook the backends call and cleared it on the way
+// out, so a window closed after the loop returned had its GPU device
+// closed with nobody told — and an application that pumps instead of
+// running was never told at all. media-player-video reproduced both:
+// its own `main` defers `Player.Close`, which runs after `a.Run()`
+// returns, and that is exactly where a GPU renderer would be released.
+//
+// A window's device can close whenever the window can, which is for as
+// long as the application exists; so the hook is installed when the
+// application is made.
+func TestTheClosingCallbackOutlivesTheRunLoop(t *testing.T) {
+	platform.SetGPUClosing(nil)
+	a := New(Options{Headless: true, Scale: 1})
+	t.Cleanup(func() { platform.SetGPUClosing(nil) })
+
+	hook := platform.GPUClosing()
+	if hook == nil {
+		t.Fatal("making an application installed no closing hook; a window closed outside Run tells nobody")
+	}
+	win, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	told := 0
+	win.OnPaintDeviceClosing(func() { told++ })
+
+	// A run loop that starts and stops, as an application's does.
+	a.Post(a.Quit)
+	a.Run()
+
+	// The backend closes the window's device now, after the loop: the
+	// hook is still there and still finds the window.
+	hook2 := platform.GPUClosing()
+	if hook2 == nil {
+		t.Fatal("the hook was cleared when Run returned; this is the gap that was reported")
+	}
+	hook2(win.surf)
+	if told != 1 {
+		t.Errorf("the window was told %d times after Run returned, want once", told)
+	}
+}
