@@ -161,7 +161,7 @@ func (p *ProgressBar) Paint(ctx *paintengine2d.Context) {
 // frame: the loop runs only while the bar is painted, so a bar that is not
 // in the tree costs nothing.
 func (p *ProgressBar) phase() float32 {
-	if !p.Indeterminate || p.Manual || !style.Animations() {
+	if !p.Indeterminate || p.Manual || !widget.Animates(p) {
 		return p.Phase
 	}
 	now := fadeNow()

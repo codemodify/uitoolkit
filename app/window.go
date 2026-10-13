@@ -125,6 +125,10 @@ type Window struct {
 	flip       *widgets.FlipPanel
 	flipShapes bool
 	flipShaped bool
+	// motion is what this window says about moving, over the user's
+	// preference, and what widget.MotionOf reads for a component whose
+	// own tree states nothing (app/motion.go).
+	motion style.Motion
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not

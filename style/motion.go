@@ -55,6 +55,64 @@ func Animations() bool {
 	return !(followDesktopMotion.Load() && desktopReduce.Load())
 }
 
+// Motion is what one thing in an application has to say about moving,
+// over the preference that governs the rest.
+//
+// The preference ([SetReduceMotion], look.json's `reduceMotion`) is the
+// right default for motion that decorates: a hover fading in, a scroll
+// bar fading out, the default button's pulse. It is the wrong answer for
+// motion that *is* the thing — a card that turns over to show it has a
+// back, a window that flips to its settings. Switched off there, the
+// back face simply appears, and the one cue that said "this is the same
+// object, seen from behind" is gone; the application looks broken rather
+// than calm, and nothing the application could say made any difference.
+//
+// So a component, a dialog or a window may state its own:
+//
+//	MotionAuto    the preference decides — the default, for everything
+//	MotionAlways  this motion carries meaning: run it
+//	MotionNever   this one does not move, whatever the preference says
+//
+// [widget.MotionOf] reads it from a component or the nearest ancestor
+// that states one, so one call covers a dialog and everything in it.
+//
+// **MotionAlways is not a way to ignore the preference.** It is a way to
+// say "this is content, not decoration", which is the distinction the
+// preference is about in the first place. Use it for the motion that
+// would leave a hole in the meaning if it went, and leave the rest alone:
+// an application that marks everything Always has simply turned the
+// preference off for the person who asked for it. UITK_ANIMATIONS=0 still
+// beats it, because reproducible screenshots and tests need one switch
+// nothing overrides.
+type Motion uint8
+
+const (
+	// MotionAuto leaves it to the preference. Every component starts here.
+	MotionAuto Motion = iota
+	// MotionAlways runs this motion whatever the preference says.
+	MotionAlways
+	// MotionNever keeps this one still, whatever the preference says.
+	MotionNever
+)
+
+// AnimationsWith is [Animations] for one thing that has stated its own
+// [Motion]. MotionAuto is exactly Animations.
+func AnimationsWith(m Motion) bool {
+	switch strings.TrimSpace(os.Getenv(AnimationsEnv)) {
+	case "0":
+		return false
+	case "1":
+		return true
+	}
+	switch m {
+	case MotionAlways:
+		return true
+	case MotionNever:
+		return false
+	}
+	return Animations()
+}
+
 // SetFollowDesktopMotion makes the desktop's reduced-motion setting apply
 // to this process, for an application that would rather take the
 // session's word for it than decide. Off by default: see [Animations].

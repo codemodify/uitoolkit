@@ -56,6 +56,11 @@ type Base struct {
 	hitCur           *platform.Shape
 	hitCurW, hitCurH int
 	transparent      bool
+	// motion is what this component has to say about moving, and
+	// [style.MotionAuto] — the zero value — for all but the few that say
+	// anything. [MotionOf] reads it from here or the nearest ancestor
+	// that states one.
+	motion style.Motion
 	// lookShape is the silhouette the look gave the face this component
 	// paints, remembered for as long as the look, the face and the size
 	// are the same. It stays nil for every component that does not name a
@@ -108,6 +113,20 @@ func (b *Base) Look() style.LookAndFeel        { return b.resolveLook() }
 func (b *Base) LocalBounds() paintengine2d.Rect {
 	return paintengine2d.XYWH(0, 0, b.bounds.Dx(), b.bounds.Dy())
 }
+
+// SetMotion states what this component has to say about moving, over the
+// user's reduce-motion preference: [style.MotionAlways] for motion that
+// carries meaning (a card turning over to show it has a back),
+// [style.MotionNever] for one thing that should stay still, and
+// [style.MotionAuto] — the default — to leave it to the preference.
+//
+// It covers everything under this component, so a dialog states it once
+// for itself and its contents. [MotionOf] is what the widgets read.
+func (b *Base) SetMotion(m style.Motion) { b.motion = m }
+
+// Motion is what this component states about moving — its own word, not
+// its ancestors'. [MotionOf] is the one the widgets ask.
+func (b *Base) Motion() style.Motion { return b.motion }
 
 func (b *Base) SetVisible(v bool) {
 	if b.visible == v {

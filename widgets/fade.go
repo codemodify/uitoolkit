@@ -37,7 +37,7 @@ type stateFade struct {
 // change.
 func (f *stateFade) paint(owner widget.Component, ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState, draw func(*paintengine2d.Context, style.ControlState)) {
 	ms := 0
-	if owner != nil && style.Animations() {
+	if owner != nil && widget.Animates(owner) {
 		ms = style.LookHint(owner.Look(), style.HintHoverFadeMs)
 	}
 	now := fadeNow()

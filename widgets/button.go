@@ -238,7 +238,7 @@ func (b *Button) pulse(st style.ControlState) (float32, bool) {
 		return 0, false
 	}
 	ms := style.LookHint(b.Look(), style.HintDefaultPulseMs)
-	if ms <= 0 || !style.Animations() {
+	if ms <= 0 || !widget.Animates(b) {
 		return 0, false
 	}
 	period := time.Duration(ms) * time.Millisecond

@@ -1273,6 +1273,15 @@ spinning on through another half-turn the same way. The turn is skipped —
 the faces simply swap — when motion is off (`UITK_ANIMATIONS=0`,
 `style.SetReduceMotion`) or when none of the panel is on screen.
 
+**A turn that is the thing itself says so.** The reduce-motion preference
+is the right default for a hover fade and the wrong one for a card whose
+whole point is that it has a back: switched off there, the back simply
+appears and nothing says the two faces are one object.
+`panel.SetMotion(style.MotionAlways)` — or the same on the dialog or the
+window around it, which every widget inside inherits — turns anyway. See
+"One animation at a time" in [settings.md](settings.md), which says what
+that is for and what it is not.
+
 ### Turning the whole window over
 
 `win.SetFlipFaces(front, back)` turns the *application* instead of a card

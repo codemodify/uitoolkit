@@ -176,7 +176,7 @@ func (t *Toast) Opacity() float32 { return t.alpha }
 
 // appear starts the note: it fades in, then waits out its timeout.
 func (t *Toast) appear() {
-	if !style.Animations() {
+	if !widget.Animates(t) {
 		t.alpha = 1
 		t.arm()
 		return
@@ -219,7 +219,7 @@ func (t *Toast) fade(to float32, d time.Duration, then func()) {
 			then()
 		}
 	}
-	if d <= 0 || !style.Animations() {
+	if d <= 0 || !widget.Animates(t) {
 		arrive()
 		return
 	}

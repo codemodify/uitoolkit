@@ -6,7 +6,6 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
-	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -218,7 +217,7 @@ func (f *FlipPanel) show(back bool) {
 // look allows motion, and enough of the panel is on screen to be worth
 // asking for frames.
 func (f *FlipPanel) animates() bool {
-	return style.Animations() && !f.LocalBounds().Empty() && widget.Exposed(f)
+	return widget.Animates(f) && !f.LocalBounds().Empty() && widget.Exposed(f)
 }
 
 // syncFaces puts the visibility where the panel's state says it goes: the

@@ -1014,6 +1014,33 @@ preference in its own settings (`style.SetReduceMotion`, which the
 `UITK_ANIMATIONS` settles it for the process either way: `0` makes every
 state change instant, `1` animates over every preference.
 
+**One animation at a time, over the preference.** The preference governs
+the motion that decorates — a hover fading in, a scroll bar fading out,
+the default button's pulse. It is the wrong answer for the motion that
+*is* the thing: a card that turns over to show it has a back, a window
+that flips to its settings. Switched off there, the back simply appears
+and the one cue that said "this is the same object, seen from behind" is
+gone. So a component, a dialog or a window states its own:
+
+```go
+win.SetMotion(style.MotionAlways)      // this window's turn is the thing
+dlg.SetMotion(style.MotionAlways)      // and everything in this dialog
+card.SetMotion(style.MotionNever)      // this one stays still
+```
+
+`style.MotionAuto`, the default everywhere, leaves it to the preference.
+`widget.MotionOf` reads the nearest word — the component's own, else an
+ancestor's, else the window's — so a dialog says it once and everything
+inside is covered, and `widget.Animates(c)` is the question a widget with
+something to animate asks in place of `style.Animations()`.
+
+This is not a way around the preference: it is how an application says
+which of its motion is content and which is decoration, which is the
+distinction the preference is about. An application that marks everything
+`MotionAlways` has turned the preference off for the person who asked for
+it. `UITK_ANIMATIONS=0` still beats it, because reproducible screenshots
+and tests need one switch that nothing overrides.
+
 Mode `0600`. Missing or invalid files yield the default theme,
 `metal-ocean` (Metal, Ocean theme), in its own corners (`theme`), with
 `classic` icons at `medium` size. A file without `iconSize` migrates to

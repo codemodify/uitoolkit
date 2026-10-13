@@ -144,3 +144,45 @@ func TestAWindowWithNoFacesIgnoresTheFlip(t *testing.T) {
 		t.Error("a window with no faces claims to have some")
 	}
 }
+
+// **A window can say its turn carries meaning**, and then it turns
+// although the user's preference is to reduce motion — which is what the
+// preference is for: the decoration, not the thing itself.
+//
+// The window is where an application says it once. Its content, the
+// dialogs it opens, its cover and its notes are separate trees with this
+// window as their host, so there is no component they all share to say it
+// on.
+func TestAWindowCanSayItsTurnCarriesMeaning(t *testing.T) {
+	t.Setenv(style.AnimationsEnv, "")
+	a := New(Options{Headless: true, Scale: 1})
+	win, err := a.NewWindow(platform.WindowOptions{Width: 520, Height: 360, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(win.Close)
+	p := win.SetFlipFaces(widgets.NewButton("front", nil), widgets.NewButton("back", nil))
+	p.Strips = 32
+	a.PumpOnce()
+	win.Capture()
+	// After New, which applies the appearance file and would overwrite it.
+	style.SetReduceMotion(true)
+	t.Cleanup(func() { style.SetReduceMotion(false) })
+
+	win.Flip()
+	win.Capture()
+	if p.Turning() {
+		t.Fatal("the preference stopped being the default for a window that says nothing")
+	}
+	p.ShowFront()
+
+	win.SetMotion(style.MotionAlways)
+	if got := win.Motion(); got != style.MotionAlways {
+		t.Fatalf("the window reads back %v", got)
+	}
+	win.Flip()
+	win.Capture()
+	if !p.Turning() {
+		t.Error("the window said its turn carries meaning and the preference still cut it")
+	}
+}

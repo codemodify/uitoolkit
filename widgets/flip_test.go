@@ -518,3 +518,45 @@ func TestACardTurnsBackTheWayItCame(t *testing.T) {
 		}
 	}
 }
+
+// **A turn the application says is the thing itself runs under the
+// reduce-motion preference.**
+//
+// Reported from an application whose window would not turn: the user's
+// look.json had `reduceMotion: true`, and that preference is the right
+// default for a hover fade and the wrong one for a card turning over to
+// show it has a back — switched off, the back simply appears and the one
+// cue that said "this is the same object, seen from behind" is gone. The
+// application had nothing it could say about it.
+//
+// Now it has: style.MotionAlways on the panel, or on any ancestor of it,
+// or on the window.
+func TestAPanelThatSaysItsTurnCarriesMeaningTurnsUnderReducedMotion(t *testing.T) {
+	t.Setenv(style.AnimationsEnv, "")
+	style.SetReduceMotion(true)
+	t.Cleanup(func() { style.SetReduceMotion(false) })
+	f, _, _, h := flipFaces(t)
+	useFlipClock(t, h)
+
+	f.Flip()
+	if f.Turning() {
+		t.Fatal("the preference stopped being the default; a panel that says nothing should swap at once")
+	}
+	f.ShowFront()
+
+	f.SetMotion(style.MotionAlways)
+	f.Flip()
+	if !f.Turning() {
+		t.Error("the panel said its turn carries meaning and the preference still cut it")
+	}
+	// And the other way: a panel told to stay still does, with motion on.
+	t.Setenv(style.AnimationsEnv, "")
+	style.SetReduceMotion(false)
+	f.end()
+	f.ShowFront()
+	f.SetMotion(style.MotionNever)
+	f.Flip()
+	if f.Turning() {
+		t.Error("a panel told to stay still turned anyway")
+	}
+}
