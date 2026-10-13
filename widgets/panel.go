@@ -106,6 +106,21 @@ func (p *Panel) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(sz.X+in.Left+in.Right, sz.Y+in.Top+in.Bottom))
 }
 
+// MinWidth is its body's floor and the chrome it puts round it.
+//
+// A panel answered none of its own, so the floor a window took from it
+// was the body's alone — without the frame, the padding or the group
+// box's title. secretvault sized its window from a window panel and
+// added the difference itself, measured as the panel's laid-out width
+// less its content's (item 89).
+func (p *Panel) MinWidth() float32 {
+	if p == nil || p.body == nil {
+		return 0
+	}
+	in := p.insets()
+	return widget.MinWidthOf(p.body) + in.Left + in.Right
+}
+
 func (p *Panel) Arrange(r paintengine2d.Rect) {
 	p.SetBounds(r)
 	p.body.Arrange(p.insets().Apply(p.LocalBounds()))
