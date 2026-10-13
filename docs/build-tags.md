@@ -184,7 +184,7 @@ the decision rests on.
 
 and the behaviour each tag adds is under test in that configuration:
 `tools/test.sh` runs the default build, `tools/test-fonts.sh` runs
-`font_fallback` and `font_complex`, and `tools/engines-build.sh` builds
-every engine on its own. A tag that quietly did nothing would fail the
+`font_fallback`, `font_complex` and `font_emoji`, and
+`tools/engines-build.sh` builds every engine on its own. A tag that quietly did nothing would fail the
 tests written for it, and one that quietly turned itself on in the
 default build would fail the tests written against it.
