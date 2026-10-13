@@ -9,6 +9,24 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
+// wipe zeroes the pictures of the two faces and lets go of them.
+//
+// A picture of a face is a *copy of what the face showed*, and a face
+// can show anything: secretvault turns its window over with an item
+// open and its password on screen, and wipes every copy it makes of
+// one. These copies it could not reach — the panel dropped them
+// unzeroed and they sat in memory until the collector happened to run.
+// Reported as item 78 against v0.23.6.
+func (t *flipTurn) wipe() {
+	if t.from != nil {
+		clear(t.from.Pix)
+	}
+	if t.to != nil {
+		clear(t.to.Pix)
+	}
+	t.from, t.to = nil, nil
+}
+
 // flipNow is the clock a turn runs by (tests replace it).
 var flipNow = time.Now
 
@@ -190,6 +208,7 @@ func (f *FlipPanel) ShowNow(back bool) {
 		return
 	}
 	f.showingBack = back
+	f.turn.wipe()
 	f.turn = flipTurn{}
 	f.syncFaces()
 	f.Invalidate()
@@ -202,6 +221,7 @@ func (f *FlipPanel) show(back bool) {
 	}
 	f.showingBack = back
 	if !f.animates() {
+		f.turn.wipe()
 		f.turn = flipTurn{}
 		f.syncFaces()
 		f.Invalidate()
@@ -556,6 +576,7 @@ func (f *FlipPanel) end() {
 		return
 	}
 	had := f.turn.hadFocus
+	f.turn.wipe()
 	f.turn = flipTurn{}
 	f.syncFaces()
 	// The card is its box again: a window following it puts its own shape
@@ -579,5 +600,33 @@ func (f *FlipPanel) end() {
 func (f *FlipPanel) flipped() {
 	if f.OnFlip != nil {
 		f.OnFlip(f.showingBack)
+	}
+}
+
+// Dismissed wipes the pictures of a panel taken down mid-turn: a panel
+// used as a popup, an overlay or a window's cover is told, and a turn
+// that never reached its end would otherwise leave its copies of both
+// faces in memory. A panel simply removed from its parent is not told
+// by anyone — [FlipPanel.Wipe] is there for that.
+func (f *FlipPanel) Dismissed() { f.Wipe() }
+
+// Wipe zeroes whatever pictures of the faces the panel is holding and
+// ends any turn in progress, for an application that is taking the
+// panel down itself.
+//
+// A picture of a face is a copy of what that face showed. Nothing else
+// in the toolkit holds one for longer than a turn, and this is how an
+// application that shows something it wipes elsewhere — a password, a
+// key — reaches the copies the turn made.
+func (f *FlipPanel) Wipe() {
+	if f == nil {
+		return
+	}
+	running := f.turn.running
+	f.turn.wipe()
+	f.turn = flipTurn{}
+	if running {
+		f.syncFaces()
+		f.Invalidate()
 	}
 }

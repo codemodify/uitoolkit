@@ -194,6 +194,16 @@ func newFlipShot(img *paintengine2d.Image) *flipShot {
 	return s
 }
 
+// wipe zeroes the photograph. A picture of the window is a copy of
+// whatever the window showed, which for a password manager turning over
+// with an item open is a copy of the password (secretvault item 78).
+func (s *flipShot) wipe() {
+	if s != nil && s.img != nil {
+		clear(s.img.Pix)
+		s.img = nil
+	}
+}
+
 func (s *flipShot) Paint(ctx *paintengine2d.Context) {
 	b := s.LocalBounds()
 	if s.img == nil || b.Empty() {
@@ -298,6 +308,14 @@ func (w *Window) followWindowTurn() {
 		return
 	}
 	if !w.turn.Turning() {
+		// The panel wipes its own rasterised copies; the photographs
+		// under them are this window's to wipe (secretvault item 78).
+		w.turn.Wipe()
+		for _, c := range []widget.Component{w.turn.Front(), w.turn.Back()} {
+			if shot, ok := c.(*flipShot); ok {
+				shot.wipe()
+			}
+		}
 		w.turn = nil
 		w.clearFlipShape()
 		w.laid = false

@@ -560,3 +560,71 @@ func TestAPanelThatSaysItsTurnCarriesMeaningTurnsUnderReducedMotion(t *testing.T
 		t.Error("a panel told to stay still turned anyway")
 	}
 }
+
+// **A turn's pictures are zeroed when it ends.**
+//
+// A picture of a face is a copy of what the face showed. secretvault
+// turns its window over with an item open and its password on screen,
+// and wipes every copy it makes of one; these it could not reach — the
+// panel dropped them unzeroed and they sat in memory until the
+// collector happened to run. Reported as item 78 against v0.23.6.
+func TestATurnsPicturesAreWipedWhenItEnds(t *testing.T) {
+	t.Setenv(style.AnimationsEnv, "1")
+	f, _, _, h := flipFaces(t)
+	useFlipClock(t, h)
+
+	f.Flip()
+	paintPanel(f, flipW, flipH)
+	from, to := f.turn.from, f.turn.to
+	if from == nil || to == nil {
+		t.Fatal("the turn rasterised no pictures to wipe")
+	}
+	if ink(from)+ink(to) == 0 {
+		t.Fatal("the pictures are blank before the turn ends; this test cannot tell a wipe from nothing")
+	}
+
+	h.now = h.now.Add(2 * flipDuration)
+	paintPanel(f, flipW, flipH)
+	if f.Turning() {
+		t.Fatal("the turn did not end")
+	}
+	if n := ink(from) + ink(to); n != 0 {
+		t.Errorf("%d bytes of the two pictures are still set after the turn: a copy of whatever the faces showed", n)
+	}
+	if f.turn.from != nil || f.turn.to != nil {
+		t.Error("the panel is still holding the pictures")
+	}
+}
+
+// And a panel taken down mid-turn wipes them too: a turn that never
+// reaches its end would otherwise leave both copies behind.
+func TestAPanelTakenDownMidTurnWipesItsPictures(t *testing.T) {
+	t.Setenv(style.AnimationsEnv, "1")
+	f, _, _, h := flipFaces(t)
+	useFlipClock(t, h)
+
+	f.Flip()
+	paintPanel(f, flipW, flipH)
+	from, to := f.turn.from, f.turn.to
+	if from == nil || to == nil || ink(from)+ink(to) == 0 {
+		t.Fatal("the turn rasterised nothing to wipe")
+	}
+	f.Dismissed()
+	if n := ink(from) + ink(to); n != 0 {
+		t.Errorf("%d bytes are still set after the panel was taken down mid-turn", n)
+	}
+	if f.Turning() {
+		t.Error("the turn is still running after the panel was taken down")
+	}
+}
+
+// ink is how many bytes of an image are not zero.
+func ink(img *paintengine2d.Image) int {
+	n := 0
+	for _, b := range img.Pix {
+		if b != 0 {
+			n++
+		}
+	}
+	return n
+}

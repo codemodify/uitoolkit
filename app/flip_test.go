@@ -8,6 +8,7 @@ import (
 
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
@@ -434,5 +435,57 @@ func maximizedTurnStandsAlone(t *testing.T) {
 	if float32(same) > float32(total)*0.9 {
 		t.Errorf("%d of %d pixels beside the turning card are the window at rest, pixel for pixel: it is standing behind its own turn",
 			same, total)
+	}
+}
+
+// **The photographs of a framed window are wiped when its turn ends.**
+//
+// A framed window turns as two pictures of itself, so the turn holds
+// two copies of whatever the window showed — for secretvault, two
+// copies of a password on screen (item 78). The panel wipes its own
+// rasterised copies; these are the window's to wipe.
+func TestTheWindowsPhotographsAreWipedWhenTheTurnEnds(t *testing.T) {
+	_, win, _ := framedFlipWindow(t)
+	win.Flip()
+	if win.turn == nil {
+		t.Fatal("the window is not turning as a picture")
+	}
+	var shots []*paintengine2d.Image
+	for _, c := range []widget.Component{win.turn.Front(), win.turn.Back()} {
+		s, ok := c.(*flipShot)
+		if !ok || s.img == nil {
+			t.Fatal("a face of the turn is not a photograph")
+		}
+		shots = append(shots, s.img)
+	}
+	set := 0
+	for _, im := range shots {
+		for _, b := range im.Pix {
+			if b != 0 {
+				set++
+			}
+		}
+	}
+	if set == 0 {
+		t.Fatal("the photographs are blank; this test cannot tell a wipe from nothing")
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for win.Turning() {
+		if time.Now().After(deadline) {
+			t.Fatal("the turn was still running after ten seconds")
+		}
+		win.Capture()
+	}
+	left := 0
+	for _, im := range shots {
+		for _, b := range im.Pix {
+			if b != 0 {
+				left++
+			}
+		}
+	}
+	if left != 0 {
+		t.Errorf("%d bytes of the window's two photographs are still set after the turn", left)
 	}
 }
