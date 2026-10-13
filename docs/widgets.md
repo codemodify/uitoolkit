@@ -184,9 +184,16 @@ slides against the screen; one placed by hand says so with
 
 **Breadcrumbs** say where a window is as a row of steps — Vault › personal
 › Logins — each a button: `widgets.NewBreadcrumbs(Crumb{Text, Icon,
-OnClick, Menu}, …)`. A step with a `Menu` opens what it could be changed
-to instead of going anywhere, and the menu is built when it is pressed,
-so a list that depends on what is on disk is read then. The default shape
+OnClick, Menu, Opens, Tip}, …)`. A step with a `Menu` opens what it could
+be changed to instead of going anywhere, and the menu is built when it is
+pressed, so a list that depends on what is on disk is read then. Such a
+step is drawn with a chevron after its words, so that it looks like what
+it does; `Opens` puts the same mark on a step that raises a drop-down of
+the application's own. `Tip` is what one step says when the pointer rests
+on it, and its description to a screen reader — the step's own, because a
+path whose steps are a vault, an item and a tab has something different
+to say at each, and a tip on the row says one thing wherever the pointer
+is. The default shape
 is words with the look's own chevron between them (a file manager's
 address bar); `Arrows` draws each step as a slab with a point and the
 next one's notch over it (a shell's path bar), where a press in the notch
@@ -1296,6 +1303,12 @@ client asked. So what turns is everything the toolkit draws, and the
 window is made to follow it: while the card turns, the window's shape is
 set to its silhouette every frame, so the desktop shows through wherever
 the card is not and what the eye is given is a window rotating in place.
+
+**A picture of a face is a copy of what it showed**, so a turn's two
+pictures are zeroed when it ends, and `panel.Wipe()` is there for an
+application taking the panel down itself. A password manager that turns
+its window over with a secret on screen wipes every copy it makes of
+one; these were copies it could not reach.
 
 **The toolkit's own frame turns with it**, so the window keeps its resize
 edges, its minimise and its maximise through the turn and after it. The

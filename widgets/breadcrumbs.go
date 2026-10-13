@@ -25,6 +25,19 @@ type Crumb struct {
 	// A step with a Menu and an OnClick offers the menu; the click is
 	// what a step with no menu does.
 	Menu func() []*MenuItem
+	// Opens marks a step that opens something of the application's own
+	// — a drop-down it puts up itself from OnClick — so that it is
+	// drawn with the same chevron as a step with a Menu. A step with a
+	// Menu needs no flag: it is one.
+	Opens bool
+	// Tip is what the step says when the pointer rests on it, and its
+	// description to a screen reader. Empty for a step that has nothing
+	// to add to its own name.
+	//
+	// It is the step's, not the row's: a path whose steps are a vault,
+	// an item and a tab has something different to say at each, and a
+	// tip on the row said one thing wherever the pointer was.
+	Tip string
 }
 
 // Breadcrumbs is a path of steps, each a button: Vault › personal ›
@@ -134,8 +147,19 @@ func (b *Breadcrumbs) crumbWidth(i int, pad, gap, iconSide float32) float32 {
 	if c.Text != "" {
 		w += style.ControlAdvanceOf(b.Look(), style.RoleTool, c.Text)
 	}
+	if crumbOpens(c) {
+		w += gap + crumbChevron(iconSide)
+	}
 	return w
 }
+
+// crumbOpens reports whether pressing the step puts something up rather
+// than going somewhere: a Menu of the toolkit's, or a drop-down the
+// application opens from OnClick and marks with [Crumb.Opens].
+func crumbOpens(c Crumb) bool { return c.Menu != nil || c.Opens }
+
+// crumbChevron is how wide the mark on such a step is.
+func crumbChevron(iconSide float32) float32 { return iconSide * 0.6 }
 
 func (b *Breadcrumbs) Measure(c layout.Constraints) paintengine2d.Point {
 	h, pad, gap, iconSide, sep := b.crumbMetrics()
@@ -360,11 +384,15 @@ func (b *Breadcrumbs) paintCrumb(ctx *paintengine2d.Context, r paintengine2d.Rec
 	case !last:
 		ink = lk.Palette().TextMuted
 	}
-	x := r.Min.X + pad
+	// off is where we are within the step rather than the absolute x:
+	// fewer large numbers subtracted from large ones, which is what
+	// makes a step's room come out a hair under the advance it was
+	// measured with (Font.Fit allows for the rest).
+	off := pad
 	if icon != style.IconNone {
-		box := paintengine2d.XYWH(x, r.Min.Y+(r.Dy()-iconSide)*0.5, iconSide, iconSide)
+		box := paintengine2d.XYWH(r.Min.X+off, r.Min.Y+(r.Dy()-iconSide)*0.5, iconSide, iconSide)
 		style.DrawToolIcon(ctx, box, icon, ink, style.IconSetOf(lk))
-		x = box.Max.X + gap
+		off += iconSide + gap
 	}
 	if text == "" {
 		return
@@ -373,8 +401,35 @@ func (b *Breadcrumbs) paintCrumb(ctx *paintengine2d.Context, r paintengine2d.Rec
 	if f == nil {
 		return
 	}
-	shown := f.Fit(style.ControlLabelOf(lk, style.RoleTool, text), r.Max.X-pad-x)
-	f.Draw(ctx, shown, paintengine2d.Pt(x, r.Min.Y+(r.Dy()-f.Height())*0.5), ink)
+	room := r.Dx() - off - pad
+	var chev float32
+	if i >= 0 && crumbOpens(b.Crumbs[i]) {
+		chev = crumbChevron(iconSide)
+		room -= gap + chev
+	}
+	shown := f.Fit(style.ControlLabelOf(lk, style.RoleTool, text), room)
+	f.Draw(ctx, shown, paintengine2d.Pt(r.Min.X+off, r.Min.Y+(r.Dy()-f.Height())*0.5), ink)
+	if chev <= 0 {
+		return
+	}
+	// A step that opens something says so, as the manager's own
+	// breadcrumbs did: a chevron after the words, and nothing after a
+	// step that only goes somewhere.
+	box := paintengine2d.XYWH(r.Max.X-pad-chev, r.Min.Y+(r.Dy()-chev)*0.5, chev, chev)
+	style.DrawArrowOf(lk, ctx, box.Inset(chev*0.2), style.DirDown, ink)
+}
+
+// Tooltip is the tip of the step the pointer is on, and nothing when it
+// is on none of them or that step has nothing to add.
+//
+// A tip set on a box round the row says the same thing wherever the
+// pointer is, which for a path — a vault, an item, a tab — is the wrong
+// thing at two steps out of three.
+func (b *Breadcrumbs) Tooltip() string {
+	if b == nil || b.hover < 0 || b.hover >= len(b.Crumbs) {
+		return ""
+	}
+	return b.Crumbs[b.hover].Tip
 }
 
 // focusRect is the box the focus ring goes round.

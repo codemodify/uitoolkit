@@ -1101,6 +1101,12 @@ func (b *Breadcrumbs) AccessibleItems() []*a11y.Node {
 			node.State |= a11y.StateOffscreen
 		}
 		node.Actions = node.Actions.With(a11y.ActionDefault)
+		// A step's tip is its own, so it is this node's description and
+		// not the row's: a path whose steps are a vault, an item and a
+		// tab has something different to say at each.
+		if c.Tip != "" {
+			node.Description = c.Tip
+		}
 		out = append(out, node)
 	}
 	return out

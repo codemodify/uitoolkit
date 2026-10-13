@@ -242,3 +242,87 @@ func TestThePathIsReadAsOne(t *testing.T) {
 		t.Errorf("the reader's press picked %v", picked)
 	}
 }
+
+// **A step says a tip of its own.**
+//
+// A path's steps are different things — a vault, an item, a tab — and a
+// tip set on a box round the row said the same thing wherever the
+// pointer was, which is the wrong thing at two steps out of three.
+// secretvault held the row in such a box and said the vault's state at
+// every step.
+func TestAStepSaysATipOfItsOwn(t *testing.T) {
+	b := NewBreadcrumbs(
+		Crumb{Text: "Vault", Tip: "personal: unlocked, 4 items"},
+		Crumb{Text: "Grants", Tip: "shared with 2 people"},
+		Crumb{Text: "Plain"},
+	)
+	b.SetLook(style.DarkLook())
+	w := b.Measure(layout.Loose(900, 40))
+	b.Arrange(paintengine2d.XYWH(0, 0, w.X, w.Y))
+
+	if got := b.Tooltip(); got != "" {
+		t.Errorf("a row nobody is pointing at says %q", got)
+	}
+	for i, want := range []string{"personal: unlocked, 4 items", "shared with 2 people", ""} {
+		r := b.CrumbRect(i)
+		b.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(r.Min.X+r.Dx()*0.5, r.Min.Y+r.Dy()*0.5)})
+		if got := b.Tooltip(); got != want {
+			t.Errorf("the pointer on step %d says %q, want %q", i, got, want)
+		}
+	}
+	b.MouseExit()
+	if got := b.Tooltip(); got != "" {
+		t.Errorf("the pointer gone, the row still says %q", got)
+	}
+
+	// And a screen reader is told the same thing, per step.
+	items := b.AccessibleItems()
+	if len(items) != 3 {
+		t.Fatalf("%d nodes for three steps", len(items))
+	}
+	if items[0].Description != "personal: unlocked, 4 items" || items[1].Description != "shared with 2 people" {
+		t.Errorf("the nodes describe %q and %q", items[0].Description, items[1].Description)
+	}
+	if items[2].Description != "" {
+		t.Errorf("a step with nothing to add describes itself as %q", items[2].Description)
+	}
+}
+
+// **A step that opens something is marked.**
+//
+// A step is drawn with its icon and its words whether pressing it goes
+// there or puts up a menu of what it could be changed to. The vault's
+// own breadcrumbs had a chevron after the words of a step that opens
+// something and none on one that does not.
+func TestAStepThatOpensSomethingIsMarked(t *testing.T) {
+	plain := NewBreadcrumbs(Crumb{Text: "Vault"})
+	menu := NewBreadcrumbs(Crumb{Text: "Vault", Menu: func() []*MenuItem { return nil }})
+	opens := NewBreadcrumbs(Crumb{Text: "Vault", Opens: true})
+	for _, b := range []*Breadcrumbs{plain, menu, opens} {
+		b.SetLook(style.DarkLook())
+	}
+	flat := plain.Measure(layout.Loose(900, 40))
+	withMenu := menu.Measure(layout.Loose(900, 40))
+	withOpens := opens.Measure(layout.Loose(900, 40))
+	if withMenu.X <= flat.X {
+		t.Errorf("a step with a menu is %v wide and a plain one %v: no room was kept for a mark", withMenu.X, flat.X)
+	}
+	if withOpens.X != withMenu.X {
+		t.Errorf("a step that says it opens something is %v wide and one with a menu %v: they wear the same mark", withOpens.X, withMenu.X)
+	}
+
+	// And the mark is drawn: the step's own box has ink in it that the
+	// plain one does not, at the end where the chevron goes.
+	draw := func(b *Breadcrumbs, w paintengine2d.Point) *paintengine2d.Image {
+		b.Arrange(paintengine2d.XYWH(0, 0, w.X, w.Y))
+		img := paintengine2d.NewImage(int(w.X)+2, int(w.Y)+2)
+		ctx := paintengine2d.NewContext(img)
+		b.Paint(ctx)
+		img.Touch()
+		return img
+	}
+	a, c := draw(plain, withMenu), draw(menu, withMenu)
+	if n := differingPixels(a, c, 8); n < 10 {
+		t.Errorf("the two steps differ in %d pixels; the mark is not drawn", n)
+	}
+}
