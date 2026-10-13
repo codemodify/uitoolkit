@@ -1358,7 +1358,10 @@ frame, so a turn costs the columns and not the trees behind them. On the
 GPU that is free; on the CPU device a full-window card is a few megapixels
 a frame, so a large one is better flipped where `Window.UsesGPU` reports
 true. `examples/uitoolkit-sample-flip` is a small player with its settings
-on the back.
+on the back: `-window` turns the whole thing over, frame and all, and
+`-window -noframe` is the other way — no frame from anybody, each face
+drawing one of its own, which is what an application had to do before
+the toolkit could turn a frame.
 
 ## Glass, and the light on it
 

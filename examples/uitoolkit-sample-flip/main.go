@@ -34,6 +34,7 @@ func main() {
 	strips := flag.Int("strips", 0, "columns the face is cut into (0 takes the default)")
 	motion := flag.Bool("motion", false, "animate even where the desktop asks for reduced motion")
 	whole := flag.Bool("window", false, "turn the whole window over, not a card inside it")
+	bare := flag.Bool("noframe", false, "with -window: no frame from anybody, each face draws its own")
 	flag.Parse()
 
 	// A desktop with its animations switched off (Plasma's
@@ -63,20 +64,34 @@ func main() {
 		Title: windowTitle(name), Width: 520, Height: 360, MinWidth: 420, MinHeight: 300,
 	}
 	if *whole {
-		// No frame from anybody: a window that turns over draws its own,
-		// on the faces, so that the frame turns with them. The desktop's
-		// frame cannot turn (the toolkit does not draw it) and the
-		// toolkit's own sits outside the content, so either would be the
-		// one part that stayed still — and under DecorationsClient the
-		// first version of this wore two captions, the window's and the
-		// face's. DecorationsNone is the mode for exactly this: "no
-		// frame at all; the app draws whatever it wants".
-		opts.Decorations = platform.DecorationsNone
+		// The toolkit's own frame turns with the window, so the window
+		// keeps its resize edges, its minimise and its maximise through
+		// the turn: ask for it and call Flip. (The desktop's frame
+		// cannot turn — the toolkit does not draw it — so a window
+		// wearing that one turns its contents inside a frame that stays
+		// still.)
+		opts.Decorations = platform.DecorationsClient
+		if *bare {
+			// The other way, and what this sample had to do before the
+			// toolkit could turn a frame: no frame from anybody, and
+			// each face draws one of its own. It costs the resize
+			// edges, the minimise and the maximise, and each face has
+			// to be told what a caption does.
+			opts.Decorations = platform.DecorationsNone
+		}
 	}
 	win, err := a.NewWindow(opts)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// The turn is what this program is: with it off there is nothing to
+	// look at, which is what style.MotionAlways is for — the motion that
+	// carries the meaning rather than the motion that decorates. An
+	// application says it on the window, or on the panel, or on the
+	// dialog, and everything inside inherits it. (-motion is the other
+	// way round: UITK_ANIMATIONS belongs to whoever starts a program,
+	// and beats every preference including this one.)
+	win.SetMotion(style.MotionAlways)
 
 	card := &card{volume: 65, quality: 2}
 	if *whole {
@@ -86,18 +101,16 @@ func main() {
 		// no status line here — a bar outside the card would be a strip
 		// that did not turn with the window it belongs to.
 		//
-		// The frame has to go *on the faces*. A window wears its frame
-		// outside its content, so a frame left to the window would be
-		// the one part that stayed still while everything inside it
-		// turned; and dropping the frame without putting one back is how
-		// the first version of this came out with no border at all. Each
-		// face is an in-app window instead — the look's own frame,
-		// caption and close button, drawn by the era in its own style —
-		// so the border turns with the card that wears it.
-		// The faces carry the chrome, so they carry what the chrome does:
-		// the caption hands the press to the desktop for a move, or the
-		// window has a title bar that cannot move it.
-		card.chrome, card.onClose, card.onMove = true, a.Quit, win.StartMove
+		// Under -noframe the frame goes *on the faces*: each one is an
+		// in-app window, wearing the look's own frame, caption and
+		// close button, so the border turns with the card. Carrying the
+		// chrome means carrying what the chrome does — the caption
+		// hands the press to the desktop for a move, or the window has
+		// a title bar that cannot move it. With the toolkit's frame
+		// there is nothing to do: it is in the picture that turns.
+		if *bare {
+			card.chrome, card.onClose, card.onMove = true, a.Quit, win.StartMove
+		}
 		card.adopt(win.SetFlipFaces(card.front(), card.settings()))
 	} else {
 		// A card inside an ordinary window: the window does not move, and
