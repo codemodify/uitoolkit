@@ -241,10 +241,23 @@ func (t *TextArea) Arrange(r paintengine2d.Rect) {
 	t.clampScroll()
 }
 
+// inner is the box the text is laid out in: the view less its padding,
+// and **never negative**.
+//
+// XYWH canonicalises a negative size, so a view shorter than its own
+// padding came back with a box 2·pad *tall* instead of empty — a 0px
+// view answering 20px. Everything that asks "is there room?" was
+// therefore told yes before the window had ever laid out, and
+// ensureCaretVisible scrolled a 26px line into a 20px box that does not
+// exist. comms-mail's reading pane opened 6.3px down its first line and
+// stayed there, because once the view grew that offset was legal.
 func (t *TextArea) inner() paintengine2d.Rect {
 	pad := t.fieldPad()
 	b := t.LocalBounds()
-	return paintengine2d.XYWH(pad, pad, b.Dx()-pad*2, b.Dy()-pad*2)
+	return paintengine2d.Rect{
+		Min: paintengine2d.Pt(pad, pad),
+		Max: paintengine2d.Pt(pad+max(b.Dx()-pad*2, 0), pad+max(b.Dy()-pad*2, 0)),
+	}
 }
 
 // areaLayout caches one wrap result. Re-wrapping is O(runes) with a font
@@ -700,7 +713,15 @@ func (t *TextArea) ensureCaretVisible() {
 		t.scrollY = y
 	}
 	if y+lh > t.scrollY+inner.Dy() {
-		t.scrollY = y + lh - inner.Dy()
+		// A line taller than the box cannot be brought into view by
+		// its bottom: scrolling to `y+lh-inner` puts its *top* above
+		// the edge, which is the first line cut off at the top rather
+		// than the last line shown whole. Its top is what to keep.
+		if lh > inner.Dy() {
+			t.scrollY = y
+		} else {
+			t.scrollY = y + lh - inner.Dy()
+		}
 	}
 	if !t.Wrap && li >= 0 && li < len(t.lines) {
 		ln := t.lines[li]
