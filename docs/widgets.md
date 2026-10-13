@@ -1297,20 +1297,35 @@ window is made to follow it: while the card turns, the window's shape is
 set to its silhouette every frame, so the desktop shows through wherever
 the card is not and what the eye is given is a window rotating in place.
 
-That has one consequence to know before reaching for it: the desktop's own
-frame cannot turn, because the toolkit does not draw it. Use the
-toolkit's own decorations (`platform.DecorationsClient`) or none.
+**The toolkit's own frame turns with it**, so the window keeps its resize
+edges, its minimise and its maximise through the turn and after it. The
+panel cannot reach the frame — it is the window's content, the frame is
+drawn outside that box, and every component is clipped to its own box —
+so a framed window turns as a *picture* of itself: the window is
+photographed with each face up, and those two pictures are turned over
+everything it draws. The live content under the picture is already the
+face being turned to, so when the picture goes there is nothing to swap.
+Two full repaints at the start is what that costs, once per flip.
+
+That leaves one consequence to know before reaching for it: the
+**desktop's** frame cannot turn, because the toolkit does not draw it.
+Use the toolkit's own decorations (`platform.DecorationsClient`) or none.
 `win.SetFlipShapesWindow(false)` leaves the window a plain rectangle and
 turns only what is inside it, which is the honest choice for a window
 wearing the desktop's frame.
 
-Since the frame has to turn with the card, it has to be *on* the card:
-ask for `platform.DecorationsNone` and make each face a `Panel` with
-`Window` set, which wears the look's own frame, caption and close button.
-A caption drawn that way is paint until it is told what a caption does —
-`panel.OnCaptionPress = win.StartMove` hands the press to the desktop for
-an interactive move, and `panel.OnClose` closes. Without the first, the
-window has a title bar that cannot move it.
+`win.Turning()` is the one question that answers both kinds of turn —
+the whole window's and, for a window with no frame of the toolkit's, the
+card's. While it runs, nothing under the picture takes the pointer: what
+is under it is not where it appears to be.
+
+With `platform.DecorationsNone` the faces carry the chrome themselves:
+make each one a `Panel` with `Window` set, which wears the look's own
+frame, caption and close button. A caption drawn that way is paint until
+it is told what a caption does — `panel.OnCaptionPress = win.StartMove`
+hands the press to the desktop for an interactive move, and
+`panel.OnClose` closes. Without the first, the window has a title bar
+that cannot move it.
 
 ### It is a real perspective turn, not a squeeze
 

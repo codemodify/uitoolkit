@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codemodify/paintengine2d"
+
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -184,5 +186,253 @@ func TestAWindowCanSayItsTurnCarriesMeaning(t *testing.T) {
 	win.Capture()
 	if !p.Turning() {
 		t.Error("the window said its turn carries meaning and the preference still cut it")
+	}
+}
+
+// framedFlipWindow is a window wearing the toolkit's own frame whose
+// whole content is two faces, in a pack whose caption is unmistakable in
+// a picture: Hangar's close button is a block of ember.
+func framedFlipWindow(t *testing.T) (*Application, *Window, *widgets.FlipPanel) {
+	t.Helper()
+	t.Setenv(style.AnimationsEnv, "1")
+	t.Setenv(platform.EnvDecorations, "")
+	p, ok := style.LoadTheme("hangar")
+	if !ok {
+		t.Skip("the hangar pack is not in this build")
+	}
+	a := New(Options{Look: p.Look(), Headless: true, Scale: 1})
+	win, err := a.NewWindow(platform.WindowOptions{Title: "Player", Width: 520, Height: 360,
+		Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(win.Close)
+	fp := win.SetFlipFaces(widgets.NewButton("front", nil), widgets.NewButton("back", nil))
+	fp.Strips = 32
+	a.PumpOnce()
+	win.Capture()
+	if !win.geom.framed {
+		t.Fatal("the window is not drawing its own frame; this test is not testing what it says")
+	}
+	return a, win, fp
+}
+
+// **A framed window turns over with its frame.**
+//
+// Reported as a gap: `Window.Flip` worked only on a window with no frame
+// of the toolkit's, and the frame is what supplies the resize edges, the
+// minimise and the maximise — so an application that wanted the turn had
+// to give those up and draw a caption of its own on each face. The panel
+// could not do otherwise: it is the window's content, every component is
+// clipped to its own box, and the frame is drawn outside that box.
+//
+// So the window turns as one picture. This asks the two questions that
+// says: the caption is *in* the turning card, and the card is all there
+// is of the window while it turns.
+func TestAFramedWindowTurnsWithItsFrame(t *testing.T) {
+	_, win, fp := framedFlipWindow(t)
+	accent := win.look.Palette().Accent
+
+	// At rest the caption is there, with its ember close button.
+	flat := win.Capture()
+	if flat == nil {
+		t.Fatal("nothing captured")
+	}
+	if n := countNear(flat, accent, 0.08); n < 50 {
+		t.Fatalf("the window at rest has %d accent pixels; the caption's close button is not in it", n)
+	}
+
+	win.Flip()
+	if !win.Turning() {
+		t.Fatal("the window is not turning")
+	}
+	// The content under the picture is already the face being turned to,
+	// so when the picture goes there is nothing left to swap.
+	if !fp.Showing() {
+		t.Error("the content did not swap to the back under the picture")
+	}
+	if fp.Turning() {
+		t.Error("the content is turning inside a window that is turning: the card would turn twice")
+	}
+
+	// A turn runs on the real clock, so the loop does as little as it
+	// can: one capture to draw the frame, the shape's width read off the
+	// raster, and exactly one picture kept — the first frame the card
+	// has plainly turned in. Counting pixels inside the loop spent the
+	// four hundred milliseconds it has on arithmetic instead of frames.
+	wide := win.windowBox().Dx()
+	var widths []int
+	var turned *paintengine2d.Image
+	deadline := time.Now().Add(10 * time.Second)
+	for win.Turning() {
+		if time.Now().After(deadline) {
+			t.Fatal("the turn was still running after ten seconds")
+		}
+		img := win.Capture()
+		if img == nil || !win.Turning() {
+			break
+		}
+		r := win.shapeRaster()
+		if r == nil {
+			t.Fatal("a turning window has no silhouette: the shape is not following the card")
+		}
+		widths = append(widths, r.Bounds.W)
+		if turned == nil && float32(r.Bounds.W) < wide*0.8 {
+			turned = img.Clone()
+		}
+	}
+	if len(widths) < 3 {
+		t.Fatalf("only %d frames were drawn; the turn did not run", len(widths))
+	}
+	narrowest := widths[0]
+	for _, w := range widths {
+		if w > int(wide) {
+			t.Fatalf("the silhouette is %d wide on a %v window: it is not the card", w, wide)
+		}
+		if w < narrowest {
+			narrowest = w
+		}
+	}
+	if float32(narrowest) > wide*0.8 {
+		t.Errorf("the narrowest frame is %d of %v: the card never turned far enough to be one", narrowest, wide)
+	}
+	caption := 0
+	if turned != nil && countNear(turned, accent, 0.08) > 20 {
+		caption++
+	}
+	if caption == 0 {
+		t.Error("no frame of the turn had the caption's ember in it: the frame did not turn with the window")
+	}
+
+	// And at the end the window is itself again: frame, caption, buttons.
+	win.Capture()
+	if win.turn != nil {
+		t.Error("the picture is still over the window after the turn")
+	}
+	if win.flipShaped {
+		t.Error("the window kept the card's shape after the turn")
+	}
+	done := win.Capture()
+	if n := countNear(done, accent, 0.08); n < 50 {
+		t.Errorf("the window has %d accent pixels after the turn; the caption did not come back", n)
+	}
+}
+
+// countNear is how many pixels of img are within tol of col on every
+// channel, alpha included only as "not transparent".
+func countNear(img *paintengine2d.Image, col paintengine2d.Color, tol float32) int {
+	if img == nil {
+		return 0
+	}
+	n := 0
+	near := func(a, b float32) bool { return a-b < tol && b-a < tol }
+	for y := 0; y < img.Height; y++ {
+		for x := 0; x < img.Width; x++ {
+			p := img.NRGBAAt(x, y)
+			if p.A < 128 {
+				continue
+			}
+			if near(float32(p.R)/255, col.R) && near(float32(p.G)/255, col.G) && near(float32(p.B)/255, col.B) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// **A maximized window turns against its own ground, not against itself.**
+//
+// A silhouette is dropped where the window is maximized or tiled — it
+// fills a box the desktop chose and shares its edges with the screen —
+// so the card cannot be cut out of the window there. Were the window
+// still drawn under its own picture it would stand flat behind the
+// turning one: two windows, one of them rotating.
+//
+// What says so is the strip beside the card. Drawn under its picture,
+// that strip is the window, pixel for pixel what it looks like at rest;
+// with nothing under the picture it is the ground the window paints and
+// nothing else.
+func TestAMaximizedWindowDoesNotStandBehindItsOwnTurn(t *testing.T) {
+	for _, scene := range []string{"1", "0"} {
+		t.Run("scene="+scene, func(t *testing.T) {
+			t.Setenv(platform.EnvScene, scene)
+			maximizedTurnStandsAlone(t)
+		})
+	}
+}
+
+// maximizedTurnStandsAlone is the body, run once against each painter:
+// the recorded one and the immediate one. A layer the window draws has
+// to be in both, and this one was added to both.
+func maximizedTurnStandsAlone(t *testing.T) {
+	a, win, _ := framedFlipWindow(t)
+	o := win.Surface().(*platform.Offscreen)
+	o.SimulateWindowState(platform.WindowState{Activated: true, Maximized: true})
+	a.PumpOnce()
+	win.Capture()
+	if !win.state.Maximized {
+		t.Fatal("the window did not maximize")
+	}
+
+	win.Flip()
+	if !win.Turning() {
+		t.Fatal("a maximized window did not turn")
+	}
+	if win.shapeRaster() != nil {
+		t.Fatal("a maximized window took a shape; this test is about the case where it cannot")
+	}
+	// The first frame whose card leaves a wide strip of window beside it.
+	var mid *paintengine2d.Image
+	var cardRight float32
+	deadline := time.Now().Add(10 * time.Second)
+	for win.Turning() && mid == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the turn was still running after ten seconds")
+		}
+		img := win.Capture()
+		if img == nil || !win.Turning() {
+			break
+		}
+		p := win.turn
+		if p == nil || p.CardOutline() == nil {
+			continue
+		}
+		b := p.CardOutline().Bounds()
+		if b.Dx() < win.windowBox().Dx()*0.7 {
+			mid, cardRight = img.Clone(), b.Max.X
+		}
+	}
+	if mid == nil {
+		t.Skip("the turn never reached a frame narrow enough to read; the clock beat the painter")
+	}
+	for win.Turning() {
+		win.Capture()
+	}
+	flat := win.Capture()
+	if flat == nil || flat.Width != mid.Width || flat.Height != mid.Height {
+		t.Fatal("the window at rest is not the same size as the window turning")
+	}
+
+	// Beside the card, down the whole height: identical to the window at
+	// rest means the window is being drawn there.
+	x0 := int(cardRight) + 8
+	if x0 >= mid.Width-4 {
+		t.Skipf("the card reaches %v of %d: no strip beside it to read", cardRight, mid.Width)
+	}
+	same, total := 0, 0
+	for y := 0; y < mid.Height; y += 3 {
+		for x := x0; x < mid.Width; x += 3 {
+			total++
+			if mid.NRGBAAt(x, y) == flat.NRGBAAt(x, y) {
+				same++
+			}
+		}
+	}
+	if total == 0 {
+		t.Fatal("no pixels beside the card to compare")
+	}
+	if float32(same) > float32(total)*0.9 {
+		t.Errorf("%d of %d pixels beside the turning card are the window at rest, pixel for pixel: it is standing behind its own turn",
+			same, total)
 	}
 }

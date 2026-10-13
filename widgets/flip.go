@@ -176,6 +176,26 @@ func (f *FlipPanel) ShowFront() { f.show(false) }
 func (f *FlipPanel) ShowBack() { f.show(true) }
 
 // show turns to a face, or swaps to it where there is to be no animation.
+// ShowNow puts a face up at once, with no turn, whatever the look or
+// the environment says about motion — and ends a turn already running.
+//
+// It is not a quieter [FlipPanel.Flip]: it is for the caller that is
+// drawing the turn itself. A framed window turns as one picture over
+// everything it draws ([app.Window.Flip]), and the live content under
+// that picture has to be the face being turned to from the first frame,
+// or the window would turn to a face it then has to swap in afterwards.
+// [FlipPanel.OnFlip] fires, because the face that is up did change.
+func (f *FlipPanel) ShowNow(back bool) {
+	if back == f.showingBack && !f.turn.running {
+		return
+	}
+	f.showingBack = back
+	f.turn = flipTurn{}
+	f.syncFaces()
+	f.Invalidate()
+	f.flipped()
+}
+
 func (f *FlipPanel) show(back bool) {
 	if back == f.showingBack && !f.turn.running {
 		return

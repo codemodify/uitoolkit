@@ -125,12 +125,16 @@ type Window struct {
 	flip       *widgets.FlipPanel
 	flipShapes bool
 	flipShaped bool
+	// turn is the picture of the whole window — frame and all — that a
+	// framed window turns over, and nil at every other moment
+	// (app/flip.go).
+	turn *widgets.FlipPanel
 	// motion is what this window says about moving, over the user's
 	// preference, and what widget.MotionOf reads for a component whose
 	// own tree states nothing (app/motion.go).
 	motion style.Motion
-	layers     *widget.SceneCache
-	scene      *paintengine2d.Scene
+	layers *widget.SceneCache
+	scene  *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not
 	// clone every path it records each frame.
 	paths *paintengine2d.PathCache
@@ -1490,6 +1494,12 @@ func (w *Window) hit(p paintengine2d.Point) widget.Component {
 }
 
 func (w *Window) hitContent(p paintengine2d.Point) widget.Component {
+	if w.turn != nil {
+		// A window in the middle of turning over is a picture: what is
+		// under the pointer is not where it appears to be, and in four
+		// hundred milliseconds it will be somewhere else again.
+		return nil
+	}
 	if w.cover != nil {
 		// Nothing under it: a press that misses the cover's own widgets
 		// reaches no one, because what it would reach cannot be seen.
@@ -1978,6 +1988,7 @@ func (w *Window) layout() {
 		}
 	}
 	w.arrangeCover()
+	w.arrangeTurn()
 	w.arrangeToasts()
 	if w.statusMenu && w.popup != nil {
 		w.popup.Arrange(box)
@@ -2185,6 +2196,15 @@ func (w *Window) frame() {
 // dirty (device pixels) only skips subtrees that cannot contribute; the
 // caller's clip is what makes the result correct.
 func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
+	if w.turn != nil {
+		// The photographs hold the frame and the content both, so
+		// nothing under them is drawn. It is also the only thing that is
+		// right for a window that cannot wear the card's shape — a
+		// maximized or tiled one — which would otherwise stand there
+		// flat behind its own turning picture.
+		widget.PaintTree(w.turn, ctx, dirty)
+		return
+	}
 	if w.caption != nil {
 		w.paintDecoration(ctx)
 		widget.PaintTree(w.caption, ctx, dirty)
@@ -2397,21 +2417,26 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	// partial redraw happens at replay, where the engine clips every op to
 	// the dirty box. Recording a subset would make the next partial replay
 	// paint from a scene that never had the clean widgets in it.
-	if w.caption != nil {
-		w.paintDecoration(ctx)
-		widget.RecordTree(w.caption, rec, ctx, nil, w.layers, false)
-	}
-	if w.root != nil {
-		widget.RecordTree(w.root, rec, ctx, nil, w.layers, false)
-	}
-	if w.overlay != nil {
-		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
-	}
-	if w.cover != nil {
-		widget.RecordTree(w.cover, rec, ctx, nil, w.layers, true)
-	}
-	if w.toasts != nil {
-		widget.RecordTree(w.toasts, rec, ctx, nil, w.layers, true)
+	if w.turn != nil {
+		// Nothing under the turning picture, as in paintLayers.
+		widget.RecordTree(w.turn, rec, ctx, nil, w.layers, true)
+	} else {
+		if w.caption != nil {
+			w.paintDecoration(ctx)
+			widget.RecordTree(w.caption, rec, ctx, nil, w.layers, false)
+		}
+		if w.root != nil {
+			widget.RecordTree(w.root, rec, ctx, nil, w.layers, false)
+		}
+		if w.overlay != nil {
+			widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
+		}
+		if w.cover != nil {
+			widget.RecordTree(w.cover, rec, ctx, nil, w.layers, true)
+		}
+		if w.toasts != nil {
+			widget.RecordTree(w.toasts, rec, ctx, nil, w.layers, true)
+		}
 	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
