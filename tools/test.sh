@@ -34,4 +34,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export UITK_SYSTEM_FONTS=${UITK_SYSTEM_FONTS:-0}
+
+# A package to test, always. `go test` given flags alone tests the package
+# in the working directory — the repository root, which holds a handful of
+# files — so a run meant for the whole toolkit finished in a quarter of a
+# second having tested almost nothing, and printed ok. It happened twice in
+# one afternoon, both times reported as a pass. Name no package and the
+# whole tree is the default.
+have_pkg=0
+for a in "$@"; do
+  case "$a" in ./*|.|github.com/*) have_pkg=1 ;; esac
+done
+[ "$have_pkg" = 1 ] || set -- "$@" ./...
 exec tools/testenv.sh go test -tags theme_engine_all "$@"

@@ -92,6 +92,18 @@ rsync -az --delete --exclude '.git' --exclude 'tools/atlas/out' --exclude '*.tes
 # The arguments go through a second shell on the far side, so each one is
 # quoted for it: without this a -run 'A|B' arrives as a pipeline and the
 # Mac tries to run a command called TestB.
+# A package to test, always. `go test` given flags alone tests the package
+# in the working directory — the repository root, which holds a handful of
+# files — so a run meant for the whole toolkit finished in a quarter of a
+# second having tested almost nothing, and printed ok. It happened twice in
+# one afternoon, both times reported as a pass. Name no package and the
+# whole tree is the default.
+have_pkg=0
+for a in "$@"; do
+  case "$a" in ./*|.|github.com/*) have_pkg=1 ;; esac
+done
+[ "$have_pkg" = 1 ] || set -- "$@" ./...
+
 args=""
 for a in "$@"; do args+=" $(printf %q "$a")"; done
 

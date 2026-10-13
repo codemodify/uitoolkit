@@ -43,6 +43,18 @@ D="tools/e2e/$N"
 KINDS="${UITK_DISPLAY_KINDS:-x11 wayland}"
 export UITK_SYSTEM_FONTS=${UITK_SYSTEM_FONTS:-0}
 
+# A package to test, always. `go test` given flags alone tests the package
+# in the working directory — the repository root, which holds a handful of
+# files — so a run meant for the whole toolkit finished in a quarter of a
+# second having tested almost nothing, and printed ok. It happened twice in
+# one afternoon, both times reported as a pass. Name no package and the
+# whole tree is the default.
+have_pkg=0
+for a in "$@"; do
+  case "$a" in ./*|.|github.com/*) have_pkg=1 ;; esac
+done
+[ "$have_pkg" = 1 ] || set -- "$@" ./...
+
 # shellcheck disable=SC2086 -- the size is two words on purpose
 tools/e2e/start.sh "$N" ${UITK_DISPLAY_SIZE:-1280 860} >/dev/null
 disp=$(cat "$D/display")
