@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/codemodify/uitoolkit/platform"
 	"testing"
 	"time"
 
@@ -627,4 +628,61 @@ func ink(img *paintengine2d.Image) int {
 		}
 	}
 	return n
+}
+
+// **A key offered to the panel reaches the face that is up.**
+//
+// A window offers its own keys to its content root, which for a window
+// that turns over is the flip panel. The panel had no KeyPress, so an
+// application's shortcuts — the ones that work with the keyboard on the
+// title bar or on nothing — reached neither face, and stopped working
+// the day the turn became the toolkit's (secretvault item 90).
+func TestAKeyReachesTheFaceThatIsUp(t *testing.T) {
+	front, back := newKeyBox(), newKeyBox()
+	f := NewFlipPanel(front, back)
+	h := &timerHost{look: style.DarkLook(), now: time.Unix(1000, 0)}
+	f.SetHost(h)
+	f.Arrange(paintengine2d.XYWH(0, 0, flipW, flipH))
+
+	if !f.KeyPress(widget.KeyEvent{Key: platform.KeyF5}) {
+		t.Error("the face that is up did not take the key")
+	}
+	if front.keys != 1 || back.keys != 0 {
+		t.Errorf("the key went front=%d back=%d; it belongs to the face that is up", front.keys, back.keys)
+	}
+
+	f.ShowNow(true)
+	if !f.KeyPress(widget.KeyEvent{Key: platform.KeyF5}) {
+		t.Error("after the turn the back did not take the key")
+	}
+	if front.keys != 1 || back.keys != 1 {
+		t.Errorf("after turning, front=%d back=%d", front.keys, back.keys)
+	}
+
+	// A key nothing in the face took is not claimed by the panel.
+	front.take, back.take = false, false
+	if f.KeyPress(widget.KeyEvent{Key: platform.KeyF5}) {
+		t.Error("the panel claimed a key its face refused")
+	}
+}
+
+// keyBox counts the keys it is offered and says whether it took them.
+type keyBox struct {
+	widget.Base
+	keys int
+	take bool
+}
+
+func newKeyBox() *keyBox {
+	b := &keyBox{take: true}
+	b.Init(b)
+	return b
+}
+
+func (b *keyBox) KeyPress(widget.KeyEvent) bool {
+	if !b.take {
+		return false
+	}
+	b.keys++
+	return true
 }

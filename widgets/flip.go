@@ -336,6 +336,26 @@ func (f *FlipPanel) MousePress(e widget.MouseEvent) bool {
 	return f.Base.MousePress(e)
 }
 
+// KeyPress offers the key to the face that is up.
+//
+// A window whose content is a flip panel offers its own keys to its
+// content root (`app.Window.contentKey`) — that is where an application
+// keeps the shortcuts that work with the keyboard on the title bar, or
+// on nothing at all. The panel had no KeyPress, so those keys reached
+// neither face and an application's shortcuts stopped working the day
+// the turn became the toolkit's (secretvault item 90).
+//
+// Unlike a press, which is swallowed while the card turns because a
+// picture is not a target, a key is offered throughout: it has no
+// position to be wrong about, and the face it goes to is the one that
+// will be live when the turn ends.
+func (f *FlipPanel) KeyPress(e widget.KeyEvent) bool {
+	if up := f.upFace(); up != nil && up.KeyPress(e) {
+		return true
+	}
+	return f.Base.KeyPress(e)
+}
+
 func (f *FlipPanel) Paint(ctx *paintengine2d.Context) {
 	if !f.turn.running {
 		if up := f.upFace(); up != nil {
