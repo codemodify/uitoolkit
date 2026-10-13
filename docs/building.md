@@ -186,6 +186,7 @@ your binary is not there at all, and you get the default look:
 ```sh
 go build -tags theme_engine_adwaita ./...
 go build -tags theme_engine_all ./...      # every one, +8.4 MB
+go build -tags font_fallback ./...         # borrow glyphs the face lacks, +0
 ```
 
 Ask `style.ThemePackAvailable(name)` before you rely on one.
@@ -226,6 +227,10 @@ Two rules, and the second is the one that is easy to get wrong.
 **A mark is an icon, never a character.** The bundled face is Latin only
 and there is no font fallback, so `✓ → ★` typed into a label draw as
 boxes — on your machine as much as anyone's under `UITK_SYSTEM_FONTS=0`.
+(`-tags font_fallback` borrows a glyph from another installed family for
+a rune the face lacks, at no cost in binary size — but it is for *text*,
+the user's own CJK or Cyrillic words, and a mark is still an icon. See
+[contracts.md](contracts.md#no-font-fallback-unless-you-ask-for-it-at-build-time).)
 Use `Button.Icon`, `MenuItem.Icon`, `TableView.CellIcon`,
 `TreeNode.Icon`, **`Label.Icon`** for a mark nothing clicks (a status
 bar, a caption), or `style.DrawToolIcon` when painting yourself.

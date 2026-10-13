@@ -100,7 +100,7 @@ triangles are on the left, scroll bars are on the right, and a dialog's
 buttons are in the order the look's own convention puts them. Nothing
 reads a locale's direction, and there is no API to ask for the flip.
 
-### No font fallback
+### No font fallback, unless you ask for it at build time
 
 **One face draws everything.** A rune the selected face lacks is a box —
 the toolkit does not go looking for another font that has it, the way
@@ -110,6 +110,33 @@ This is the rule that surprises people, because installed fonts *do*
 matter: they decide **which single face is selected** for a pack, not
 which glyph is used for a rune. Installing Noto does not rescue a `✓` in
 a label set in Titillium Web.
+
+It has a cost, and it is worth stating plainly: two different CJK titles
+are then *the same row of boxes, pixel for pixel*, so a list shows two
+identical rows for two different things. A music player reported exactly
+that, with the accessible names correctly distinct and nothing to see.
+
+```sh
+go build -tags font_fallback ./...
+```
+
+builds the other behaviour: a rune the chosen face lacks is borrowed
+from the first family in `style.FallbackFamilies()` that has it — the
+built-in list names the usual CJK and wide-coverage families, and
+`style.SetFallbackFamilies("Noto Sans CJK JP", …)` replaces it. The
+borrowed face is baked to the borrowing face's baseline, so the glyphs
+sit on the line rather than above it.
+
+**It costs no bytes.** The faces are the machine's own; the toolkit
+embeds two Latin faces (0.65 MB) and nothing else, and one CJK family is
+18 MB, which is why it never will. What it costs instead is that text
+measurement then depends on what is installed — which is why it is a
+build-time choice and not the default, and why it is off under
+`UITK_SYSTEM_FONTS=0` along with everything else about installed fonts.
+
+It is fallback and nothing more: no shaping, so Arabic stays unjoined
+and Indic unreordered, and no bidi, so Hebrew stays in logical order.
+Scripts that need neither — CJK, Cyrillic, Greek — are what it is for.
 
 A face that cannot draw Latin at all — Noto Sans Arabic, Noto Sans CJK,
 Noto Color Emoji, and about thirty families the chooser offers on an

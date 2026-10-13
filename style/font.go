@@ -71,9 +71,13 @@ type shapeCache struct {
 }
 
 type shapedRun struct {
-	run paintengine2d.GlyphRun
-	adv float32
-	ink float32
+	// runs is the glyphs, grouped by the sheet they come from: one for
+	// text a single face draws, which is nearly all text, and one more
+	// for each face a fallback borrowed a glyph from. Positions are
+	// absolute within the run, so the groups may be drawn in any order.
+	runs []paintengine2d.GlyphRun
+	adv  float32
+	ink  float32
 	// xs is where each rune starts, kerning included, then where the run
 	// ends: carets, hit-testing and eliding read the layout Draw paints.
 	xs []float32
@@ -415,7 +419,7 @@ func (f *Font) shapeOf(text string) shapedRun {
 			f.shaped.mu.Lock()
 			hit, ok := f.shaped.m[text]
 			f.shaped.mu.Unlock()
-			if ok && hit.run.Atlas == cur {
+			if ok && hit.primary() == cur {
 				return hit
 			}
 		}
@@ -433,9 +437,11 @@ func (f *Font) shapeOf(text string) shapedRun {
 	if hit, ok := f.shaped.m[text]; ok {
 		// Re-point a run shaped against an earlier snapshot: cells are only
 		// ever added, so the positions still hold, and the superseded sheet
-		// stops being pinned by the cache.
-		if hit.run.Atlas != atlas {
-			hit.run.Atlas = atlas
+		// stops being pinned by the cache. Only this font's own sheet —
+		// a borrowed one belongs to the face it came from, which
+		// republishes on its own account.
+		if hit.primary() != atlas && len(hit.runs) > 0 {
+			hit.runs[0].Atlas = atlas
 			f.shaped.m[text] = hit
 		}
 		return hit
@@ -455,7 +461,7 @@ func (f *Font) shapeOf(text string) shapedRun {
 // with the face's pair kerning ("AV", "To") between neighbours, then snaps
 // the glyphs onto the pixel grid.
 func (f *Font) layout(text string, atlas *paintengine2d.FontAtlas) shapedRun {
-	run := paintengine2d.GlyphRun{Atlas: atlas}
+	lay := runList{atlas: atlas}
 	xs := make([]float32, 0, len(text)+1)
 	var x float32
 	prev := rune(-1)
@@ -465,21 +471,35 @@ func (f *Font) layout(text string, atlas *paintengine2d.FontAtlas) shapedRun {
 		if ok && prev >= 0 && f.ot != nil {
 			x += f.ot.kern(prev, r)
 		}
+		// A rune this face has not got, in a build that may borrow one.
+		// The box it would otherwise draw is what makes two different
+		// CJK titles the same row of pixels.
+		if !ok || f.isNotdef(cell) {
+			if fb := fallbackFor(f, r); fb != nil {
+				if fa := fb.atlasForRune(r); fa != nil {
+					if c2, ok2 := fa.Cell(id); ok2 {
+						xs = append(xs, x)
+						lay.add(fa, paintengine2d.Glyph{ID: id, X: x})
+						x += advanceOf(c2)
+						// No kerning across a borrowed glyph: the
+						// pair is not in either face's table.
+						prev = -1
+						continue
+					}
+				}
+			}
+		}
 		xs = append(xs, x)
 		if !ok {
 			prev = -1
 			continue
 		}
-		run.Glyphs = append(run.Glyphs, paintengine2d.Glyph{ID: id, X: x})
-		adv := cell.Advance
-		if adv <= 0 {
-			adv = cell.Src.Dx() + 1
-		}
-		x += adv
+		lay.add(atlas, paintengine2d.Glyph{ID: id, X: x})
+		x += advanceOf(cell)
 		prev = r
 	}
 	xs = append(xs, x)
-	s := measureShaped(snapRun(run, atlas), atlas)
+	s := lay.measure()
 	// The advance is where the layout ends; snapping each glyph onto the
 	// pixel grid moves ink, not the layout.
 	s.adv, s.xs = x, xs
@@ -487,6 +507,63 @@ func (f *Font) layout(text string, atlas *paintengine2d.FontAtlas) shapedRun {
 		s.ink = x
 	}
 	return s
+}
+
+// advanceOf is how far a cell moves the pen.
+func advanceOf(cell paintengine2d.AtlasCell) float32 {
+	if cell.Advance > 0 {
+		return cell.Advance
+	}
+	return cell.Src.Dx() + 1
+}
+
+// isNotdef reports that a cell is the sheet's shared "no such glyph"
+// box rather than a glyph of its own.
+func (f *Font) isNotdef(cell paintengine2d.AtlasCell) bool {
+	return f != nil && f.ot != nil && f.ot.hasNotdef && cell.Src == f.ot.notdef.Src
+}
+
+// runList collects the glyphs of one string, grouped by the sheet each
+// came from. The first group is always the font's own, so the shape
+// cache has something stable to check itself against; a second appears
+// only where a glyph was borrowed.
+type runList struct {
+	atlas *paintengine2d.FontAtlas
+	runs  []paintengine2d.GlyphRun
+}
+
+func (l *runList) add(atlas *paintengine2d.FontAtlas, g paintengine2d.Glyph) {
+	for i := range l.runs {
+		if l.runs[i].Atlas == atlas {
+			l.runs[i].Glyphs = append(l.runs[i].Glyphs, g)
+			return
+		}
+	}
+	if len(l.runs) == 0 && atlas != l.atlas {
+		// Keep the font's own sheet first even when the string opens
+		// with a borrowed glyph.
+		l.runs = append(l.runs, paintengine2d.GlyphRun{Atlas: l.atlas})
+	}
+	l.runs = append(l.runs, paintengine2d.GlyphRun{Atlas: atlas, Glyphs: []paintengine2d.Glyph{g}})
+}
+
+// measure snaps every group onto the pixel grid and takes the widest ink.
+func (l *runList) measure() shapedRun {
+	if len(l.runs) == 0 {
+		l.runs = append(l.runs, paintengine2d.GlyphRun{Atlas: l.atlas})
+	}
+	out := shapedRun{runs: make([]paintengine2d.GlyphRun, 0, len(l.runs))}
+	for _, run := range l.runs {
+		one := measureShaped(snapRun(run, run.Atlas), run.Atlas)
+		out.runs = append(out.runs, one.runs...)
+		if one.adv > out.adv {
+			out.adv = one.adv
+		}
+		if one.ink > out.ink {
+			out.ink = one.ink
+		}
+	}
+	return out
 }
 
 // snapRun rounds every glyph onto the pixel grid.
@@ -536,7 +613,7 @@ func measureShaped(run paintengine2d.GlyphRun, atlas *paintengine2d.FontAtlas) s
 	if !ink.Empty() && ink.Max.X > w {
 		inkW = ink.Max.X
 	}
-	return shapedRun{run: run, adv: w, ink: inkW}
+	return shapedRun{runs: []paintengine2d.GlyphRun{run}, adv: w, ink: inkW}
 }
 
 // Draw paints text at origin (baseline-top of the em box) tinted with col.
@@ -548,8 +625,8 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	if f == nil || ctx == nil || text == "" {
 		return
 	}
-	run := f.shapeOf(text).run
-	if len(run.Glyphs) == 0 {
+	shaped := f.shapeOf(text)
+	if shaped.empty() {
 		return
 	}
 	col := tint
@@ -565,13 +642,42 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	} else {
 		filter = paintengine2d.FilterBilinear
 	}
-	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: filter})
+	paint := paintengine2d.Paint{Color: col, Filter: filter}
+	for _, run := range shaped.runs {
+		if len(run.Glyphs) == 0 {
+			continue
+		}
+		ctx.DrawGlyphs(run, origin, paint)
+	}
+}
+
+// primary is the sheet this font's own glyphs came from, which is the
+// one the shape cache is checked against.
+func (s shapedRun) primary() *paintengine2d.FontAtlas {
+	if len(s.runs) == 0 {
+		return nil
+	}
+	return s.runs[0].Atlas
+}
+
+// empty reports that there is nothing to draw.
+func (s shapedRun) empty() bool {
+	for _, r := range s.runs {
+		if len(r.Glyphs) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 type fontKey struct {
 	family string
 	weight Weight
 	size   int
+	// ascent is set only for a face baked to sit on another face's
+	// baseline (a fallback, style/fontfallback_on.go); zero is the
+	// face's own, which is every ordinary bake.
+	ascent int
 }
 
 // fontCacheBudget caps the glyph sheets the size cache keeps alive. Sheets
@@ -744,11 +850,25 @@ func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
 
 // bakeFace bakes exactly the family asked for, with no fallback.
 func bakeFace(family string, weight Weight, size float32) (*Font, error) {
+	return bakeFaceAscent(family, weight, size, 0)
+}
+
+// bakeFaceAscent is bakeFace with the baseline it must sit on, or 0 for
+// the face's own.
+//
+// A glyph's vertical bearing is baked as `ascent + ymin`, measured from
+// the top of the line box, so a face lending a glyph to another face has
+// to be baked against *that* face's ascent or its glyphs hang below the
+// line they are on. Nothing else wants this.
+func bakeFaceAscent(family string, weight Weight, size, baseline float32) (*Font, error) {
 	face, err := faceFor(family, weight)
 	if err != nil {
 		return nil, err
 	}
 	ascent, descent := face.metrics(size)
+	if baseline > 0 {
+		ascent = baseline
+	}
 	ot := newOTAtlas(face, size)
 	ot.ascent = ascent
 	atlas, err := ot.bake(otPreload)

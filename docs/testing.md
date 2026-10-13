@@ -65,6 +65,24 @@ bundled faces makes those numbers a property of the toolkit rather than
 of the developer. Set `UITK_SYSTEM_FONTS=1` to run against this
 machine's fonts.
 
+**Font behaviour is a build too.** A rune the chosen face lacks is a box
+by default and borrowed from another family under `-tags font_fallback`
+([contracts.md](contracts.md)), so "the other one" is a different binary
+rather than a different flag:
+
+```bash
+tools/test-fonts.sh
+tools/test-fonts.sh -run TestARuneTheFaceLacks
+```
+
+Both halves are pinned, and against each other: the default build has a
+test that nothing is borrowed, the tagged build one that something is.
+Neither needs an installed font — the two *bundled* faces differ in
+coverage (Titillium Web is Latin only, JetBrains Mono has Greek,
+Cyrillic and the arrows), so a borrowed glyph is provable in a clean
+container. `UITK_SYSTEM_FONTS=1` runs the same tests against the
+machine's real fonts, where the CJK case it was written for lives.
+
 **Linux's own two backends need a display**, and `testenv.sh` takes it
 away — rightly, and at a cost that went unnoticed for a long time. Every
 test that needs an X server or a compositor skips, so `platform`'s X11 and
