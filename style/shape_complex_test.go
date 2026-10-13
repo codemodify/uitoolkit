@@ -1,4 +1,4 @@
-//go:build font_complex
+//go:build font_complex || font_emoji
 
 package style
 
@@ -461,4 +461,56 @@ func TestTheBreakTableForbidsWhatItShould(t *testing.T) {
 			}
 		}
 	})
+}
+
+// A lender that lives in a collection is still read.
+//
+// Every Noto CJK family ships as one file holding four languages'
+// worth of Han — a `.ttc` — and that is the lender a Linux machine
+// reaches for first. The shaper parses the face a second time, with its
+// own parser, and the call for a single font refuses a collection
+// outright: for one afternoon a shaping build drew every borrowed glyph
+// as a box, which is exactly what the fallback build exists to stop.
+// The plain build never noticed, because it reads the file with the
+// parser that was always there.
+//
+// The suite pins installed fonts off, so this brings one file in by
+// hand and skips where the machine has no collection at all.
+func TestALenderInACollectionIsStillRead(t *testing.T) {
+	path := collectionFontFile(t)
+	if path == "" {
+		t.Skip("no font collection on this machine")
+	}
+	fakeFonts(t, "Collection Test\t80\t0\t0\t"+path)
+	SetFallbackFamilies("Collection Test")
+	t.Cleanup(func() { SetFallbackFamilies() })
+
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+	box := runeInk(t, f, '')
+	for _, r := range []rune{'山', '海', 'Ω'} {
+		if got := runeInk(t, f, r); got == box {
+			t.Errorf("%q drew the %d-pixel box; the collection was not read", r, box)
+		}
+	}
+}
+
+// collectionFontFile is any .ttc on this machine, or "".
+func collectionFontFile(t *testing.T) string {
+	t.Helper()
+	for _, dir := range []string{"/usr/share/fonts", "/usr/local/share/fonts", "/Library/Fonts"} {
+		var found string
+		_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || found != "" {
+				return nil
+			}
+			if strings.HasSuffix(strings.ToLower(d.Name()), ".ttc") {
+				found = p
+			}
+			return nil
+		})
+		if found != "" {
+			return found
+		}
+	}
+	return ""
 }

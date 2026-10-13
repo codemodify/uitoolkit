@@ -1,4 +1,4 @@
-//go:build !font_fallback && !font_complex
+//go:build !font_fallback && !font_complex && !font_emoji
 
 package style
 

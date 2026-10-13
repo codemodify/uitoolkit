@@ -813,7 +813,14 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 		if len(run.Glyphs) == 0 {
 			continue
 		}
-		ctx.DrawGlyphs(run, origin, paint)
+		p := paint
+		if isColourSheet(run.Atlas) {
+			// A sheet of pictures, not of coverage: an emoji carries
+			// its own colours and multiplying them by the text's would
+			// make a red label's 👀 red. White multiplies to itself.
+			p.Color = paintengine2d.White
+		}
+		ctx.DrawGlyphs(run, origin, p)
 	}
 }
 

@@ -59,7 +59,7 @@ func emboldened(base *otFace, amount float32) *otFace {
 	if f, ok := emboldenedFaces.m[k]; ok {
 		return f
 	}
-	f := &otFace{font: base.font, src: base.src, name: base.name, embolden: base.embolden + amount}
+	f := &otFace{font: base.font, src: base.src, index: base.index, name: base.name, embolden: base.embolden + amount}
 	emboldenedFaces.m[k] = f
 	return f
 }
@@ -107,9 +107,14 @@ func FontFor(l LookAndFeel, role FontRole) *Font {
 type otFace struct {
 	font *sfnt.Font
 	src  []byte
-	name string
-	mu   sync.Mutex
-	buf  sfnt.Buffer
+	// index is which face of src this is. Zero for an ordinary file and
+	// for the first face of a collection; a .ttc holds several faces in
+	// one file — every Noto CJK family is one — and src is the whole of
+	// it, so anything parsing src again has to be told which.
+	index int
+	name  string
+	mu    sync.Mutex
+	buf   sfnt.Buffer
 	// embolden draws the outline heavier by this fraction of the size: a
 	// bold synthesized from a regular face (a variable font's bold instance,
 	// which sfnt cannot draw).
@@ -181,7 +186,7 @@ func parseFaceBytes(name string, buf []byte, index int) (*otFace, error) {
 	if err != nil {
 		return nil, fmt.Errorf("style: parse %s: %w", name, err)
 	}
-	tf := &otFace{font: f, src: buf}
+	tf := &otFace{font: f, src: buf, index: index}
 	var b sfnt.Buffer
 	if n, err := f.Name(&b, sfnt.NameIDFamily); err == nil {
 		tf.name = n

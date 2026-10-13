@@ -13,6 +13,7 @@
 #   font_fallback   a rune the face lacks is borrowed from one that has it
 #   font_complex    the face's own tables choose the glyphs: shaping,
 #                   bidi, and the Unicode line breaking algorithm
+#   font_emoji      a colour emoji face's own pictures, untinted
 #
 # Both halves are tested, and they are tested against each other: the
 # default build has fontfallback_off_test.go pinning that nothing is
@@ -51,4 +52,10 @@ echo "=== font_fallback"
 tools/testenv.sh go test -tags "theme_engine_all,font_fallback" "${args[@]}" "${pkgs[@]}"
 
 echo "=== font_complex"
-exec tools/testenv.sh go test -tags "theme_engine_all,font_complex" "${args[@]}" "${complex_pkgs[@]}"
+tools/testenv.sh go test -tags "theme_engine_all,font_complex" "${args[@]}" "${complex_pkgs[@]}"
+
+# font_emoji is font_complex plus the colour sheets, so ./style/ is
+# where its own behaviour lives; the rest of the tree is the same build
+# the pass above already ran.
+echo "=== font_emoji"
+exec tools/testenv.sh go test -tags "theme_engine_all,font_emoji" "${args[@]}" "${pkgs[@]}"

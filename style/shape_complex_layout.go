@@ -1,4 +1,4 @@
-//go:build font_complex
+//go:build font_complex || font_emoji
 
 package style
 
@@ -73,6 +73,18 @@ func paragraphDirection(runes []rune) di.Direction {
 	return di.DirectionLTR
 }
 
+// glyphSheet is a sheet the shaped glyphs of one face are baked into.
+//
+// Two kinds: [otAtlas], an A8 coverage mask of outlines, which is every
+// face that draws letters; and [emojiAtlas], a colour sheet of pictures,
+// which is an emoji face in a font_emoji build. The layout treats them
+// alike — ask for the glyphs, get a sheet — and [Font.Draw] tells them
+// apart by the only thing that differs: a colour sheet is not tinted.
+type glyphSheet interface {
+	ensureGIDs(gids []uint32) *paintengine2d.FontAtlas
+	atlas() *paintengine2d.FontAtlas
+}
+
 // uitkFontmap answers the segmenter's "which face draws this rune" with
 // the toolkit's own answer: this font's face, or the first family in
 // [FallbackFamilies] that has the rune. It remembers which sheet each
@@ -81,7 +93,7 @@ func paragraphDirection(runes []rune) di.Direction {
 type uitkFontmap struct {
 	f    *Font
 	prim *gofont.Face
-	of   map[*gofont.Face]*otAtlas
+	of   map[*gofont.Face]glyphSheet
 }
 
 func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
@@ -95,6 +107,14 @@ func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
 				return g
 			}
 		}
+		// Nothing with an outline for it. A colour face may still have
+		// a picture — 👀 is a PNG in Noto Color Emoji and an outline in
+		// nothing at all — and in a font_emoji build this is where it
+		// comes from.
+		if g, sheet := emojiSheetFor(m.f, r); g != nil && sheet != nil {
+			m.of[g] = sheet
+			return g
+		}
 	}
 	// Never nil: the sheet's .notdef box is the honest answer, and the
 	// caller still needs a face to measure it with.
@@ -104,7 +124,7 @@ func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
 // part is one shaped run: glyphs in visual order, from one face, at one
 // bidi level.
 type part struct {
-	at     *otAtlas
+	at     glyphSheet
 	glyphs []shapedGlyph
 	start  int // first rune of the run, in the whole string
 	end    int
@@ -140,7 +160,7 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 		}
 	}
 
-	fm := &uitkFontmap{f: f, prim: prim, of: map[*gofont.Face]*otAtlas{prim: f.ot}}
+	fm := &uitkFontmap{f: f, prim: prim, of: map[*gofont.Face]glyphSheet{prim: f.ot}}
 	seg := segPool.Get().(*shaping.Segmenter)
 	defer segPool.Put(seg)
 	sh := shaperPool.Get().(*shaping.HarfbuzzShaper)
@@ -166,8 +186,8 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 		// and the shaper knows nothing about it: the outline is the
 		// face's own and so is every advance in its tables.
 		var emb float32
-		if at.face != nil {
-			emb = at.face.embolden * at.size
+		if ot, ok := at.(*otAtlas); ok && ot.face != nil {
+			emb = ot.face.embolden * ot.size
 		}
 		for _, g := range out.Glyphs {
 			sg := shapedGlyph{
@@ -177,7 +197,8 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 				Y:       -fx32(g.YOffset),
 				Cluster: g.TextIndex(),
 			}
-			if g.GlyphID == 0 && sg.Cluster >= 0 && sg.Cluster < len(runes) {
+			_, outlines := at.(*otAtlas)
+			if outlines && g.GlyphID == 0 && sg.Cluster >= 0 && sg.Cluster < len(runes) {
 				// Nothing in this face, and nothing lent: hand the
 				// cluster back to the rune path, which has a drawn
 				// star for '★' and a box for everything else.
@@ -193,18 +214,20 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 	reorderVisual(parts)
 
 	// Bake every glyph, one draft per sheet, then place them.
-	byAtlas := map[*otAtlas][]uint32{}
+	byAtlas := map[glyphSheet][]uint32{}
 	byRune := map[*otAtlas][]rune{}
 	for _, p := range parts {
 		for _, g := range p.glyphs {
 			if g.byRune {
-				byRune[p.at] = append(byRune[p.at], rune(g.GID))
+				if ot, ok := p.at.(*otAtlas); ok {
+					byRune[ot] = append(byRune[ot], rune(g.GID))
+				}
 				continue
 			}
 			byAtlas[p.at] = append(byAtlas[p.at], g.GID)
 		}
 	}
-	sheets := make(map[*otAtlas]*paintengine2d.FontAtlas, len(byAtlas)+len(byRune))
+	sheets := make(map[glyphSheet]*paintengine2d.FontAtlas, len(byAtlas)+len(byRune))
 	for at, gids := range byAtlas {
 		sheets[at] = at.ensureGIDs(gids)
 	}

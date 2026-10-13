@@ -1,4 +1,4 @@
-//go:build font_complex
+//go:build font_complex || font_emoji
 
 // Shaping, behind the font_complex tag: the pieces that talk to the
 // shaper. [complexLayout] in shape_complex_layout.go is what uses them,
@@ -8,6 +8,7 @@ package style
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 
 	"github.com/go-text/typesetting/di"
@@ -70,7 +71,7 @@ func (f *otFace) gotext() *gofont.Face {
 	if g, ok := gotextFaces.m[f]; ok {
 		return g
 	}
-	g, err := gofont.ParseTTF(bytes.NewReader(f.src))
+	g, err := parseGotext(f.src, f.index)
 	if err != nil {
 		g = nil
 	}
@@ -88,6 +89,30 @@ func scriptDirection(s language.Script) di.Direction {
 		return di.DirectionRTL
 	}
 	return di.DirectionLTR
+}
+
+// parseGotext reads one face of a font file.
+//
+// A collection has to be said out loud: every Noto CJK family ships as
+// one — four languages' worth of Han in a single .ttc — and ParseTTF
+// refuses the file outright. Falling back to "no shaper for this face"
+// there meant every borrowed glyph in a shaping build was a box, which
+// is what the plain fallback build was written to stop.
+func parseGotext(src []byte, index int) (*gofont.Face, error) {
+	if len(src) >= 4 && string(src[:4]) == "ttcf" {
+		faces, err := gofont.ParseTTC(bytes.NewReader(src))
+		if err != nil {
+			return nil, err
+		}
+		if index < 0 || index >= len(faces) {
+			index = 0
+		}
+		if len(faces) == 0 {
+			return nil, fmt.Errorf("style: %d faces in the collection", len(faces))
+		}
+		return faces[index], nil
+	}
+	return gofont.ParseTTF(bytes.NewReader(src))
 }
 
 var shaperPool = sync.Pool{New: func() any { return &shaping.HarfbuzzShaper{} }}

@@ -21,6 +21,7 @@ choice, `CGO_ENABLED=0`, in its own section at the end: it is worth
 | `+ font_fallback` | a rune the face lacks is borrowed from one that has it | two different CJK titles are the same row of boxes | 13.06 MB — **+0.01** |
 | three engines | three looks to switch between | the other thirty-one | 13.45 MB — **+0.40** |
 | `+ font_complex` | shaping, bidirectional text, Unicode line breaking | Arabic unjoined, Hebrew reversed, Japanese unwrappable | 15.21 MB — **+2.16** |
+| `+ font_emoji` | 👀 and 🥳 drawn from the machine's colour emoji face | emoji are boxes, even with the rest of the text right | 15.22 MB — **+0.01** |
 | `theme_engine_all` | all 34 engines, 132 packs | — | 21.32 MB — **+8.27** |
 | `theme_engine_all,font_complex` | everything there is | — | 23.50 MB |
 | *default, **not** stripped* | a usable stack trace | 5.69 MB | 18.74 MB |
@@ -107,6 +108,27 @@ the single biggest thing most applications are not doing.
 **Give up:** symbol names in a panic trace. Ship stripped and keep the
 unstripped binary beside the tag you built it from.
 
+### `font_emoji` — the pictures in a colour face
+
+**Gain:** a rune the outline faces have not got, but a colour emoji face
+has, is drawn as its own picture — the PNG strikes of `CBDT`/`CBLC`
+(Noto Color Emoji, which is what Linux has) and `sbix` (Apple's).
+**Give up without it:** emoji are boxes. `font_complex` draws every
+*script* the machine has a face for and still cannot draw 👀, because no
+face anywhere has an outline for it.
+
+A hundredth of a megabyte, because everything it needs is already
+there: go-text parses the colour tables as part of the parser
+`font_complex` already links, and the toolkit already decodes PNG for
+its icons. **It implies `font_complex`**, and not only for the parser —
+an emoji font's own `GSUB` is what turns the five runes of 👨‍👩‍👧 into one
+glyph (UTS #51), so without shaping the picture would be right and the
+sequence wrong.
+
+Not drawn: `COLR`/`CPAL` layered outlines (gradients in v1) and `SVG`
+glyphs. go-text parses both; nothing here turns them into cells yet, so
+a face that has only those is still a box.
+
 ### cgo — `CGO_ENABLED=0`
 
 Not a tag, an environment variable, and the only one of these choices
@@ -136,8 +158,9 @@ So that nobody goes looking for one:
 
 - **A mirrored interface** for a right-to-left locale. Not in any build;
   `font_complex` is about text, not layout. **[contracts.md](contracts.md)**
-- **Colour emoji** (COLR/CPAL, CBDT, sbix). Planned as `font_emoji`,
-  not written.
+- **COLR and SVG colour glyphs.** `font_emoji` draws the PNG kind
+  (CBDT, sbix), which is what the common emoji faces use; layered
+  outlines and SVG are parsed and not drawn.
 - **Embedding your own face.** You install it with the application and
   name it; a registration call is a known gap. **[fonts.md](fonts.md)**
 - **IME** and **printing** — platform work, not switches.

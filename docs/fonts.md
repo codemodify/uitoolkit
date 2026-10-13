@@ -98,7 +98,16 @@ go build -tags font_complex ./...
 which reads the face's own tables: ligatures and joining forms, GPOS
 kerning, bidirectional ordering, and the Unicode line breaking
 algorithm. It implies `font_fallback`, and costs 2.16 MB of code and no
-font data. [complex-text.md](complex-text.md) is what it does,
+font data.
+
+```sh
+go build -tags "font_complex,font_emoji" ./...
+```
+
+adds the one thing that is still a box after all of that: **colour
+emoji**, drawn from the machine's own emoji face as the pictures they
+are. A hundredth of a megabyte on top of `font_complex`, which it
+implies. [complex-text.md](complex-text.md) is what it does,
 what it costs and what it still does not do; [the text
 contract](contracts.md) is what a build without it promises.
 
@@ -128,6 +137,7 @@ Measured on `cmd/uitoolkit-settings`:
 | every theme engine (`theme_engine_all`) | 21.31 MB | **+8.3 MB** over the default |
 | `-tags font_fallback` | +0.01 MB | ten kilobytes of code; the faces are the machine's |
 | `-tags font_complex` | +2.16 MB | shaping, bidi and line breaking; still no font data |
+| `-tags font_emoji` | +0.01 MB | colour emoji from the machine's face; needs font_complex |
 | the four embedded faces | 0.65 MB of the above | |
 | *one* Noto Sans CJK family | **18.6 MB** | which is why it is not in there |
 

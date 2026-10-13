@@ -52,6 +52,14 @@
 # UITK_WIN_VM_PORT the port this serves on (default 8099)
 # UITK_WIN_PKGS    the packages to test (default ./...)
 set -euo pipefail
+
+# The build tags the guest's binaries are compiled with. theme_engine_all
+# by default, as everywhere else; UITK_WIN_TAGS is how the font builds
+# are run over there — the text code is the same Go on every platform,
+# but what a machine has installed is not.
+#
+#   UITK_WIN_TAGS=theme_engine_all,font_complex tools/test-windows.sh
+TAGS=${UITK_WIN_TAGS:-theme_engine_all}
 cd "$(dirname "$0")/.."
 
 MON=${UITK_WIN_VM_MON:-}
@@ -110,12 +118,12 @@ while read -r p; do
   [ -z "$rel" ] && rel="."
   name=$(printf '%s' "$rel" | tr '/' '_')
   GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-    go test -c -tags theme_engine_all -o "$work/bin/$name.test.exe" "$p"
+    go test -c -tags "$TAGS" -o "$work/bin/$name.test.exe" "$p"
   # Backslashes: the guest will cd to it.
   printf '%s %s\n' "$name" "$(printf '%s' "$rel" | tr '/' '\\')" >> "$work/pkgs.txt"
   n=$((n + 1))
 done < <(GOOS=windows go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' \
-  -tags theme_engine_all $PKGS)
+  -tags "$TAGS" $PKGS)
 echo "   $n packages"
 
 echo "== packing the source tree =="

@@ -115,10 +115,11 @@ machine's.
 
 - **Vertical text** (UAX #50). The segmenter can resolve the
   orientation; nothing above it would know what to do with the answer.
-- **Colour glyphs** (COLR/CPAL, CBDT, sbix). go-text parses them;
-  `paintengine2d`'s sheet is one premultiplied RGBA image and could hold
-  them, but nothing maps the one to the other. See the emoji note in
-  [fonts.md](fonts.md).
+- **COLR and SVG colour glyphs.** The PNG kind — `CBDT`/`CBLC` and
+  `sbix`, which is what the emoji faces people have actually use — is
+  drawn under `-tags font_emoji`, in a colour sheet of its own that
+  [Font.Draw] leaves untinted. Layered outlines and SVG glyphs are
+  parsed by go-text and not drawn.
 - **Caret affinity.** At a change of direction one text position is two
   places on screen. The toolkit picks one: the leading edge of the
   character the index names.
