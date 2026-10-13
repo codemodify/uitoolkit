@@ -1,5 +1,8 @@
 # Complex text: shaping, direction and line breaking
 
+*(Weighing this against the other build-time choices:
+[build-tags.md](build-tags.md).)*
+
 `-tags font_complex` makes the toolkit read the font's own tables
 instead of looking each character up by itself. Leave the tag off and
 nothing here applies: the toolkit is exactly what [the text

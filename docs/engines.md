@@ -33,12 +33,14 @@ Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 
 | build | engines | size |
 | --- | --- | --- |
-| default | 1 | **13.03 MB** |
-| `theme_engine_oxygen` | 1 | 12.97 MB |
-| three engines | 3 | 13.48 MB |
-| `theme_engine_all` | 34 | 21.31 MB |
+| default | 1 | **13.05 MB** |
+| `theme_engine_oxygen` | 1 | 12.98 MB |
+| three engines | 3 | 13.45 MB |
+| `theme_engine_all` | 34 | 21.32 MB |
 
 **8.3 MB**, 39% of the binary, for an application that wants one look.
+Engines are one of three build-time choices; the other two are about
+text, and [build-tags.md](build-tags.md) is all of them on one page.
 
 ## How the tags are written
 

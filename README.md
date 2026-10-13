@@ -57,18 +57,24 @@ go build -tags "theme_engine_breeze,theme_engine_win95" ./...
 go build -tags theme_engine_all ./...             # every engine there is
 ```
 
-It is worth 8 MB: **12.98 MB** for a single-engine `uitoolkit-settings`
-against **21.09 MB** for all of them, stripped. Naming any engine makes the default step
-aside; `theme_engine_all` is the escape hatch. Build tags cannot contain
-hyphens, so the names use underscores. See
-**[docs/engines.md](docs/engines.md)**.
+It is worth 8 MB: **13.05 MB** for the default single-engine
+`uitoolkit-settings` against **21.32 MB** for all of them, stripped.
+Naming any engine makes the default step aside; `theme_engine_all` is
+the escape hatch. Build tags cannot contain hyphens, so the names use
+underscores. See **[docs/engines.md](docs/engines.md)**.
+
+Text is the other build-time choice: `font_fallback` borrows a rune the
+face has not got (+0.01 MB) and `font_complex` adds shaping, bidi and
+Unicode line breaking (+2.16 MB, and no font data). Every tag, what it
+gains and what it costs, on one page:
+**[docs/build-tags.md](docs/build-tags.md)**.
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
 | Compared with | Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI, AppKit — **[docs/toolkits.md](docs/toolkits.md)** |
-| Paint | paintengine2d **v0.11.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
-| Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
+| Paint | paintengine2d **v0.12.2** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
+| Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas; shaping, bidi and UAX #14 under `-tags font_complex` |
 | Windowing | **Wayland** and **X11** on Linux (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`), **Win32** on Windows (`CreateDIBSection` + `BitBlt`), **AppKit** on macOS (`CGImage` → `CALayer`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |

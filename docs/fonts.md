@@ -1,5 +1,9 @@
 # Fonts: what ships, what comes from the machine, what it costs
 
+*(For the one-page comparison of every build tag — what each gains,
+what it costs in megabytes, and what you give up without it — see
+[build-tags.md](build-tags.md).)*
+
 Everything about type in this toolkit comes down to one decision nobody
 has to make twice: **the toolkit embeds two Latin faces and nothing
 else, and borrows the rest from the machine it runs on.** This page says

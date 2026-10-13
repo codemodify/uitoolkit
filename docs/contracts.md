@@ -82,6 +82,8 @@ limits below are build-time choices now, and one is not:
 A build with the tag draws Arabic, Hebrew, Devanagari and Japanese text
 correctly, and still lays its windows out left to right. Those are two
 different promises and only one of them is for sale.
+[build-tags.md](build-tags.md) weighs it against the other build-time
+choices.
 
 ### No complex text shaping
 

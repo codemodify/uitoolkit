@@ -297,8 +297,9 @@ happening. [testing.md](testing.md), [diagnostics.md](diagnostics.md).
 | an application whose chrome is its own (a browser, an editor) | [recipes.md](recipes.md#an-application-whose-chrome-is-its-own--a-browser-an-editor) |
 | window frames, captions, shapes | [decorations.md](decorations.md), [shapes.md](shapes.md) |
 | theme packs, engines, skins | [themes.md](themes.md), [engines.md](engines.md), [skins.md](skins.md) |
+| **what to ship: every build tag, and what it costs** | **[build-tags.md](build-tags.md)** |
 | the status item | [tray.md](tray.md) |
 | Windows and macOS | [windows.md](windows.md), [macos.md](macos.md) |
-| what the text stack does not do | [contracts.md](contracts.md) |
+| what the text stack does not do, and the tag that changes it | [contracts.md](contracts.md), [complex-text.md](complex-text.md) |
 | paint cost | [perf.md](perf.md) |
 | this toolkit next to the others | [toolkits.md](toolkits.md) |
