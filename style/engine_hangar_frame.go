@@ -108,11 +108,44 @@ func (hangarEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 	// The border follows the cut rather than the rectangle, and the
 	// bracket hairline sits inside its bottom left corner: the frame's
 	// own version of the mark every panel in this look wears.
+	//
+	// Drawn here *and* over the content (DrawDecorationOver): a cut
+	// crosses the content's box, so content that fills the corner — a
+	// rail down the window's left edge, which is what reported this —
+	// covers whatever was drawn there first.
+	hangarEdge(l, ctx, win, cut, line, c.bracket, st)
+}
+
+// hangarEdge is the window's outline and its bracket: the two things
+// this look puts at the very edge of a window.
+func hangarEdge(l *Classic, ctx *paintengine2d.Context, win paintengine2d.Rect, cut float32, line, bracket paintengine2d.Color, st DecorationState) {
+	lw := hangarPx(l)
 	ctx.DrawPath(hangarCutRect(win.Inset(lw*0.5), cut, hangarPanelSides),
 		paintengine2d.StrokePaint(line, lw))
 	if st.Active {
-		hangarBrackets(l, ctx, win, cut, c.bracket)
+		hangarBrackets(l, ctx, win, cut, bracket)
 	}
+}
+
+// DrawDecorationOver puts the window's outline and its bracket back over
+// the content.
+//
+// A rectangular border lies outside the content's box and nothing can
+// cover it. A cut corner's does not: the chamfer crosses the box, so the
+// hairline along it and the bracket inside it were painted first and
+// then covered by whatever the content drew in that corner. secretvault
+// reported it with a rail running down the window's left edge to the
+// bottom, where this look cuts the corner and puts its mark.
+func (hangarEngine) DrawDecorationOver(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
+	if st.NoBorder || f.Window.Empty() {
+		return
+	}
+	c := hangarColorsOf(l)
+	line := c.line
+	if !st.Active {
+		line = Mix(c.line, c.ground, 0.45)
+	}
+	hangarEdge(l, ctx, hangarSnap(f.Window), hangarChamfer(l), line, c.bracket, st)
 }
 
 func (hangarEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {

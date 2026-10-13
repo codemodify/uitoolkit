@@ -265,3 +265,91 @@ func TestAHangarWindowCutsItsCornersUnderAMergedCaption(t *testing.T) {
 		}
 	}
 }
+
+// **A cut corner's hairline is drawn over the content, not under it.**
+//
+// A frame is painted first and the content over it, which is right for
+// every rectangular border: it lies outside the content's box, so
+// nothing can cover it. A border along a cut corner does not — the
+// chamfer crosses the box — so content that fills the corner buried
+// Hangar's hairline there, and the bracket inside its bottom left
+// corner with it. secretvault reported it with a rail running down the
+// window's left edge to the bottom.
+func TestACutCornersHairlineSurvivesContentInTheCorner(t *testing.T) {
+	p, ok := style.LoadTheme("hangar")
+	if !ok {
+		t.Skip("the hangar pack is not in this build")
+	}
+	t.Setenv(platform.EnvDecorations, "")
+	a := New(Options{Look: p.Look(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Console", Width: 600, Height: 400,
+		Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Close)
+	// A rail of flat colour over the whole content, as the vault's is:
+	// it paints into every corner the content's box reaches.
+	w.SetContent(newFillBox(paintengine2d.RGBA(0, 1, 0, 1)))
+	w.SetTitleBar(widgets.NewTitleBar("Console", ""))
+	a.PumpOnce()
+	w.frame()
+
+	img := w.surf.Buffer()
+	g := w.geom
+	x0, y1 := int(g.window.Min.X), int(g.window.Max.Y)
+	// Down the chamfer itself, a step at a time. Pure green is the rail
+	// and nothing else: the hairline over it is grey, and even where it
+	// is half covered the red and the blue come up off the floor.
+	//
+	// Counting a box in the corner instead proves nothing — the window's
+	// own edge and the antialiasing of the cut fill one whether or not
+	// the hairline is there, which is what the first version of this
+	// test did.
+	hair, rail := 0, 0
+	for d := 2; d < 16; d++ {
+		best := 0
+		for off := -2; off <= 2; off++ {
+			c := img.NRGBAAt(x0+d, y1-1-d+off)
+			if c.A < 128 {
+				continue
+			}
+			if c.G > 200 && c.R < 20 && c.B < 20 {
+				rail++
+				continue
+			}
+			if int(c.R) > best {
+				best = int(c.R)
+			}
+		}
+		if best > 30 {
+			hair++
+		}
+	}
+	if rail == 0 {
+		t.Fatal("the rail did not reach the chamfer; this test is not testing what it says")
+	}
+	// The chamfer is twelve pixels at this scale and its ends are
+	// antialiased away, so a handful of clean steps is all there is to
+	// find — but without the hairline there are none at all.
+	if hair < 4 {
+		t.Errorf("only %d steps down the cut corner carry the frame's hairline; the content buried it", hair)
+	}
+}
+
+// fillBox paints one colour over its whole box, as a rail or a page
+// ground does.
+type fillBox struct {
+	widget.Base
+	col paintengine2d.Color
+}
+
+func newFillBox(col paintengine2d.Color) *fillBox {
+	b := &fillBox{col: col}
+	b.Init(b)
+	return b
+}
+
+func (b *fillBox) Paint(ctx *paintengine2d.Context) {
+	ctx.DrawRect(b.LocalBounds(), paintengine2d.Fill(b.col))
+}

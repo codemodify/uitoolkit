@@ -2221,6 +2221,10 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	if w.toasts != nil {
 		widget.PaintTree(w.toasts, ctx, dirty)
 	}
+	// Whatever the frame puts over the content — a cut corner's hairline
+	// and its marks — goes on after everything the window holds and
+	// before the popups, which are above the window entirely.
+	w.paintDecorationOver(ctx)
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
 			w.paintShadow(ctx, c, style.PopupMenu, dirty)
@@ -2437,6 +2441,7 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 		if w.toasts != nil {
 			widget.RecordTree(w.toasts, rec, ctx, nil, w.layers, true)
 		}
+		w.paintDecorationOver(ctx)
 	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {

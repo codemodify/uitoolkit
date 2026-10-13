@@ -479,6 +479,52 @@ func DrawDecorationOf(lk LookAndFeel, ctx *paintengine2d.Context, f DecorationFr
 	e.DrawDecoration(c, ctx, f, st)
 }
 
+// DecorationOverEngine is an optional engine hook: the parts of a window
+// frame that belong *over* the content rather than under it.
+//
+// A frame is painted first and the content over it, which is right for
+// every rectangular border — it lies outside the content's box, so
+// nothing can cover it. A border along a **cut corner** does not: the
+// cut crosses the box, so whatever the content paints into that corner
+// covers the hairline there, and in Hangar the bracket inside its
+// bottom left corner with it. secretvault reported it against v0.23.6,
+// with a rail running down the window's left edge to the bottom.
+//
+// Only a look with something in that corner needs this, so it is a hook
+// and not a method on [Engine]: what an engine draws here it must also
+// be willing to have drawn twice a frame, over content that may be any
+// colour. It is skipped where the frame is skipped.
+type DecorationOverEngine interface {
+	DrawDecorationOver(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState)
+}
+
+// DrawDecorationOverOf paints whatever lk's frame puts over the content,
+// and reports whether it drew anything at all — so a window that
+// recorded a scene knows whether that layer exists.
+func DrawDecorationOverOf(lk LookAndFeel, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) bool {
+	if lk == nil || ctx == nil || f.Window.Empty() {
+		return false
+	}
+	c, e := decorationFor(lk)
+	over, ok := e.(DecorationOverEngine)
+	if !ok {
+		return false
+	}
+	over.DrawDecorationOver(c, ctx, f, st)
+	return true
+}
+
+// DecorationDrawsOver reports whether lk's frame has anything to put
+// over the content, without drawing it.
+func DecorationDrawsOver(lk LookAndFeel) bool {
+	if lk == nil {
+		return false
+	}
+	_, e := decorationFor(lk)
+	_, ok := e.(DecorationOverEngine)
+	return ok
+}
+
 // DrawCaptionTitleOf paints the window title in the caption's free space b.
 func DrawCaptionTitleOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
 	if lk == nil || ctx == nil || title == "" || b.Dx() < 4 || b.Dy() < 4 {

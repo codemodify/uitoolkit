@@ -1342,6 +1342,25 @@ func (w *Window) paintDecoration(ctx *paintengine2d.Context) {
 	style.DrawDecorationOf(w.look, ctx, f, w.caption.DecorationState())
 }
 
+// paintDecorationOver puts back whatever the look's frame draws over the
+// content: the hairline along a cut corner, and the marks beside it,
+// which the content covers wherever the cut crosses its box
+// (style.DecorationOverEngine). Almost every look has nothing here.
+func (w *Window) paintDecorationOver(ctx *paintengine2d.Context) {
+	g := w.geom
+	if !g.framed || w.caption == nil || !style.DecorationDrawsOver(w.look) {
+		return
+	}
+	f := style.DecorationFrame{Window: g.window}
+	cap, bar := w.caption.FrameParts()
+	o := widget.DeviceOrigin(w.caption)
+	f.Caption = cap.Translate(o)
+	if !bar.Empty() {
+		f.Bar = bar.Translate(o)
+	}
+	style.DrawDecorationOverOf(w.look, ctx, f, w.caption.DecorationState())
+}
+
 // ---- the desktop's title-bar conventions ------------------------------------
 
 // titleBarPrefsCache holds the desktop's title-bar conventions and the
