@@ -89,18 +89,24 @@ linking what the row says:
 | **c** — a + go-text's OpenType parser | 6.26 MB | **+1.07** |
 | **b** — c + harfbuzz + `language` | 7.09 MB | **+0.83** |
 | **f** — b + the line/word segmenter | 7.14 MB | +0.05 |
-| `cmd/uitoolkit-settings`, default | 13.04 MB | |
-| the same, `-tags font_complex` | 13.12 MB | +0.08 |
+| `cmd/uitoolkit-settings`, default | 13.05 MB | |
+| the same, `-tags font_fallback` | 13.06 MB | +0.01 |
+| the same, **`-tags font_complex`** | **15.21 MB** | **+2.16** |
+| the same, with every theme engine too | 23.50 MB | |
 
-So **+1.9 MB** as it stands, and **+1.6 MB** once go-text replaces
-`x/image/font/sfnt` rather than sitting beside it — every face is parsed
-twice today, once by each. The shaper itself is the cheap half: harfbuzz
-and its script tables are 0.83 MB, and go-text's *font parser* is 1.07.
-Bidi and segmentation are rounding errors.
+**+2.16 MB** is the number to plan with: a whole application, built the
+way one ships, with the shaper reachable from `main`. The rows above it
+say where it goes — go-text's OpenType parser is the largest single
+piece at 1.07 MB, and it is on the bill only because the toolkit still
+parses every face twice, once with it and once with
+`x/image/font/sfnt`. Dropping `sfnt` would give about 0.33 MB back. The
+shaper itself, harfbuzz and its script tables, is 0.83 MB; bidi and
+segmentation are rounding errors.
 
 The rule from [fonts.md](fonts.md) is unchanged, and this is the proof of
-it: supporting every script on earth costs 1.6 MB of *code*. One Noto
-Sans CJK family is 18.6 MB of font data. The faces stay the machine's.
+it: supporting every script on earth costs two megabytes of *code*. One
+Noto Sans CJK family is 18.6 MB of font data. The faces stay the
+machine's.
 
 ## What is still missing
 
@@ -117,8 +123,8 @@ Sans CJK family is 18.6 MB of font data. The faces stay the machine's.
   run moves to the next character in the *string*, which is to the
   right. Both behaviours exist in the wild; this one is the one the
   toolkit already had.
-- **One parser.** Keeping `sfnt` costs the 1.07 MB above and parses
-  every face twice.
+- **One parser.** Keeping `sfnt` costs about 0.33 MB of the 2.16 above
+  and parses every face twice.
 
 ## The dependency
 

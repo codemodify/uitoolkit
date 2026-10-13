@@ -214,7 +214,7 @@ need to line up.
 
 First reach for the build tag: `-tags font_complex` is a shaping engine,
 the bidirectional algorithm and the line breaking algorithm, and it is
-1.6 MB ([complex-text.md](complex-text.md)). What it does not do is
+2.16 MB ([complex-text.md](complex-text.md)). What it does not do is
 mirror the interface, and for some of these that is the whole
 requirement:
 

@@ -93,8 +93,8 @@ go build -tags font_complex ./...
 
 which reads the face's own tables: ligatures and joining forms, GPOS
 kerning, bidirectional ordering, and the Unicode line breaking
-algorithm. It implies `font_fallback`, and costs about 1.6 MB of code
-and no font data. [complex-text.md](complex-text.md) is what it does,
+algorithm. It implies `font_fallback`, and costs 2.16 MB of code and no
+font data. [complex-text.md](complex-text.md) is what it does,
 what it costs and what it still does not do; [the text
 contract](contracts.md) is what a build without it promises.
 
@@ -123,7 +123,7 @@ Measured on `cmd/uitoolkit-settings`:
 | **unstripped** | 18.71 MB | `-ldflags "-s -w"` saves **5.68 MB** |
 | every theme engine (`theme_engine_all`) | 21.31 MB | **+8.3 MB** over the default |
 | `-tags font_fallback` | +0.01 MB | ten kilobytes of code; the faces are the machine's |
-| `-tags font_complex` | +1.9 MB | shaping, bidi and line breaking; still no font data |
+| `-tags font_complex` | +2.16 MB | shaping, bidi and line breaking; still no font data |
 | the four embedded faces | 0.65 MB of the above | |
 | *one* Noto Sans CJK family | **18.6 MB** | which is why it is not in there |
 
@@ -139,7 +139,7 @@ So, to make a binary smaller, in the order the bytes come off:
    assets an application opts into.
 4. **Do not reach for fonts.** The embedded faces are 0.65 MB of a
    13 MB binary — 5% — and dropping them would leave a machine with no
-   installed fonts drawing nothing at all. `font_complex` is +1.9 MB of
+   installed fonts drawing nothing at all. `font_complex` is +2.16 MB of
    *code* and no font data: the scripts come from the machine either
    way ([complex-text.md](complex-text.md)).
 
