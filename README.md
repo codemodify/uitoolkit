@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.7
+go get github.com/codemodify/uitoolkit@v0.23.8
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,18 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.8** — **Text that is not Latin, and a scroll bar that is not a
+row.** Two halves. Every view that scrolls asked "is there a row at this
+*height*" where it meant "at this *point*", so the bar and the gutter
+beside it belonged to the row behind them: dragging the bar dragged a
+row, a press in the gutter moved the selection, and in a popup menu — 
+which acts on the release — a click there *ran the command*. And complex
+text arrives as two build tags: `font_complex` (+2.16 MB) shapes with the
+face's own tables, orders a line by UAX #9 with the caret, hit test and
+selection to match, and breaks lines by UAX #14; `font_emoji` (+0.01 MB)
+draws the machine's colour emoji. Neither mirrors the interface, which is
+a different promise. See [docs/features.md](docs/features.md).
 
 **0.23.7** — **Everything three applications found in 0.23.6**, reported
 within hours of it: two regressions in what it shipped (the GPU closing

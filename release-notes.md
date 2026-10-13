@@ -7,6 +7,166 @@ about the problem it solved.
 
 ---
 
+## 0.23.8
+
+**Text that is not Latin, and a scroll bar that is not a row.** Two
+unrelated halves: a family of pointer bugs in every view that scrolls —
+one of which *ran menu commands* — and complex text, which turns the
+toolkit's oldest documented limit into a build tag.
+
+New: `-tags font_complex` (shaping, bidirectional layout, Unicode line
+breaking) and `-tags font_emoji` (colour emoji), each additive and each
+implying the tag below it. With them come `Font.SelectionSpans`,
+`style.DirectionRuns`, `style.DirectionRun` and `style.LineBreaks` —
+for an application that places text itself. Nothing an application
+already compiles changes: a build without the tags is the same binary,
+to the pixel.
+
+### The scroll bar kept none of the presses that started on it
+
+A view asked "is there a row at this **height**" where it meant "at
+this **point**". A vertical bar runs down beside the rows, so every
+point on it — and in the one- or two-pixel gutter either side — had a
+row at its height. Five consequences, in five views:
+
+- **Grabbing the bar dragged the row beside it** instead of scrolling,
+  in the list, the table and the tree. `MousePress` handled the bar
+  correctly; `DragAt` is asked separately once the pointer passes the
+  threshold, and it tested the height alone. This is what a password
+  manager reported.
+- **A press in the gutter moved the selection** in the tree and the
+  table, from a point visibly on no row.
+- **A click in the gutter ran the menu command level with it.** A popup
+  menu acts on the release, and only a menu long enough to overflow has
+  a bar, which is why it took this long to find.
+- **A press below the last card** selected a card that is not on
+  screen: the card list had no bound on the height at all.
+- **The highlight stayed on the row the pointer had left**, in all five
+  views, promising it was the one about to be acted on while the bar
+  was being dragged.
+
+And a sixth, in a list whose rows a skin has placed: a drop was
+credited to a row as far down as the skin's chrome is tall, because the
+drop measured from the frame where the press measures from the padding.
+
+Each view now asks one question — is there a row at this *point*, on
+both axes and off the bar — and each fix is pinned by a test that walks
+every pixel from the row edge to the view edge.
+
+### Complex text, behind `-tags font_complex`
+
+[docs/complex-text.md](docs/complex-text.md) is the page. In short, a
+build with the tag:
+
+- **shapes** with the face's own `GSUB` and `GPOS` — Arabic and Syriac
+  join, Indic reorders, ligatures form, kerning comes from pairs the
+  `kern` table never had;
+- **orders** a line by UAX #9, including nested levels, with a caret,
+  a hit test and a selection that follow it — a selection crossing a
+  change of direction is drawn as the several boxes it is on screen;
+- **breaks lines** by UAX #14, in labels and in the text editor, so a
+  language with no spaces wraps where it is allowed to rather than
+  where the box ends — never opening a line with a closing bracket or a
+  full stop;
+- **borrows per run rather than per rune**, through the segmenter, so
+  `font_complex` implies `font_fallback`.
+
+It costs **+2.16 MB** on a built application and no font data: the
+faces stay the machine's. The rule that binary size follows fonts and
+not scripts is unchanged, and this is the proof of it.
+
+What it does **not** do is mirror the interface for a right-to-left
+locale. The text is right; the window is still laid out left to right.
+[docs/contracts.md](docs/contracts.md) now says which of its limits are
+a build tag and which are a different promise.
+
+### Colour emoji, behind `-tags font_emoji`
+
+👀 has no outline in any face: Noto Color Emoji carries no `glyf` and no
+`CFF` at all, only PNGs in `CBDT`, and Apple's is the same in `sbix`. So
+this is a glyph sheet of another kind — in colour, with the picture
+scaled into it — beside the coverage masks everything else bakes, and
+it is drawn untinted, or a red label's emoji would come out red.
+
+**+0.01 MB**, because everything it needs was already linked: the
+shaper's parser reads the colour tables and the toolkit already decodes
+PNG for its icons. It implies `font_complex`, and not only for the
+parser — an emoji font's own `GSUB` is what turns the five runes of a
+family emoji into one glyph.
+
+Not drawn: `COLR`/`CPAL` layered outlines and `SVG` glyphs, both parsed
+and neither rendered.
+
+### What the applications reported
+
+- **A fallback list changed at run time did not take effect** (a video
+  player). `SetFallbackFamilies` replaced the list without touching the
+  memo of decisions already made, so a glyph that had been a box stayed
+  one, and a borrowed glyph went on being borrowed from a face no
+  longer named. Both caches are keyed by a generation now.
+- **A lender had to be able to draw Latin** (a mail client), which is
+  the right rule for the face that draws the interface and wrong for
+  one lending a single glyph: no emoji or symbols face could ever lend.
+- **A text view given its text before it was laid out opened scrolled
+  down** (a mail client). A box shorter than its own padding has a
+  negative inner height, which the rectangle type canonicalises into a
+  positive one, so the guard against "no room" never fired and the view
+  scrolled to show a caret that did not fit. The inner box is clamped at
+  zero, and a line taller than the box keeps its *top* in view.
+- **A framed window always turned the same way**, and **a flip panel
+  passed a key to neither face** (a password manager).
+- **A window's closing callback was the application's**, not the
+  window's: installed globally, it ran for every window and was cleared
+  when `Run` returned.
+
+### Two bugs found while building this, not reported by anyone
+
+Both were invisible to the suite, which pins installed fonts off so a
+pixel is the same number on every machine:
+
+- **A lender in a font *collection* was never read.** Every Noto CJK
+  family ships as one `.ttc`, and the shaper's parser refuses a
+  collection, so for one afternoon a `font_complex` build drew every
+  borrowed glyph as a box — exactly what `font_fallback` exists to
+  stop. A face now remembers which of its file's faces it is.
+- **An uninstalled family came back as the bundled one.** `faceFor`
+  never fails by design — a pack naming "Segoe UI" must still draw
+  without it — so asking it for an emoji family returned Titillium,
+  perfectly parsed and emoji-free. Cached under the name asked for, that
+  stand-in became the answer for the whole process.
+
+### The test runners
+
+Three gaps, all of which had been hiding work rather than failing it:
+
+- **A runner with no package named tested the repository root alone** —
+  a quarter of a second, exit 0, indistinguishable from a full green run
+  in a log. It cost two false passes in one afternoon. `tools/test.sh`,
+  `tools/test-display.sh` and `tools/test-darwin.sh` add `./...`
+  themselves now.
+- **The Windows guest measured text in Windows' own fonts.** The Linux
+  and macOS runners pin `UITK_SYSTEM_FONTS=0`; that one never did.
+  Harmless while one face drew everything, and wrong the moment a build
+  borrows. `UITK_WIN_TAGS` arrived with the fix, because until then no
+  font build could be run on Windows at all.
+- **The fallback tests ran only under `font_fallback`**, so the two
+  builds that imply it compiled the feature and none of its tests.
+
+### Documentation
+
+- **[docs/features.md](docs/features.md)** — every feature and how to
+  switch it on: the tags, the environment variables (which existed only
+  scattered across eight pages), the calls, and the build command for
+  each platform.
+- **[docs/build-tags.md](docs/build-tags.md)** — the same choices
+  weighed in megabytes, re-measured on one application under identical
+  conditions, including `CGO_ENABLED=0`: 1.27 MB and the GPU, which was
+  documented nowhere as a size.
+- **[docs/complex-text.md](docs/complex-text.md)** — what the tag does,
+  what it costs, and the five things it still does not do.
+
+---
+
 ## 0.23.7
 
 **Everything three applications found in 0.23.6, and the font rule that
