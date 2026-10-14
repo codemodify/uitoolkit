@@ -400,10 +400,20 @@ func (d *Desk) wakeAt(w *app.Window, until time.Time) {
 	if in <= 0 {
 		return
 	}
-	if w == nil || w.Closed() {
-		w = d.openWindow()
+	// The wake rides on the desk's own first window — the anchor the
+	// others follow — and not on the satellite that asked for it.
+	//
+	// A timer dies with its window, and the window being moved is the
+	// one most likely to go: ask two satellites to move, close the
+	// later one before its patience runs out, and the only wake went
+	// with it. The pass re-arms what is still outstanding, but a pass
+	// has to run first, and a *direct* Apply or Show has no event
+	// behind it to cause one. Arming on a window that outlives the
+	// request is what closes that door (a music player, item 10).
+	if owner := d.openWindow(); owner != nil {
+		w = owner
 	}
-	if w == nil {
+	if w == nil || w.Closed() {
 		return
 	}
 	if d.stopWake != nil {

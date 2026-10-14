@@ -93,3 +93,60 @@ func TestClosingOneSatelliteDoesNotStrandAnother(t *testing.T) {
 			d.Rack.Pane(si).To, d.Rack.Pane(si).Box)
 	}
 }
+
+// Two more ways to lose the only wake-up, both without an event behind
+// them: a *direct* Apply and a *direct* Show. The pass re-arms whatever
+// is still outstanding, but a pass has to run — and nothing asks for
+// one when the application drives the rack itself. A music player
+// reported both after the event-driven cases were repaired.
+func TestADirectRequestSurvivesItsSatelliteClosing(t *testing.T) {
+	rig := func(t *testing.T) (*app.Application, *Desk, int, int, *app.Window) {
+		t.Helper()
+		a, d, _, sat, mi, si, _ := coalesceRig(t)
+		d.SetClock(nil)
+		sat2, err := a.NewWindow(platform.WindowOptions{X: 0, Y: 200, Width: 200, Height: 100, Headless: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		si2 := d.Add("Sat2", sat2)
+		a.PumpOnce()
+		d.Rack.MoveTo(si2, 0, 200)
+		if d.Rack.Pane(si).To != mi {
+			t.Skipf("the first satellite bonded to %d, which this rig did not arrange", d.Rack.Pane(si).To)
+		}
+		sat.Surface().(*platform.Offscreen).SetMoveHonoured(false)
+		sat2.Surface().(*platform.Offscreen).SetMoveHonoured(false)
+		return a, d, si, si2, sat2
+	}
+
+	t.Run("a direct Apply", func(t *testing.T) {
+		a, d, si, _, sat2 := rig(t)
+		// The application moves the group itself and asks for the
+		// placement: no desktop event anywhere in this.
+		d.Rack.MoveTo(0, 600, 700)
+		d.Apply()
+		sat2.Close()
+		a.PumpOnce()
+		if !reconciled(t, a, d, si, 3*time.Second) {
+			t.Errorf("after a direct Apply the satellite is still bonded to %d at %v",
+				d.Rack.Pane(si).To, d.Rack.Pane(si).Box)
+		}
+	})
+
+	t.Run("a direct Show of each", func(t *testing.T) {
+		a, d, si, si2, sat2 := rig(t)
+		d.Show(si, false)
+		d.Show(si2, false)
+		a.PumpOnce()
+		d.Window(si).Surface().(*platform.Offscreen).SimulateDesktopMove(700, 700)
+		sat2.Surface().(*platform.Offscreen).SimulateDesktopMove(700, 800)
+		d.Show(si, true)
+		d.Show(si2, true)
+		sat2.Close()
+		a.PumpOnce()
+		if !reconciled(t, a, d, si, 3*time.Second) {
+			t.Errorf("after a direct Show the satellite is still bonded to %d at %v",
+				d.Rack.Pane(si).To, d.Rack.Pane(si).Box)
+		}
+	})
+}
