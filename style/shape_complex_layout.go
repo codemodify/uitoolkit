@@ -197,8 +197,23 @@ func (m *uitkFontmap) faceRuns(in shaping.Input) []shaping.Input {
 		out = append(out, piece)
 	}
 	for i := in.RunStart; i < in.RunEnd; i++ {
+		// Part of the picture stays with the picture, whether or not
+		// the colour face has a glyph of its own for it. A joiner, a
+		// presentation selector and an enclosing keycap are all
+		// characters the *font* composes away (UTS #51) — asking
+		// whether the face "has" them and sending them elsewhere when
+		// it has not is what broke every family and profession emoji
+		// into its separate pictures, and every keycap into a digit
+		// and a box. Three applications reported it within half an
+		// hour of the release that did it.
+		if face != nil && m.isColour(face) && m.colourAt[i] {
+			continue
+		}
 		want := m.faceAt(i)
 		if face != nil && keepsItsRun(m.runes[i]) {
+			// Whitespace keeps the run it is in — unless that run is
+			// a colour face, because an emoji font's space is a
+			// quarter wider than its em.
 			if !m.isColour(face) {
 				continue
 			}
@@ -238,6 +253,13 @@ func emojiPresentation(runes []rune) []bool {
 		vs16        = 0xFE0F // emoji presentation
 		zwj         = 0x200D
 	)
+	// No arm for U+20E3, the enclosing keycap of `1️⃣`, and none is
+	// needed: a font that composes the sequence has the character in
+	// its cmap, so the general rule keeps it with the picture — and a
+	// font that has not cannot compose it however it is routed, since
+	// a GSUB rule can only consume a glyph the cmap produced. An arm
+	// for it looked like standards compliance and was dead code; the
+	// mutation that deleted it changed nothing, which is what said so.
 	out := make([]bool, len(runes))
 	for i, r := range runes {
 		out[i] = r >= pictographs || r == vs16

@@ -173,6 +173,15 @@ func (f *Font) Prefix(text string, maxW float32) string {
 	// above can overrun. It is right to within a character, so this
 	// walks down from it rather than searching.
 	runes := []rune(text)
+	// Up as well as down. The estimate is the sum of each character's
+	// width *inside the whole string*, and reshaping a prefix can make
+	// it either wider than that (a letter loses its join) or narrower
+	// (two letters become a ligature) — so the answer is on either
+	// side of the estimate, and taking only the shorter one handed
+	// back less text than fitted.
+	for n < len(runes) && f.Advance(string(runes[:n+1])) <= maxW+fitSlack {
+		n++
+	}
 	for ; n > 0; n-- {
 		if head := string(runes[:n]); f.Advance(head) <= maxW+fitSlack {
 			return head
@@ -383,8 +392,12 @@ func (f *Font) Fit(text string, maxW float32) string {
 	// The ellipsis joins what it is added to, so the two together are
 	// not the width of the two apart — the same reshaping that makes
 	// Prefix measure its own answer.
-	runes := []rune(head)
-	for n := len(runes); n > 0; n-- {
+	runes := []rune(text)
+	n := len([]rune(head))
+	for n < len(runes) && f.Advance(string(runes[:n+1])+ell) <= maxW+fitSlack {
+		n++
+	}
+	for ; n > 0; n-- {
 		if out := string(runes[:n]) + ell; f.Advance(out) <= maxW+fitSlack {
 			return out
 		}

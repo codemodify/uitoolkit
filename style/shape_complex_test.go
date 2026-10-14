@@ -681,3 +681,43 @@ func TestTheBuiltInListNamesTheShapedScripts(t *testing.T) {
 		}
 	}
 }
+
+// Prefix returns the longest prefix that fits — not one short of it.
+//
+// The estimate is each character's width *inside the whole string*,
+// and reshaping the piece can make it wider (a letter loses its join)
+// or narrower (two letters become one ligature). The first fix walked
+// only downwards from the estimate, so where reshaping made the piece
+// *narrower* the answer came back short: a music player measured
+// prefixes that independently fitted and had not been returned.
+//
+// Checked against the honest answer, which is to measure every prefix.
+func TestPrefixIsTheLongestThatFits(t *testing.T) {
+	t.Setenv("UITK_SYSTEM_FONTS", "0")
+	if err := LoadEmbeddedFonts(); err != nil {
+		t.Fatal(err)
+	}
+	// The bundled monospace face has programming ligatures, so a cut
+	// changes the width of what is left without any installed font.
+	for _, family := range []string{FamilyMono, FamilyUI} {
+		f := BakeFamily(family, WeightRegular, 20, paintengine2d.White)
+		for _, text := range []string{"a -> b => c != d", "office affluent", "AVAST waving"} {
+			runes := []rune(text)
+			full := f.Advance(text)
+			for i := 1; i <= 30; i++ {
+				maxW := full * float32(i) / 31
+				got := len([]rune(f.Prefix(text, maxW)))
+				best := 0
+				for n := 1; n <= len(runes); n++ {
+					if f.Advance(string(runes[:n])) <= maxW+fitSlack {
+						best = n
+					}
+				}
+				if got != best {
+					t.Errorf("%s %q at %.2f: Prefix gave %d characters, %d fit",
+						family, text, maxW, got, best)
+				}
+			}
+		}
+	}
+}

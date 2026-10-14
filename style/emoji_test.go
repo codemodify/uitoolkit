@@ -443,3 +443,48 @@ func TestOneEmojiFaceServesTwoSizesAtOnce(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// A sequence the font composes is one picture.
+//
+// A family, a profession, a flag, a keycap and a skin tone are each
+// several characters that an emoji font's own GSUB turns into one
+// glyph (UTS #51). The characters that do the joining — the zero-width
+// joiner, the presentation selector, the enclosing keycap — are ones
+// the font composes *away*, and asking whether the colour face "has" a
+// glyph for them, then sending them to the text face when it has not,
+// split every one of these into its parts: a family drew as three
+// people, a keycap as a digit beside a box. Three applications
+// reported it within half an hour of the release that did it.
+func TestASequenceTheFontComposesIsOnePicture(t *testing.T) {
+	path := emojiFontFile(t)
+	if path == "" {
+		t.Skip("no colour emoji face on this machine")
+	}
+	fakeFonts(t, "Noto Color Emoji\t80\t0\t0\t"+path)
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	one := f.Advance("👩")
+	if one <= 0 {
+		t.Fatal("one emoji measured nothing")
+	}
+	for _, seq := range []struct {
+		text, what string
+	}{
+		{"👨‍👩‍👧", "a family"},
+		{"👨‍💻", "a profession"},
+		{"🏳️‍🌈", "a flag"},
+		{"1️⃣", "a keycap"},
+		{"👍🏽", "a skin tone"},
+	} {
+		// A quarter over, which is loose enough for another emoji
+		// font's advances and tight enough to catch the sequence
+		// drawn as a picture *plus a leftover box* — which is what a
+		// keycap did while the enclosing character was treated as
+		// text, and what a 1.5 threshold let through.
+		got := f.Advance(seq.text)
+		if got > one*1.25 {
+			t.Errorf("%s is %.2f wide and one picture is %.2f: it was drawn as %.1f pictures",
+				seq.what, got, one, got/one)
+		}
+	}
+}
