@@ -11,6 +11,18 @@
 # Nothing opens on the desktop, and a clean config directory means the
 # default look and no remembered skin. Needs Go and ImageMagick (`magick`),
 # which writes the lossless WebPs the pages link to.
+#
+# UITK_SYSTEM_FONTS=0, as in tools/test.sh and in the uitk-shots command
+# beside it: a look reads in the era's typeface where the machine has it,
+# so without this the committed pictures are a picture of *this* machine's
+# font set. It was missing here and nowhere else, and it cost an hour at
+# the 0.23.14 release: every one of the fourteen files came out different,
+# which reads like a rendering change and was a different font. Pinned,
+# the released tree reproduces thirteen of them byte for byte.
+#
+# settings.webp is the fourteenth and does not reproduce: two runs of one
+# unchanged tree differ by about 200 pixels, the way inspector.png has
+# always done. Do not read a diff of it as a rendering change.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
@@ -19,7 +31,7 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$DEST" "$WORK/bin" "$WORK/cfg"
 (cd "$REPO" && go build -o "$WORK/bin/" ./examples/uitoolkit-sample-tour ./cmd/uitoolkit-settings)
-headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$WORK/cfg" UITK_ANIMATIONS=0 "$@" >/dev/null; }
+headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$WORK/cfg" UITK_ANIMATIONS=0 UITK_SYSTEM_FONTS="${UITK_SYSTEM_FONTS:-0}" "$@" >/dev/null; }
 webp() { # in.png out.webp
   magick "$1" -strip -define webp:lossless=true -define webp:method=6 "$2"
   echo "$(basename "$2"): $(magick identify -format '%wx%h' "$2"), $(( $(stat -c %s "$2") / 1024 )) KB"
