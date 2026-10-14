@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.9
+go get github.com/codemodify/uitoolkit@v0.23.10
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,19 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.10** — **The second day of complex text.** Five more from the
+applications: a face is chosen by *position* now rather than by
+character, so a presentation selector speaks for one ❤ and not the
+next, U+FE0E is obeyed, and the space beside an emoji is a text space
+and not the emoji font's 1.245-em one; `Prefix` and `Fit` measure their
+own answer, because cutting a string reshapes it; one parsed face used
+from two goroutines is locked; and the built-in fallback list names the
+scripts that shape, so **Arabic, Hebrew, Devanagari and Thai draw with
+no configuration at all**. With them, two asks from a password manager:
+`Key0`..`Key9` (only `Key3` existed, so `Ctrl+1` did nothing), and a
+cloud icon plus `style.IconBadge` — a plus, a dot or a count on an
+icon's corner.
 
 **0.23.9** — **Everything two applications found in 0.23.8, inside two
 hours of it.** Complex text had one day of real use: a shaping build

@@ -7,6 +7,98 @@ about the problem it solved.
 
 ---
 
+## 0.23.10
+
+**The second day of complex text, and two things a password manager had
+been drawing for itself.** Five more defects from the applications —
+four of them in the two days of text work, the fifth a list that was
+honest when it was written — and the two smallest asks on the oldest
+gap list.
+
+New: `platform.Key0`..`Key9` with `DigitKey` and `DigitRune`;
+`style.IconCloud`; `style.IconBadge`, `style.BadgeMark`,
+`style.DrawIconBadge` and `style.Badged`; `widgets.ToolItem.Badge`.
+
+### A face is chosen by position now, not by character
+
+The segmenter asks "which face draws this rune", which cannot answer
+two questions that matter.
+
+**A presentation selector speaks for one character, not for all of
+them.** `❤️ ❤` is a picture and then a dingbat; a table keyed by the
+character made both of them pictures, and ignored U+FE0E — the
+selector that asks for the *text* form — entirely.
+
+**A space is a space, whoever drew the emoji beside it.** The
+segmenter's own rule is that whitespace never forces a change of face,
+which is right between two text faces and wrong beside a picture: Noto
+Color Emoji's space is 1.245 em, so the space after 👀 came out five
+times the one before it.
+
+The toolkit splits its own face runs now — by index, with the selectors
+obeyed, and with whitespace leaving a colour run.
+
+### A prefix is measured as what it is
+
+Cutting a string changes how what is left is drawn: a medial Arabic
+letter becomes final, a ligature comes apart. So the sum of the
+characters' widths inside the whole string is not the width of the
+piece, and `Prefix` and `Fit` — which both promise a width — were
+handing back strings wider than they were asked for. Both measure
+their own answer now, walking down from the estimate rather than
+trusting it.
+
+### One parsed face, used from two goroutines
+
+A go-text face is not read-only: shaping fills caches in it, and
+asking for a bitmap sets the pixel size its strike is chosen by. One
+face serves every `Font` that borrowed from it, so two sizes drawn at
+once wrote over each other. The race detector said so; it no longer
+does.
+
+### The built-in fallback list names the scripts that shape
+
+It named CJK, the wide-coverage faces and the symbols, and nothing for
+Arabic, Hebrew or the Indic scripts — honest while the fallback refused
+to lend them, and wrong from the day it started. The list names them
+now, the script's own Noto face first and then the one face a platform
+covers many with, so **Arabic, Hebrew, Devanagari and Thai draw with no
+application configuration at all**.
+
+### Every digit is a key
+
+`platform.Key` had the letters, the function keys, the arrows — and of
+the digits, `Key3` alone, sitting between `KeySpace` and `KeyHash`
+because those three characters are what an accelerator needed once.
+So `Ctrl+3` worked and `Ctrl+1` did nothing: the accelerator parser
+answered `KeyUnknown`, which matches no key event ever sent.
+
+`Key0`..`Key9` are a contiguous run now, so `Key0+n` is the nth, with
+`DigitKey` and `DigitRune` beside `LetterKey` and `KeyRune`. Three
+tables learn them — the keysyms, which X11 and Wayland share; the
+Windows virtual keys; AppKit's characters — and in each one the
+keypad's digits are the same keys, because Num Lock is the person's
+business and not a shortcut's. `Key3` keeps its name and changes its
+number, which is what an opaque enum is for.
+
+### A cloud, and a badge on the corner of an icon
+
+`IconCloud` is an icon like the others, in all five premiere packs and
+drawn by both vector sets. The re-render added ten PNGs and rewrote
+nothing else.
+
+A badge is a small mark over a corner: a plus for an action that adds,
+a dot for something waiting, a count for how many. It decorates a
+**box**, not a widget — a tool bar passes the button it has just had
+drawn, an application passes the icon it is drawing — which is what
+keeps thirty-four engines out of it, since where an icon sits inside a
+tool button is the look's business. A plus and a dot sit at the bottom
+right, where a mark that modifies an action reads as part of it; a
+count sits at the top right, where counts have always been.
+`style.Badged(0)` is no badge at all.
+
+---
+
 ## 0.23.9
 
 **Everything two applications found in 0.23.8, inside two hours of it.**
