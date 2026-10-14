@@ -617,3 +617,67 @@ func TestAShapingBuildBorrowsTheScriptsThatNeedShaping(t *testing.T) {
 		}
 	}
 }
+
+// A prefix is measured as what it is, not as the sum of its parts.
+//
+// Cutting a string changes how what is left is drawn: an Arabic letter
+// that was medial becomes final, a ligature comes apart, and the
+// pieces are not the width they were inside the whole. So Prefix and
+// Fit, which both promise a width, have to measure their own answer —
+// a music player found Arabic and Indic prefixes overrunning the width
+// they were asked for.
+func TestAPrefixFitsAfterItHasBeenCut(t *testing.T) {
+	path := arabicFontFile(t)
+	if path == "" {
+		t.Skip("no face on this machine covers Arabic")
+	}
+	fakeFonts(t, "Noto Arabic Test\t80\t0\t0\t"+path)
+	f, err := bakeFaceAscent("Noto Arabic Test", WeightRegular, 20, 16)
+	if err != nil || f == nil {
+		t.Skipf("the Arabic face at %s did not load: %v", path, err)
+	}
+
+	const word = "السلام عليكم"
+	full := f.Advance(word)
+	if full <= 0 {
+		t.Fatal("the words measured nothing")
+	}
+	for cut := 0.2; cut < 1.0; cut += 0.05 {
+		maxW := full * float32(cut)
+		if got := f.Prefix(word, maxW); got != "" {
+			if w := f.Advance(got); w > maxW+fitSlack {
+				t.Errorf("Prefix(%.2f) returned %q, which is %.2f wide once it is on its own", maxW, got, w)
+			}
+		}
+		if got := f.Fit(word, maxW); got != "" {
+			if w := f.Advance(got); w > maxW+fitSlack {
+				t.Errorf("Fit(%.2f) returned %q, which is %.2f wide", maxW, got, w)
+			}
+		}
+	}
+}
+
+// The built-in fallback list names a face for the scripts that shape.
+//
+// It named CJK, the wide-coverage faces and the symbol faces, and
+// nothing for Arabic, Hebrew or the Indic scripts — honestly, while
+// the fallback refused to lend them at all. A shaping build lends
+// them, so the list has to name them, or every application has to
+// name them itself (which a mail client did, and then asked why).
+func TestTheBuiltInListNamesTheShapedScripts(t *testing.T) {
+	path := arabicFontFile(t)
+	if path == "" {
+		t.Skip("no face on this machine covers Arabic")
+	}
+	// Installed under the name the built-in list uses. Nothing calls
+	// SetFallbackFamilies: the point is that the default finds it.
+	fakeFonts(t, "Noto Sans Arabic\t80\t0\t0\t"+path)
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	box := runeInk(t, f, '')
+	for _, r := range []rune{'س', 'ل', 'ا'} {
+		if got := runeInk(t, f, r); got == box {
+			t.Errorf("%q drew the %d-pixel box, with an Arabic face installed and the built-in list in force", r, box)
+		}
+	}
+}

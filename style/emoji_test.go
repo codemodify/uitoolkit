@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -336,4 +337,109 @@ func TestGrowingTheEmojiSheetKeepsTheColoursOfWhatIsDrawn(t *testing.T) {
 	if !untinted("👀") {
 		t.Error("👀 took the text colour once the sheet had grown under it")
 	}
+}
+
+// A space is a space, whoever drew the emoji beside it.
+//
+// The segmenter's rule is that whitespace never forces a change of
+// face, so it keeps whatever run it is in — which is right between two
+// Latin faces and wrong beside a picture: Noto Color Emoji's space is
+// 1.245 em, so the space after 👀 came out five times the one before
+// it. A mail client measured it. Whitespace at the edge of a picture
+// belongs to the words.
+func TestASpaceBesideAnEmojiIsATextSpace(t *testing.T) {
+	path := emojiFontFile(t)
+	if path == "" {
+		t.Skip("no colour emoji face on this machine")
+	}
+	fakeFonts(t, "Noto Color Emoji\t80\t0\t0\t"+path)
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	space := f.Advance(" ")
+	if space <= 0 {
+		t.Fatal("a space measured nothing")
+	}
+	after := f.Advance("👀 x") - f.Advance("👀x")
+	if d := after - space; d > 0.01 || d < -0.01 {
+		t.Errorf("the space after an emoji is %.3f wide; on its own it is %.3f", after, space)
+	}
+	// And the line is the same width whichever side the picture is on.
+	if a, b := f.Advance("👀 x"), f.Advance("x 👀"); a != b {
+		t.Errorf("%q is %.3f and %q is %.3f", "👀 x", a, "x 👀", b)
+	}
+}
+
+// One selector does not speak for another occurrence.
+//
+// ❤️ and ❤ are the same character, the first with the selector that
+// asks for its emoji form. A table keyed by the character made both of
+// them pictures — and ignored U+FE0E, the selector that asks for the
+// text form. A music player found both.
+func TestAPresentationSelectorSpeaksOnlyForItsOwnCharacter(t *testing.T) {
+	path := emojiFontFile(t)
+	if path == "" {
+		t.Skip("no colour emoji face on this machine")
+	}
+	outline := outlineHeartFile(t)
+	if outline == "" {
+		t.Skip("no outline face with a heart in it")
+	}
+	fakeFonts(t,
+		"Noto Color Emoji\t80\t0\t0\t"+path,
+		"Outline Hearts\t80\t0\t0\t"+outline)
+	SetFallbackFamilies("Outline Hearts")
+	t.Cleanup(func() { SetFallbackFamilies() })
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+
+	emoji, text, space := f.Advance("❤️"), f.Advance("❤"), f.Advance(" ")
+	if emoji == text {
+		t.Skip("this machine draws both forms the same width; the test cannot tell them apart")
+	}
+	// A picture, a space, and a dingbat.
+	want := emoji + space + text
+	if got := f.Advance("❤️ ❤"); got < want-0.02 || got > want+0.02 {
+		t.Errorf("%q is %.3f wide; a picture, a space and a dingbat are %.3f", "❤️ ❤", got, want)
+	}
+	// And the other selector is obeyed, not ignored.
+	if got := f.Advance("❤︎"); got != text {
+		t.Errorf("❤ asked for as text is %.3f wide; the text form is %.3f", got, text)
+	}
+}
+
+// Two sizes of one face, drawn at once.
+//
+// A parsed face is not read-only: shaping fills caches in it and
+// asking for a bitmap sets the pixel size its strike is chosen by. One
+// face serves every Font that borrowed from it, so two goroutines
+// drawing at two sizes wrote over each other. Found with the race
+// detector by a music player; run this one with -race.
+func TestOneEmojiFaceServesTwoSizesAtOnce(t *testing.T) {
+	path := emojiFontFile(t)
+	if path == "" {
+		t.Skip("no colour emoji face on this machine")
+	}
+	fakeFonts(t, "Noto Color Emoji\t80\t0\t0\t"+path)
+	fonts := []*Font{
+		BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White),
+		BakeFamily(FamilyUI, WeightRegular, 31, paintengine2d.White),
+		BakeFamily(FamilyUI, WeightRegular, 48, paintengine2d.White),
+	}
+	texts := []string{"👀", "😀", "🎉", "👀 x", "🥳🎉"}
+
+	var wg sync.WaitGroup
+	for _, f := range fonts {
+		for _, s := range texts {
+			wg.Add(1)
+			go func(f *Font, s string) {
+				defer wg.Done()
+				img := paintengine2d.NewImage(80, 80)
+				ctx := paintengine2d.NewContext(img)
+				for i := 0; i < 4; i++ {
+					f.Draw(ctx, s, paintengine2d.Pt(4, 4), paintengine2d.White)
+					_ = f.Advance(s)
+				}
+			}(f, s)
+		}
+	}
+	wg.Wait()
 }

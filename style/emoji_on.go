@@ -115,7 +115,9 @@ func emojiSheetFor(f *Font, r rune) (*gofont.Face, *emojiAtlas) {
 		if g == nil {
 			continue
 		}
+		unlock := lockFace(g)
 		gid, ok := g.NominalGlyph(r)
+		unlock()
 		if !ok || gid == 0 {
 			continue
 		}
@@ -318,8 +320,12 @@ func bitmapOf(g *gofont.Face, gid gofont.GID, size float32) (*paintengine2d.Imag
 	if ppem < 8 {
 		ppem = 8
 	}
+	// Under the face's own lock: SetPpem *writes* to the face, and one
+	// face serves every size the application draws at.
+	unlock := lockFace(g)
 	g.SetPpem(ppem, ppem)
 	bm, ok := g.GlyphDataBitmap(gid)
+	unlock()
 	if !ok || len(bm.Data) == 0 || bm.Format != gofont.PNG {
 		return nil, false
 	}

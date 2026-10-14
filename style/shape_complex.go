@@ -123,6 +123,29 @@ func shapes() bool { return true }
 
 var shaperPool = sync.Pool{New: func() any { return &shaping.HarfbuzzShaper{} }}
 
+// faceLocks is one mutex per parsed face.
+//
+// A go-text face is not a read-only table: shaping fills caches in it,
+// and asking for a bitmap sets the pixel size the strike is chosen by.
+// One face is shared by every [Font] that borrowed from it — the same
+// family at two sizes is two Fonts and one face — so two goroutines
+// drawing at once walked over each other's state. A music player found
+// it with the race detector, on two emoji fonts at two sizes.
+//
+// Shaping one string is microseconds and the result is cached above
+// this, so the lock is off the hot path.
+var faceLocks sync.Map // *gofont.Face -> *sync.Mutex
+
+func lockFace(g *gofont.Face) func() {
+	if g == nil {
+		return func() {}
+	}
+	v, _ := faceLocks.LoadOrStore(g, new(sync.Mutex))
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 // shapeComplex runs the face's own OpenType tables over text: GSUB for the
 // substitutions (joining forms, ligatures, Indic reordering) and GPOS for
 // the positioning (kerning, mark attachment).

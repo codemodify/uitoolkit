@@ -44,13 +44,30 @@ var defaultFallbackFamilies = []string{
 	// Everything else a Latin face is likely to be short of.
 	"Noto Sans", "DejaVu Sans", "FreeSans", "Arial Unicode MS", "Segoe UI Symbol",
 	// Marks and emoji, where a face draws them as outlines. A colour
-	// emoji face (Noto Color Emoji's CBDT bitmaps, Apple Color Emoji's
-	// sbix, Segoe UI Emoji's COLR) is not named here and would not help
-	// if it were: nothing in this build can draw a colour glyph, and
-	// doing it properly means shaping as well, because a family, a skin
-	// tone and a flag are all sequences the *font* composes (UTS #51).
-	// comms-mail item 58, deferred to that work.
+	// emoji face is not named here and does not need to be: a build
+	// with `font_emoji` finds one for itself, and no other build can
+	// draw a colour glyph at all (see style/emoji_on.go).
 	"Noto Emoji", "Symbola", "Noto Sans Symbols 2", "Noto Sans Symbols",
+	// The scripts that join or reorder, which only a build that shapes
+	// borrows ([shapes]): until v0.23.9 the fallback refused them, so
+	// naming a face for them would have been a lie. A mail client
+	// named these itself in the meantime, which is what told us the
+	// list was short.
+	//
+	// The script's own face first, because that is what a Linux
+	// machine has, then the one face a platform covers many scripts
+	// with — Nirmala UI is every Indic script on Windows, Segoe UI
+	// carries Arabic and Hebrew there, and macOS has its own.
+	"Noto Sans Arabic", "Noto Naskh Arabic", "Geeza Pro",
+	"Noto Sans Hebrew", "Arial Hebrew",
+	"Noto Sans Devanagari", "Kohinoor Devanagari", "Lohit Devanagari",
+	"Noto Sans Bengali", "Noto Sans Gujarati", "Noto Sans Gurmukhi",
+	"Noto Sans Kannada", "Noto Sans Malayalam", "Noto Sans Oriya",
+	"Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Sinhala",
+	"Noto Sans Thai", "Leelawadee UI", "Thonburi",
+	"Noto Sans Lao", "Noto Sans Khmer", "Noto Sans Myanmar",
+	"Noto Sans Ethiopic", "Noto Sans Armenian", "Noto Sans Georgian",
+	"Nirmala UI", "Segoe UI",
 }
 
 var fallback = struct {

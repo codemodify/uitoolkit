@@ -166,10 +166,19 @@ func (f *Font) Prefix(text string, maxW float32) string {
 		w += hi - lo
 		n++
 	}
-	if n <= 0 {
-		return ""
+	// And then measured as what it is. A prefix is not the sum of its
+	// characters' widths in a build that shapes: cutting a string
+	// changes how what is left is drawn — an Arabic letter that was
+	// medial becomes final, a ligature comes apart — so the estimate
+	// above can overrun. It is right to within a character, so this
+	// walks down from it rather than searching.
+	runes := []rune(text)
+	for ; n > 0; n-- {
+		if head := string(runes[:n]); f.Advance(head) <= maxW+fitSlack {
+			return head
+		}
 	}
-	return string([]rune(text)[:n])
+	return ""
 }
 
 // Wrap breaks text into lines no wider than maxW.
@@ -371,7 +380,16 @@ func (f *Font) Fit(text string, maxW float32) string {
 	if head == "" {
 		return ell
 	}
-	return head + ell
+	// The ellipsis joins what it is added to, so the two together are
+	// not the width of the two apart — the same reshaping that makes
+	// Prefix measure its own answer.
+	runes := []rune(head)
+	for n := len(runes); n > 0; n-- {
+		if out := string(runes[:n]) + ell; f.Advance(out) <= maxW+fitSlack {
+			return out
+		}
+	}
+	return ell
 }
 
 func (f *Font) Measure(text string) paintengine2d.Point {

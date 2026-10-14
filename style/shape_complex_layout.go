@@ -4,6 +4,7 @@ package style
 
 import (
 	"sync"
+	"unicode"
 
 	"github.com/go-text/typesetting/bidi"
 	"github.com/go-text/typesetting/di"
@@ -94,61 +95,32 @@ type uitkFontmap struct {
 	f    *Font
 	prim *gofont.Face
 	of   map[*gofont.Face]glyphSheet
-	// colourFirst are the runes of this string that are to be drawn as
-	// emoji if anything can: see [emojiPresentation].
-	colourFirst map[rune]bool
+	// runes is the whole string, and colourAt says which of its
+	// positions are to be drawn as emoji ([emojiPresentation]).
+	runes    []rune
+	colourAt []bool
 }
 
-// emojiPresentation is the set of runes in this string that UTS #51
-// says to draw as emoji rather than as text.
-//
-// Three cases, and the string is needed for two of them: a character
-// from the pictographic planes, which is emoji on its own; one followed
-// by U+FE0F, the variation selector that asks for the emoji form of a
-// character that is text by default (❤ and ❤️ are the same rune); and a
-// zero-width joiner *between* emoji, which is one glyph's worth of
-// family or flag and must not be split off to another face. The same
-// joiner between Devanagari letters is not emoji and is left alone.
-func emojiPresentation(runes []rune) map[rune]bool {
-	const (
-		pictographs = 0x1F000
-		vs16        = 0xFE0F
-		zwj         = 0x200D
-	)
-	var out map[rune]bool
-	mark := func(r rune) {
-		if out == nil {
-			out = make(map[rune]bool, 4)
-		}
-		out[r] = true
-	}
-	for i, r := range runes {
-		switch {
-		case r >= pictographs:
-			mark(r)
-		case r == vs16:
-			mark(r)
-		case i+1 < len(runes) && runes[i+1] == vs16:
-			mark(r)
-		case r == zwj:
-			before := i > 0 && runes[i-1] >= pictographs
-			after := i+1 < len(runes) && runes[i+1] >= pictographs
-			if before || after {
-				mark(r)
-			}
-		}
-	}
-	return out
-}
+// ResolveFace satisfies [shaping.Fontmap] and chooses nothing: the
+// segmenter is asked for direction and script, and the face is picked
+// per position afterwards ([uitkFontmap.faceRuns]). It has to be, for
+// two reasons the segmenter cannot see — a presentation selector makes
+// one ❤ a picture and leaves the next one a dingbat, and the
+// segmenter's own rule that whitespace never forces a face change puts
+// the space after an emoji *in the emoji font*, whose space is a
+// quarter wider than its em.
+func (m *uitkFontmap) ResolveFace(rune) *gofont.Face { return m.prim }
 
-func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
+// faceAt is the face that draws the character at i.
+func (m *uitkFontmap) faceAt(i int) *gofont.Face {
+	r := m.runes[i]
 	// A character to be drawn as emoji goes to a colour face before
 	// anything else is asked, including the face this font is. An
 	// outline face that happens to carry a black-and-white 👍 is not
 	// the answer when the machine has the picture, and taking it split
 	// 👍🏽 in two: the base from one face and the skin tone from
 	// another, which no shaper can then join.
-	if m.colourFirst[r] {
+	if m.colourAt[i] {
 		if g := m.colour(r); g != nil {
 			return g
 		}
@@ -160,9 +132,7 @@ func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
 	// a glyph at a time cannot honestly draw — the ones that join or
 	// reorder — and it is right in the build that has no shaper. This
 	// is the shaper, so Arabic, Hebrew and Devanagari are exactly what
-	// it should be borrowing; keeping the gate meant a font_complex
-	// build drew boxes for them however many faces the machine had
-	// (reported by a mail client and a music player, the same hour).
+	// it should be borrowing.
 	if fb := fallbackFor(m.f, r); fb != nil && fb.ot != nil {
 		if g := fb.ot.face.gotext(); g != nil {
 			m.of[g] = fb.ot
@@ -178,6 +148,120 @@ func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
 	// Never nil: the sheet's .notdef box is the honest answer, and the
 	// caller still needs a face to measure it with.
 	return m.prim
+}
+
+// isColour reports that a face's glyphs are pictures of their own.
+func (m *uitkFontmap) isColour(g *gofont.Face) bool {
+	if g == nil {
+		return false
+	}
+	_, outlines := m.of[g].(*otAtlas)
+	return !outlines
+}
+
+// keepsItsRun reports a character that does not change face on its own
+// account: control codes, separators, spaces and the default-ignorable
+// ones, which pango and go-text both let continue whatever run they
+// are in rather than cut it in two.
+func keepsItsRun(r rune) bool {
+	switch {
+	case unicode.Is(unicode.Cc, r), unicode.Is(unicode.Cs, r),
+		unicode.Is(unicode.Zl, r), unicode.Is(unicode.Zp, r):
+		return true
+	case unicode.Is(unicode.Zs, r) && r != '\u1680':
+		return true
+	case unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r):
+		return true
+	}
+	return false
+}
+
+// faceRuns splits one piece of the segmenter's work into runs of a
+// single face, by position.
+//
+// A character that keeps its run does so — *unless* the run is a
+// colour face. An emoji font is not a text font: its space is 1.245 em
+// in Noto Color Emoji, so the space after 👀 came out five times the
+// width of the space before it (a mail client measured it). Whitespace
+// at the edge of a picture belongs to the words, not to the picture.
+func (m *uitkFontmap) faceRuns(in shaping.Input) []shaping.Input {
+	var out []shaping.Input
+	start := in.RunStart
+	var face *gofont.Face
+	flush := func(end int) {
+		if end <= start || face == nil {
+			return
+		}
+		piece := in
+		piece.RunStart, piece.RunEnd, piece.Face = start, end, face
+		out = append(out, piece)
+	}
+	for i := in.RunStart; i < in.RunEnd; i++ {
+		want := m.faceAt(i)
+		if face != nil && keepsItsRun(m.runes[i]) {
+			if !m.isColour(face) {
+				continue
+			}
+			want = m.prim
+		}
+		switch {
+		case face == nil:
+			face = want
+		case want != face:
+			flush(i)
+			start, face = i, want
+		}
+	}
+	flush(in.RunEnd)
+	return out
+}
+
+// emojiPresentation says, for each *position* in the string, whether
+// UTS #51 asks for the character there to be drawn as emoji.
+//
+// By position and not by character, because the same character can be
+// both in one string: `❤️ ❤` is a picture and then a dingbat, and a
+// table keyed by the rune made the second one a picture as well. A
+// music player found that, and that U+FE0E — the selector that asks
+// for the *text* form — was being ignored.
+//
+// The rules: a character from the pictographic planes is emoji on its
+// own; U+FE0F after one asks for the emoji form of a character that is
+// text by default; U+FE0E after one asks for the text form and wins;
+// and a zero-width joiner between emoji is part of the one glyph a
+// family or a flag becomes. The same joiner between Devanagari letters
+// is not emoji and is left alone.
+func emojiPresentation(runes []rune) []bool {
+	const (
+		pictographs = 0x1F000
+		vs15        = 0xFE0E // text presentation
+		vs16        = 0xFE0F // emoji presentation
+		zwj         = 0x200D
+	)
+	out := make([]bool, len(runes))
+	for i, r := range runes {
+		out[i] = r >= pictographs || r == vs16
+	}
+	for i, r := range runes {
+		switch r {
+		case vs16:
+			if i > 0 {
+				out[i-1] = true
+			}
+		case vs15:
+			// Asked for as text, which is the whole point of the
+			// selector: neither it nor what it follows is a picture.
+			out[i] = false
+			if i > 0 {
+				out[i-1] = false
+			}
+		case zwj:
+			before := i > 0 && out[i-1]
+			after := i+1 < len(runes) && runes[i+1] >= pictographs
+			out[i] = before && after
+		}
+	}
+	return out
 }
 
 // colour is the emoji face for r, remembered with its sheet.
@@ -231,8 +315,9 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 
 	fm := &uitkFontmap{
 		f: f, prim: prim,
-		of:          map[*gofont.Face]glyphSheet{prim: f.ot},
-		colourFirst: emojiPresentation(runes),
+		of:       map[*gofont.Face]glyphSheet{prim: f.ot},
+		runes:    runes,
+		colourAt: emojiPresentation(runes),
 	}
 	seg := segPool.Get().(*shaping.Segmenter)
 	defer segPool.Put(seg)
@@ -245,12 +330,19 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 		Direction: base,
 	}
 	var parts []part
-	for _, piece := range seg.Split(in, fm) {
+	pieces := seg.Split(in, fm)
+	faced := make([]shaping.Input, 0, len(pieces)+2)
+	for _, piece := range pieces {
+		faced = append(faced, fm.faceRuns(piece)...)
+	}
+	for _, piece := range faced {
 		at := fm.of[piece.Face]
 		if at == nil {
 			at = f.ot
 		}
+		unlock := lockFace(piece.Face)
 		out := sh.Shape(piece)
+		unlock()
 		p := part{at: at, start: piece.RunStart, end: piece.RunEnd}
 		if piece.RunStart < len(levels) {
 			p.level = levels[piece.RunStart]
