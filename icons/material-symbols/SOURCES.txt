@@ -89,4 +89,5 @@ terminal        terminal
 drive           hard_drive
 safe            security
 dice            casino
+cloud           cloud
 no-icon         placeholder (missing stem)

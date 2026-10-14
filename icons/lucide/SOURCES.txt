@@ -87,4 +87,5 @@ terminal        terminal
 drive           hard-drive
 safe            vault
 dice            dice-5
+cloud           cloud
 no-icon         placeholder (missing stem)

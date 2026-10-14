@@ -120,6 +120,7 @@ const (
 	IconDrive
 	IconSafe
 	IconDice
+	IconCloud
 )
 
 var toolIconLabels = [...]string{
@@ -146,7 +147,7 @@ var toolIconLabels = [...]string{
 	IconSync:     "Reload",
 	IconLockOpen: "Unlocked", IconKey: "Key", IconPassword: "Password",
 	IconTerminal: "Terminal", IconDrive: "Drive", IconSafe: "Safe",
-	IconDice: "Roll",
+	IconDice: "Roll", IconCloud: "Cloud",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -228,6 +229,7 @@ var toolIconFiles = []struct {
 	{IconDrive, "drive"},
 	{IconSafe, "safe"},
 	{IconDice, "dice"},
+	{IconCloud, "cloud"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -250,7 +252,7 @@ var shippedIconStems = []string{
 	// What a vault is made of (IconKey and its neighbours). "unlock" is
 	// up there with "lock": the packs have always shipped the open
 	// padlock, and IconLockOpen carries that stem.
-	"key", "password", "terminal", "drive", "safe", "dice",
+	"key", "password", "terminal", "drive", "safe", "dice", "cloud",
 	"no-icon",
 }
 
@@ -436,6 +438,7 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconDrive:        {"drive-harddisk", "harddisk", "media-flash"},
 	IconSafe:         {"vault", "plasmavault", "security-high", "safe"},
 	IconDice:         {"roll", "dice", "applications-games"},
+	IconCloud:        {"weather-overcast", "cloud", "folder-remote"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

@@ -664,6 +664,14 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		dial := paintengine2d.Pt(cx-w*0.04, cy)
 		ctx.DrawCircle(dial, w*0.165, stroke)
 		ctx.DrawPath(lineP(dial.X+w*0.17, cy, door.Max.X-w*0.06, cy), stroke)
+	case IconCloud:
+		// Three bulges over a flat bottom, which is how a cloud has
+		// been drawn since the first toolbar had one.
+		base := cy + h*0.16
+		ctx.DrawCircle(paintengine2d.Pt(cx-w*0.17, base-h*0.07), w*0.16, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(cx+w*0.02, base-h*0.15), w*0.21, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(cx+w*0.22, base-h*0.05), w*0.14, stroke)
+		ctx.DrawPath(lineP(cx-w*0.30, base, cx+w*0.30, base), stroke)
 	case IconDice:
 		// The five face, which is the one a die is drawn as.
 		face := b.Inset(2)
@@ -899,6 +907,12 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		dial := paintengine2d.XYWH(cx-w*0.20, cy-w*0.16, w*0.32, w*0.32)
 		ctx.DrawRect(dial, paintengine2d.StrokePaint(col, 1.5))
 		ctx.DrawRect(paintengine2d.XYWH(dial.Max.X+w*0.04, cy-1, door.Max.X-w*0.06-dial.Max.X, 2), fill)
+	case IconCloud:
+		// The same cloud with its corners taken off: a long box with a
+		// shorter one on top of it, which is the square era's cloud.
+		base := cy + h*0.16
+		ctx.DrawRect(paintengine2d.XYWH(cx-w*0.30, base-h*0.16, w*0.60, h*0.16), paintengine2d.StrokePaint(col, 1.6))
+		ctx.DrawRect(paintengine2d.XYWH(cx-w*0.14, base-h*0.32, w*0.34, h*0.17), paintengine2d.StrokePaint(col, 1.6))
 	case IconDice:
 		face := b.Inset(1.8)
 		ctx.DrawRect(face, paintengine2d.StrokePaint(col, 1.6))

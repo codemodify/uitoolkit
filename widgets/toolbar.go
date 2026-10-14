@@ -21,7 +21,12 @@ type ToolItem struct {
 	Down     bool
 	Sep      bool
 	Tip      string
-	OnClick  func()
+	// Badge is a small mark on the button's corner: a plus for an
+	// action that adds, a dot for something waiting, a count for how
+	// many ([style.IconBadge], [style.Badged]). The zero value draws
+	// nothing.
+	Badge   style.IconBadge
+	OnClick func()
 	// Widget is a control the bar carries instead of a tool button — a
 	// combo box, a search field, a progress bar — laid out on the bar,
 	// drawn on its background and focused in its own right. Use
@@ -533,6 +538,13 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 		t.fades[i].paint(t, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
 			lk.DrawToolButton(ctx, r, st, it.Text, it.Icon)
 		})
+		// Over the button the look has just drawn, rather than inside
+		// it: where the icon sits within the button is the look's
+		// business, and thirty-four engines do not need to learn about
+		// badges to let one application put a plus on a padlock.
+		if !it.Badge.Empty() {
+			style.DrawIconBadge(ctx, r.Inset(2), it.Badge, lk)
+		}
 	}
 }
 

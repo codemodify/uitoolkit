@@ -87,4 +87,5 @@ terminal        command-line
 drive           server
 safe            archive-box
 dice            cube
+cloud           cloud
 no-icon         placeholder (missing stem)

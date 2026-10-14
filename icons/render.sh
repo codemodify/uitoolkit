@@ -184,6 +184,7 @@ terminal	terminal	terminal-window	terminal-2	command-line	terminal
 drive	hard-drive	hard-drive	server	server	hard_drive
 safe	vault	vault	vault	archive-box	security
 dice	dice-5	dice-five	dice-5	cube	casino
+cloud	cloud	cloud	cloud	cloud	cloud
 MAP
 
 python3 - "$ROOT" "$MAPFILE" "$LUCIDE_DIR" "$PHOS_DIR" "$TABLER_DIR" "$HERO_DIR" "$MAT_DIR" \

@@ -86,4 +86,5 @@ terminal
 drive
 safe
 dice
+cloud
 no-icon
