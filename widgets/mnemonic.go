@@ -92,13 +92,14 @@ func accelKey(name string) platform.Key {
 		if k := platform.LetterKey(r[0]); k != platform.KeyUnknown {
 			return k
 		}
+		if k := platform.DigitKey(r[0]); k != platform.KeyUnknown {
+			return k
+		}
 		switch r[0] {
 		case ',':
 			return platform.KeyComma
 		case '#':
 			return platform.KeyHash
-		case '3':
-			return platform.Key3
 		}
 		return platform.KeyUnknown
 	}

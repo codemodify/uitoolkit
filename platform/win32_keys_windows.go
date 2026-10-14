@@ -40,6 +40,8 @@ const (
 	vkLWin     = 0x5B
 	vkRWin     = 0x5C
 	vkApps     = 0x5D // the context-menu key
+	vkNumpad0  = 0x60
+	vkNumpad9  = 0x69
 	vkF1       = 0x70
 	vkF12      = 0x7B
 	vkOemComma = 0xBC
@@ -82,10 +84,17 @@ func winKey(vk uintptr) Key {
 		// Either Alt on its own: a window shows its mnemonic underlines
 		// while it is held, which is why the key has a name at all.
 		return KeyAlt
-	case '3':
-		return Key3
 	case vkOemComma:
 		return KeyComma
+	}
+	// The digit row's virtual-key codes are the ASCII digits, and the
+	// keypad's are its own block: one key as far as a shortcut is
+	// concerned, since Num Lock is the person's business.
+	if vk >= '0' && vk <= '9' {
+		return Key0 + Key(vk-'0')
+	}
+	if vk >= vkNumpad0 && vk <= vkNumpad9 {
+		return Key0 + Key(vk-vkNumpad0)
 	}
 	if vk >= 'A' && vk <= 'Z' {
 		// Virtual-key codes for letters are the ASCII capitals, and are

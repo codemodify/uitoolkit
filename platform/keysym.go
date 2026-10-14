@@ -31,8 +31,26 @@ func keyFromKeysym(ks uint64) Key {
 		return KeyPageDown
 	case 0x0020:
 		return KeySpace
-	case 0x0033:
+	case 0x0030, 0xffb0: // '0' and the keypad's
+		return Key0
+	case 0x0031, 0xffb1:
+		return Key1
+	case 0x0032, 0xffb2:
+		return Key2
+	case 0x0033, 0xffb3:
 		return Key3
+	case 0x0034, 0xffb4:
+		return Key4
+	case 0x0035, 0xffb5:
+		return Key5
+	case 0x0036, 0xffb6:
+		return Key6
+	case 0x0037, 0xffb7:
+		return Key7
+	case 0x0038, 0xffb8:
+		return Key8
+	case 0x0039, 0xffb9:
+		return Key9
 	case 0x0023:
 		return KeyHash
 	case 0x002c:

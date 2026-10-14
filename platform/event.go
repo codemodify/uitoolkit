@@ -36,7 +36,21 @@ const (
 	KeyPageUp
 	KeyPageDown
 	KeySpace
+	// The digits, in order, so that Key0+n is the nth. Key3 was here
+	// on its own for years — it and KeyHash and KeyComma are the three
+	// characters an accelerator once needed — and an application that
+	// wanted Ctrl+1 and Ctrl+2 for its first two tabs, the way every
+	// browser does, found that only the third one worked.
+	Key0
+	Key1
+	Key2
 	Key3
+	Key4
+	Key5
+	Key6
+	Key7
+	Key8
+	Key9
 	KeyHash
 	KeyComma
 	KeyA
@@ -128,6 +142,26 @@ func (m Modifiers) NumLock() bool  { return m&ModNumLock != 0 }
 // gets reported as "the menus broke".
 func (m Modifiers) Chord() Modifiers { return m &^ (ModCapsLock | ModNumLock) }
 
+// DigitKey maps '0'..'9' to Key0..Key9, and anything else to
+// KeyUnknown.
+//
+// The keypad's digits are the same keys: a shortcut is about what the
+// key means, and Num Lock is the person's business.
+func DigitKey(r rune) Key {
+	if r >= '0' && r <= '9' {
+		return Key0 + Key(r-'0')
+	}
+	return KeyUnknown
+}
+
+// DigitRune returns the digit for Key0..Key9.
+func DigitRune(k Key) (rune, bool) {
+	if k >= Key0 && k <= Key9 {
+		return rune('0' + (k - Key0)), true
+	}
+	return 0, false
+}
+
 // LetterKey maps a/A..z/Z to KeyA..KeyZ.
 func LetterKey(r rune) Key {
 	if r >= 'A' && r <= 'Z' {
@@ -167,11 +201,12 @@ func KeyChar(k Key) rune {
 	if r, ok := KeyRune(k); ok {
 		return r
 	}
+	if r, ok := DigitRune(k); ok {
+		return r
+	}
 	switch k {
 	case KeySpace:
 		return ' '
-	case Key3:
-		return '3'
 	case KeyHash:
 		return '#'
 	case KeyComma:

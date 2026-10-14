@@ -106,8 +106,6 @@ func akKey(r rune) Key {
 		return KeySpace
 	case akMenuKey:
 		return KeyMenu
-	case '3':
-		return Key3
 	case '#':
 		return KeyHash
 	case ',':
@@ -117,6 +115,12 @@ func akKey(r rune) Key {
 	// upper-case character from a Shifted or Caps-Locked keyboard folds
 	// back down. charactersIgnoringModifiers drops the Shift for most
 	// layouts, but not for Caps Lock, which it keeps.
+	// The digits, from the row and from the keypad alike: AppKit gives
+	// the keypad's as the same characters, and a shortcut is about what
+	// the key means.
+	if r >= '0' && r <= '9' {
+		return Key0 + Key(r-'0')
+	}
 	if r >= 'A' && r <= 'Z' {
 		r += 'a' - 'A'
 	}
