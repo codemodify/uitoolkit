@@ -331,7 +331,7 @@ else.
 | a mark anywhere else you are painting | `style.DrawToolIcon(ctx, box, icon, colour, style.IconSetOf(look))` |
 | a picture in a document | `richtext` and its `<img>`, not a glyph |
 
-There are **63 typed ids** (`style.AllToolIcons`), each of which resolves
+There are **64 typed ids** (`style.AllToolIcons`), each of which resolves
 four ways, best first: the user's file icon set, an installed freedesktop
 theme by name (`style.ToolIconThemeNames`), one of the five packs shipped
 in `icons/`, and the toolkit's own drawn Classic or Sharp set. That is
@@ -350,7 +350,7 @@ print    star-filled       dot      more     menu
 layout   columns  rows     table    cards
 arrow-left        arrow-right       arrow-up arrow-down
 inbox    plus     x        lock     sync
-unlock   key      password terminal drive    safe     dice
+unlock   key      password terminal drive    safe     dice     cloud
 ```
 
 ### A mark the toolkit does not ship
