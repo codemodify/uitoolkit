@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.13
+go get github.com/codemodify/uitoolkit@v0.23.14
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,20 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.14** — **Two characters the emoji marking claimed, and a
+deadline it postponed.** "A picture on its own" was tested as
+`r >= 0x1F000`, which is true of a Han ideograph in plane 2: in
+`🎬𠮷野家.mp4` the open emoji run beside it swallowed the Han
+and the one face that could draw it was never asked. The range is
+bounded now. The unqualified-keycap fix of 0.23.13 marked whatever
+stood before U+20E3 without asking what it was, so `A⃣` drew a
+tintable letter beside an untinted cell; UTS #51 limits the base of a
+keycap to `[0-9#*]`, which settles the text selector with it. And a
+rack kept one wake-up for the *newest* deadline rather than the
+nearest, so a later move request postponed an earlier window's
+quarter second. With them: `go test -race ./app/` runs — it never
+could, on any tree.
 
 **0.23.13** — **Two data races, one of them in every build.** A glyph's
 outline is a view into the buffer it was loaded through, and all four

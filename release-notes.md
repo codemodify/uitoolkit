@@ -7,6 +7,116 @@ about the problem it solved.
 
 ---
 
+## 0.23.14
+
+**Two characters the emoji marking claimed, a deadline a later request
+postponed, and the race detector let into a package it had never
+reached.** Three applications audited 0.23.13 within the hour; two of
+the three fixes below are repairs to work 0.23.13 did for those same
+reports.
+
+### A Han ideograph is not an emoji
+
+The test for "a picture with nobody asking" was `r >= 0x1F000`. That is
+true of U+20BB7 — a Han ideograph in plane 2 — and of everything else
+in the two planes above the pictographs, so a video player's
+`🎬𠮷野家.mp4` marked the Han as colour. A run keeps the parts of its
+picture whether or not the colour face has them, which is what makes a
+family or a flag one glyph; here it meant the emoji run beside the Han
+swallowed it, and the one installed face that could draw it was never
+asked.
+
+`𠮷🎬` was always right. The marking on its own is harmless — it does
+damage only where a run is already open beside it to take the marked
+character in, which is why a one-character probe would have missed it.
+
+The range is bounded at both ends now, U+1F000 to U+1FAFF: what
+follows is Symbols for Legacy Computing, which is text.
+
+**What this is not** is Unicode's `Emoji_Presentation` property. ⌚, ⚡
+and ⭐ are pictures by default and are still waited on with U+FE0F
+here, exactly as before, because honouring the property means carrying
+the table. [docs/complex-text.md](docs/complex-text.md) says so under
+what is missing.
+
+### An enclosing keycap encloses a keycap
+
+0.23.13 taught the marking that `1⃣` is a keycap without its selector.
+It marked whatever stood before U+20E3 to do it, and asked nothing
+about what that was. UTS #51 asks two questions it did not: ED-14c
+limits the base of a keycap to `[0-9#*]`, and ED-8 says a text selector
+requests the text form.
+
+So `A⃣` went to the colour face, which has no A, and drew a tintable
+letter beside an untinted cell; and `1︎⃣`, which asks for text in as
+many words, got a picture. The second needs no case of its own once
+the first is asked, since U+FE0E is not a keycap base either.
+
+Reported by a music player as item 50, with a raw diagnostic that
+prints the width and the untinted pixel count of each form. All four
+of its rows are back to their 0.23.12 numbers.
+
+### The earliest deadline wins
+
+A rack waits a quarter of a second for a window it has asked to move,
+and arms one wake-up to look when that patience runs out. "One wake-up
+at a time, replaced by each new request" was half a rule: the
+replacement asked nothing about *when*, and a request's patience runs
+from the moment it is made. Asking one window to move and then another
+a moment later armed for the second one's deadline and cancelled the
+first's, so the first window's quarter second passed with nobody
+looking and it stayed bonded to a position it was never in until the
+later one ran out too.
+
+A lost wake-up arriving late rather than never — the remainder of the
+music player's item 10, after 0.23.11 and 0.23.13 closed the paths
+where it never arrived at all. Keeping the earlier deadline costs
+nothing: one pass looks at every window, and the pass arms again for
+whatever is still outstanding when it is done.
+
+### `go test -race ./app/` runs
+
+It did not, on this tree or on any released one, and had not been run:
+the two tests that count frames of a window turn failed every time, so
+a real race in the window layer would have had nowhere to show itself.
+
+A turn runs for 420 ms of wall clock and draws as many frames as the
+machine manages in that time, so a loop that captures frames until the
+turn is over is asserting a frame rate. Under the race detector one
+capture of a 520x360 window outlasts the whole turn: one frame, and
+"the turn did not run". Waiting for the turn to end rather than
+counting frames — the remedy already written there — cannot reach it,
+because the turn ends on time whether anything was drawn in it or not.
+
+`FlipPanel.SetClock` holds that clock still, the way `Desk.SetClock`
+holds the rack's, and the tests step it a frame at a time. `./app/` is
+green under `-race` in 71 seconds. This is a new method on a public
+type and nothing else changes: an application that does not call it
+runs on the real clock as before.
+
+`tools/test.sh` gains the other half of what this cost to find. Under
+`-race` that script builds every engine in, and `./style/` then needs
+about an hour; at `-timeout 900s` it dies inside
+`TestWebPaintsEveryControl` and prints `FAIL`, which reads like a
+broken test and is a stopwatch.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, and
+under `-race` in `app`, `rack`, `widgets` and `style`-with-`font_emoji`
+— the first of those for the first time. Green on Windows 11 and
+macOS 15 in two builds each.
+
+Each fix carries a test that fails when the old behaviour returns, and
+each was also checked against the reporting application's own probe,
+run against this tree: the keycap diagnostic reproduces all four
+0.23.12 numbers, the mixed emoji/fallback probe goes from
+`toolkit=49.8125 separate=44.9062` to the two agreeing, the staggered
+deadline reconciles at its 311 ms sample, and the music player's
+strict keycap guard passes.
+
+---
+
 ## 0.23.13
 
 **Two data races, one of them in every build, and the last of the
