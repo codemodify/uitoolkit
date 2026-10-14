@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.11
+go get github.com/codemodify/uitoolkit@v0.23.12
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,18 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.12** — **The last two emoji sequences, and the test that could
+not see them.** `👩‍❤️‍👩` came apart because the joiner beside the heart
+asked whether the next *rune* was pictographic rather than whether it
+had been marked — the heart is a picture only because the selector says
+so. And `1️⃣` broke wherever Noto Sans Symbols is installed, because an
+unmarked character is offered to the outline fallback before the colour
+face: the arm that marked the enclosing keycap had been deleted as dead
+code when a mutation changed no test, which was proof only that the
+test installed nothing but the emoji face. `realFonts(t)` now lets a
+test ask for the machine's own faces, which is where all three of the
+last two days' font defects lived.
 
 **0.23.11** — **A regression 0.23.10 shipped.** Choosing a face per
 position sent whitespace out of a colour run, because an emoji font's

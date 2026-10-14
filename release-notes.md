@@ -7,6 +7,62 @@ about the problem it solved.
 
 ---
 
+## 0.23.12
+
+**The last two emoji sequences, and the test that could not see
+them.** Both were reported against 0.23.11 within the hour, by a mail
+client and two players, and the second one is a mistake this project
+made on purpose and should not have.
+
+No new API.
+
+### A couple with a heart
+
+`👩‍❤️‍👩` is two women, a heart and two joiners. The heart is U+2764 —
+not from the pictographic planes, and a picture only because the
+selector after it says so — and the joiner beside it asked whether the
+*next rune* was pictographic rather than whether it had been **marked**.
+It decided it was joining text, left the run, and the couple drew as
+three pictures. The marks are settled first now, and the joiners read
+them.
+
+### A keycap, where an outline face is installed
+
+`1️⃣` is a digit, the selector and U+20E3. The arm that marked that last
+character as part of the picture was deleted in 0.23.11 as dead code,
+because a mutation that removed it changed no test — which was not
+proof that the code was dead. It was proof that the test installed
+nothing but the emoji face.
+
+Noto Sans Symbols has U+20E3 and is named in the built-in fallback
+list, so on an ordinary machine the **outline** face is offered the
+keycap before the colour one and takes it: the picture drew with
+somebody else's box over it. An unmarked character goes to the outline
+fallback before the colour face is asked, which is the half that
+reasoning missed.
+
+### What the suite was missing
+
+Every runner pins the installed fonts off (`UITK_SYSTEM_FONTS=0`) so
+that what a look measures is the same number on every machine. That is
+right for almost everything, and it is a blind spot: **three defects in
+two days** were found by applications and not here, each because it
+needed a real font set — this keycap, a lender inside a `.ttc`, and an
+emoji family.
+
+`realFonts(t)` is the mirror of the existing `fakeFonts`: it turns the
+index on, rebuilds it, resets the caches derived from it, and puts all
+of that back afterwards. A test that needs the machine's own faces says
+so and skips where the machine has nothing to say. The emoji sequences
+are asserted there as well as against the stub.
+
+And by **glyph count**, not only by width: an enclosing keycap is a
+combining mark with no advance at all, so the stray one from the
+outline face changed the width by nothing. Width alone called the
+keycap composed while it was being drawn twice, from two faces.
+
+---
+
 ## 0.23.11
 
 **A regression 0.23.10 shipped, and the last two items on the oldest
