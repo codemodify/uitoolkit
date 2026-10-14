@@ -27,7 +27,8 @@ func (t *flipTurn) wipe() {
 	t.from, t.to = nil, nil
 }
 
-// flipNow is the clock a turn runs by (tests replace it).
+// flipNow is the clock a turn runs by when nothing has held it still
+// ([FlipPanel.SetClock]).
 var flipNow = time.Now
 
 const (
@@ -83,6 +84,9 @@ type FlipPanel struct {
 
 	// turn is the running animation, zero when at rest.
 	turn flipTurn
+	// now is the clock this panel's turn runs by, so a test can hold it
+	// still ([FlipPanel.SetClock]). nil is the real one.
+	now func() time.Time
 
 	// OnFlip is called when a turn finishes, or at once for a turn that
 	// was skipped, with the face now up.
@@ -240,7 +244,7 @@ func (f *FlipPanel) show(back bool) {
 	if !back {
 		dir = -1
 	}
-	f.turn = flipTurn{running: true, start: flipNow(), dir: dir, hadFocus: f.focusInside()}
+	f.turn = flipTurn{running: true, start: f.clock(), dir: dir, hadFocus: f.focusInside()}
 	if f.turn.hadFocus {
 		// The face about to go face down is where the keyboard is, and it
 		// is about to become a picture. Park the focus; end hands it to
@@ -397,12 +401,34 @@ func (f *FlipPanel) upFace() widget.Component {
 	return f.front
 }
 
+// SetClock holds the turn's clock still, so that a test can step a flip
+// frame by frame instead of racing the 420 ms it really takes. nil is
+// the real clock, which is what an application wants.
+//
+// A turn is wall-clock work: it runs for [flipDuration] and draws as
+// many frames as the machine manages in that time. A test that captures
+// frames in a loop is therefore asserting a frame rate, and under the
+// race detector — where one capture of a 520x360 window can outlast the
+// whole turn — it got one frame and failed. Both window-level turn
+// tests did, every time, which is why `go test -race ./app/` could not
+// be run at all and a real race in there would have had nowhere to show
+// itself. (The rack's Desk.SetClock is the same seam for the same reason.)
+func (f *FlipPanel) SetClock(now func() time.Time) { f.now = now }
+
+// clock is the time this panel tells.
+func (f *FlipPanel) clock() time.Time {
+	if f.now != nil {
+		return f.now()
+	}
+	return flipNow()
+}
+
 // progress is how far through the turn the clock is, eased, and whether
 // it is over. The easing is symmetric — a turn that starts and stops
 // gently, rather than the ease-out a fade uses, because both ends of a
 // rotation are visible.
 func (f *FlipPanel) progress() (float32, bool) {
-	e := float32(flipNow().Sub(f.turn.start)) / float32(flipDuration)
+	e := float32(f.clock().Sub(f.turn.start)) / float32(flipDuration)
 	if e >= 1 {
 		return 1, true
 	}

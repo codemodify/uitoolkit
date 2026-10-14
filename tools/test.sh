@@ -31,6 +31,17 @@
 # different font set: on macOS, which has no fontconfig at all, and in any
 # clean container. Pinning the bundled faces makes those numbers a
 # property of the toolkit. Set it to 1 to run against this machine's fonts.
+#
+# Under -race, give ./style/ an hour: `tools/test.sh -race ./style/`
+# builds every engine in, and the engine tests paint whole control sheets.
+# At -timeout 900s it dies inside TestWebPaintsEveryControl and prints
+# FAIL, which reads like a broken test and is a stopwatch. The font
+# configurations are the quick way to race the text path:
+#
+#   tools/test.sh -race -timeout 3600s ./style/
+#   tools/testenv.sh env UITK_SYSTEM_FONTS=0 \
+#     go test -race -tags font_emoji ./style/        # 35 seconds
+#
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export UITK_SYSTEM_FONTS=${UITK_SYSTEM_FONTS:-0}

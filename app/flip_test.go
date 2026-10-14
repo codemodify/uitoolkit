@@ -12,21 +12,44 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
+// heldTurn stops the clock the turn runs by and hands back the step
+// that advances it, so that a frame is drawn because the test asked for
+// one and not because the machine was quick enough.
+//
+// Waiting for the turn to be over was the remedy before this, and it is
+// not enough on its own: the turn is over after [flipDuration] of real
+// time whether anything was drawn in it or not, so a loop that captures
+// frames until then is asserting a frame rate. Under the race detector
+// one capture of this window outlasts the whole turn, and the two tests
+// that count frames failed every time — which meant `go test -race
+// ./app/` could not be run at all, and a real race in the window layer
+// would have had nowhere to show itself.
+// It is installed before [Window.Flip], because the turn's start is
+// read off this clock too: freezing it afterwards would put the start
+// in the future and the turn would never move.
+func heldTurn(t *testing.T, p *widgets.FlipPanel) func() {
+	t.Helper()
+	now := time.Now()
+	p.SetClock(func() time.Time { return now })
+	t.Cleanup(func() { p.SetClock(nil) })
+	// Fourteen frames across the turn: more than any of these tests
+	// needs, and few enough to stay quick under the race detector.
+	return func() { now = now.Add(flipStep) }
+}
+
+// flipStep is how far heldTurn moves the clock per frame. The turn is
+// 420 ms (widgets.flipDuration, which is not exported and is not worth
+// exporting for this).
+const flipStep = 30 * time.Millisecond
+
 // runWindowTurn paints frames until the turn ends, recording the card's
 // outline width at each, and says so if it never does.
-//
-// These windows run on the real clock — the panel's is not reachable from
-// here — so the loop waits for the turn to be over instead of assuming a
-// count of frames is long enough. A fixed count passed on a loaded
-// machine and failed on an idle one, which is the third timing
-// assumption of its kind in this repo and the same remedy as the others.
-func runWindowTurn(t *testing.T, win *Window, p *widgets.FlipPanel) []float32 {
+func runWindowTurn(t *testing.T, win *Window, p *widgets.FlipPanel, step func()) []float32 {
 	t.Helper()
 	var widths []float32
-	deadline := time.Now().Add(10 * time.Second)
-	for p.Turning() {
-		if time.Now().After(deadline) {
-			t.Fatal("the turn was still running after ten seconds")
+	for n := 0; p.Turning(); n++ {
+		if n > 1000 {
+			t.Fatal("the turn never ended")
 		}
 		win.Capture()
 		if !p.Turning() {
@@ -35,6 +58,7 @@ func runWindowTurn(t *testing.T, win *Window, p *widgets.FlipPanel) []float32 {
 		if out := p.CardOutline(); out != nil {
 			widths = append(widths, out.Bounds().Dx())
 		}
+		step()
 	}
 	return widths
 }
@@ -67,6 +91,7 @@ func TestAWindowTakesTheTurningCardsShape(t *testing.T) {
 		t.Error("the window is shaped before anything has turned")
 	}
 
+	step := heldTurn(t, p)
 	win.Flip()
 	if !win.flipShaped {
 		// The shape goes on at the first frame, which Capture draws.
@@ -75,7 +100,7 @@ func TestAWindowTakesTheTurningCardsShape(t *testing.T) {
 	if !win.flipShaped && p.Turning() {
 		t.Fatal("the window is not wearing the card's shape while it turns")
 	}
-	widths := runWindowTurn(t, win, p)
+	widths := runWindowTurn(t, win, p, step)
 	if len(widths) < 4 {
 		t.Fatalf("only %d frames were drawn; the turn did not run", len(widths))
 	}
@@ -102,16 +127,17 @@ func TestAWindowCanTurnWithoutTakingTheShape(t *testing.T) {
 	_, win, p := flipWindow(t)
 	win.SetFlipShapesWindow(false)
 
+	step := heldTurn(t, p)
 	win.Flip()
-	deadline := time.Now().Add(10 * time.Second)
-	for p.Turning() {
-		if time.Now().After(deadline) {
-			t.Fatal("the turn was still running after ten seconds")
+	for n := 0; p.Turning(); n++ {
+		if n > 1000 {
+			t.Fatal("the turn never ended")
 		}
 		win.Capture()
 		if win.flipShaped {
 			t.Fatal("the window took the card's shape after being told not to")
 		}
+		step()
 	}
 	if !win.ShowingBack() {
 		t.Error("the window did not turn over")
@@ -128,8 +154,9 @@ func TestAWindowSaysWhichFaceIsUp(t *testing.T) {
 	if win.FlipPanel() != p {
 		t.Error("the window does not hand back the panel it built")
 	}
+	step := heldTurn(t, p)
 	win.Flip()
-	runWindowTurn(t, win, p)
+	runWindowTurn(t, win, p, step)
 	if !win.ShowingBack() {
 		t.Error("the back is not up after a turn")
 	}
@@ -247,6 +274,11 @@ func TestAFramedWindowTurnsWithItsFrame(t *testing.T) {
 	if !win.Turning() {
 		t.Fatal("the window is not turning")
 	}
+	// A framed window turns as one picture, in a panel Flip builds for
+	// the purpose — so the clock to hold is that one's, and it does not
+	// exist until here. Nothing expensive has run since, so the turn has
+	// barely begun.
+	step := heldTurn(t, win.turn)
 	// The content under the picture is already the face being turned to,
 	// so when the picture goes there is nothing left to swap.
 	if !fp.Showing() {
@@ -256,18 +288,17 @@ func TestAFramedWindowTurnsWithItsFrame(t *testing.T) {
 		t.Error("the content is turning inside a window that is turning: the card would turn twice")
 	}
 
-	// A turn runs on the real clock, so the loop does as little as it
-	// can: one capture to draw the frame, the shape's width read off the
+	// One capture to draw the frame, the shape's width read off the
 	// raster, and exactly one picture kept — the first frame the card
-	// has plainly turned in. Counting pixels inside the loop spent the
-	// four hundred milliseconds it has on arithmetic instead of frames.
+	// has plainly turned in. Counting pixels inside the loop is still
+	// worth avoiding: the clock is held now, but each frame is a real
+	// capture of a 520x360 window.
 	wide := win.windowBox().Dx()
 	var widths []int
 	var turned *paintengine2d.Image
-	deadline := time.Now().Add(10 * time.Second)
-	for win.Turning() {
-		if time.Now().After(deadline) {
-			t.Fatal("the turn was still running after ten seconds")
+	for n := 0; win.Turning(); n++ {
+		if n > 1000 {
+			t.Fatal("the turn never ended")
 		}
 		img := win.Capture()
 		if img == nil || !win.Turning() {
@@ -281,6 +312,7 @@ func TestAFramedWindowTurnsWithItsFrame(t *testing.T) {
 		if turned == nil && float32(r.Bounds.W) < wide*0.8 {
 			turned = img.Clone()
 		}
+		step()
 	}
 	if len(widths) < 3 {
 		t.Fatalf("only %d frames were drawn; the turn did not run", len(widths))
