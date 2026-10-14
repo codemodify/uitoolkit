@@ -60,8 +60,22 @@ type StatusItem interface {
 	SetOnShownChange(func(shown bool))
 }
 
-// StatusIcon is a tray pictogram. First non-empty field wins: Image, Path,
-// then Name (freedesktop icon theme, Windows resource, or macOS template).
+// StatusIcon is a tray pictogram.
+//
+// The toolkit picks the picture to send in this order — Image, then
+// Path — and sends Name *as well* when one is given. That second half
+// is what "first wins" does not say, and it matters: on Linux the two
+// travel to the host as separate properties (IconPixmap and IconName),
+// and which of them appears is the host's choice, not the toolkit's.
+// A panel that prefers names will show the name beside your raster.
+//
+// **Leave Name empty to be sure the picture is what is shown.** The
+// toolkit then sends no name at all, rather than the generic one that
+// used to mask a supplied raster (a music player reported that, and
+// worked round it by inventing a name no theme has).
+//
+// Name on its own is a freedesktop icon-theme name, a Windows resource
+// name, or a macOS template image name.
 type StatusIcon struct {
 	Name  string
 	Path  string

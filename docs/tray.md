@@ -111,7 +111,7 @@ Set `MenuChrome: uitoolkit.ToolkitMenu` to dogfood Office XP chrome:
 | `StatusItem` | `SetIcon` / `SetTooltip` / `SetTitle` / `SetMenu` / `Notify` / `Close` / `Backend` / `Alive` |
 | `StatusItemOptions` | ID, title, tooltip, icon, menu, `MenuChrome`, `ItemIsMenu`, `OnClick`, `OnNotifyClick`, `OnMenu`, `Stub` |
 | `StatusMenuChrome` | `HostMenu` (default) or `ToolkitMenu` |
-| `StatusIcon` | `Image` (paintengine2d), `Path` (PNG), or `Name` (freedesktop / theme) |
+| `StatusIcon` | `Image` (paintengine2d), `Path` (PNG), or `Name` (freedesktop / theme) — a `Name` given *beside* a picture is sent too, and the host chooses; leave it empty for the picture to be the only answer |
 | `StatusMenuItem` | text, separator, check, icon, `Submenu`, `OnClick` — map from `widgets.MenuItem` |
 | `Notification` | title + body (+ optional icon / click) |
 | `Application.NewStatusItem` | owns the item; a live item keeps `Run` after the last window closes |
