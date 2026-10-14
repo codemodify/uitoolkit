@@ -2585,7 +2585,6 @@ func (w *Window) Close() {
 	if w == nil || !w.closed.CompareAndSwap(false, true) {
 		return
 	}
-	w.forgetDeviceClosing(w.surf)
 	w.app.owesTrim()
 	if w.app != nil && w.app.statusMenu == w {
 		w.app.statusMenu = nil
@@ -2619,6 +2618,14 @@ func (w *Window) Close() {
 	// The shadow patch is shared with the app's other windows.
 	w.shadow.drop()
 	_ = w.surf.Close()
+	// *After* the surface is gone, not before. Closing it is what makes
+	// the backend tear the GPU device down, which is what calls the
+	// callback this registration routes — so dropping the registration
+	// first meant a window closed through Close() never called back at
+	// all, while a test that fired the notification by hand against a
+	// live window saw nothing wrong (a video player and a music player
+	// reported it within the hour, from real EGL windows).
+	w.forgetDeviceClosing(w.surf)
 	if w.app != nil {
 		w.app.remove(w)
 	}
