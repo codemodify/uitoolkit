@@ -7,6 +7,65 @@ about the problem it solved.
 
 ---
 
+## 0.23.11
+
+**A regression 0.23.10 shipped, and the last two items on the oldest
+list.** Three applications reported the same thing within half an hour
+of that release, which is the fastest this has ever gone round and the
+reason this one exists.
+
+No new API.
+
+### Every family, profession and flag emoji came apart
+
+0.23.10 began choosing a face per position, and sent whitespace out of
+a colour run because an emoji font's space is a quarter wider than its
+em. The joiners went with it: the zero-width joiner and the
+presentation selector are default-ignorable characters, like a space,
+so `👨‍👩‍👧` drew as three people and `🏳️‍🌈` as two pictures.
+
+The rule is about the *picture* now, not the character class: a
+position marked as part of an emoji sequence stays in the colour run,
+whether or not the colour face has a glyph of its own for it. That
+last clause is the one that matters — Noto Color Emoji has **no
+U+FE0F glyph at all**, which is how a flag lost its selector and came
+apart.
+
+Keycaps (`1️⃣`) compose now too, which they had not in 0.23.9 either.
+
+### Prefix returns the longest prefix that fits
+
+0.23.10 made `Prefix` and `Fit` measure their own answer, because
+cutting a string reshapes what is left of it — and walked only
+*downwards* from the estimate. Where reshaping makes the piece
+narrower, which is what a ligature does, the answer came back short.
+It walks both ways now, and the test checks it against the honest
+answer: measure every prefix. Three strings at thirty widths each, in
+two faces, exactly the longest that fits.
+
+### A rack wake-up outlives the window that asked for it
+
+The wake that reconciles a move the window manager refused was a timer
+on the window that asked for it — and a timer dies with its window. Two
+satellites refusing to move, then the later one closed before its
+patience ran out, took the only wake with it and left the first bonded
+to a position it had never been in. It rides on a window that is still
+open now, and every pass re-arms for the earliest deadline still
+outstanding. A satellite shown again after being moved behind the
+rack's back arms its own wake as well.
+
+### What a StatusIcon's Name does when there is a picture too
+
+The tray contract said "first non-empty field wins: Image, Path, then
+Name", which is not what happens: the *picture* is chosen in that
+order, and a `Name` given beside it is sent as well — on Linux they
+travel as two properties, IconPixmap and IconName, and which one
+appears is the host's choice. Leave `Name` empty and the toolkit sends
+no name at all, which is the only way to be sure the picture is what is
+shown.
+
+---
+
 ## 0.23.10
 
 **The second day of complex text, and two things a password manager had

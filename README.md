@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.10
+go get github.com/codemodify/uitoolkit@v0.23.11
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,17 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.11** — **A regression 0.23.10 shipped.** Choosing a face per
+position sent whitespace out of a colour run, because an emoji font's
+space is a quarter wider than its em — and took the joiners with it,
+since a zero-width joiner and a presentation selector are
+default-ignorable like a space. Every family, profession and flag emoji
+came apart; three applications said so within half an hour. The rule is
+about the picture now, not the character class. With it: `Prefix` walks
+up from its estimate as well as down, a rack's wake-up outlives the
+window that armed it, and the tray's icon contract says what a `Name`
+beside a picture actually does.
 
 **0.23.10** — **The second day of complex text.** Five more from the
 applications: a face is chosen by *position* now rather than by
