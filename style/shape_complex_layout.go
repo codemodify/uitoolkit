@@ -302,8 +302,21 @@ func emojiPresentation(runes []rune) []bool {
 	// outline fallback first; that is the half the earlier reasoning
 	// missed.
 	for i, r := range runes {
-		if r == keycap && i > 0 {
-			out[i] = out[i-1]
+		if r != keycap || i == 0 {
+			continue
+		}
+		// The keycap takes the mark of what it encloses — and gives
+		// one back. `1️⃣` is a digit, the selector and this, and `1⃣`
+		// is the same sequence without the selector, which UTS #51
+		// calls unqualified and every emoji font still composes. The
+		// digit is not a picture by itself, so marking only from left
+		// to right left the unqualified form split in two: a text
+		// digit from one face and an enclosing box from another,
+		// tinted with the label (a music player, item 48).
+		out[i] = true
+		out[i-1] = true
+		if i > 1 && runes[i-1] == vs16 {
+			out[i-2] = true
 		}
 	}
 	return out

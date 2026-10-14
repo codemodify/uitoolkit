@@ -44,6 +44,12 @@ func (a *otAtlas) ensureGID(gid uint32) *paintengine2d.FontAtlas {
 		adv = 0
 	}
 	segs, err := tf.font.LoadGlyph(&tf.buf, sfnt.GlyphIndex(gid), ppem, nil)
+	// Under the lock, because the segments are the Buffer's own
+	// memory: see the note in rasterize.
+	var p *paintengine2d.Path
+	if err == nil && len(segs) > 0 {
+		p = segmentsPath(segs)
+	}
 	tf.mu.Unlock()
 	if err != nil {
 		return a.publish(d)
@@ -51,10 +57,6 @@ func (a *otAtlas) ensureGID(gid uint32) *paintengine2d.FontAtlas {
 	advance := fx32(adv)
 	if tf.embolden > 0 {
 		advance += tf.embolden * a.size
-	}
-	var p *paintengine2d.Path
-	if len(segs) > 0 {
-		p = segmentsPath(segs)
 	}
 	d.blitGID(id, p, advance)
 	return a.publish(d)
@@ -110,6 +112,12 @@ func (a *otAtlas) outlineOf(gid uint32) (*paintengine2d.Path, float32, bool) {
 		adv = 0
 	}
 	segs, err := tf.font.LoadGlyph(&tf.buf, sfnt.GlyphIndex(gid), ppem, nil)
+	// Under the lock, because the segments are the Buffer's own
+	// memory: see the note in rasterize.
+	var p *paintengine2d.Path
+	if err == nil && len(segs) > 0 {
+		p = segmentsPath(segs)
+	}
 	tf.mu.Unlock()
 	if err != nil {
 		return nil, 0, false
@@ -118,10 +126,7 @@ func (a *otAtlas) outlineOf(gid uint32) (*paintengine2d.Path, float32, bool) {
 	if tf.embolden > 0 {
 		advance += tf.embolden * a.size
 	}
-	if len(segs) == 0 {
-		return nil, advance, true
-	}
-	return segmentsPath(segs), advance, true
+	return p, advance, true
 }
 
 // hasGlyph reports whether the face has a glyph of its own for r. It is

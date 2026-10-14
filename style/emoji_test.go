@@ -549,3 +549,72 @@ func TestSequencesComposeAgainstTheMachinesOwnFonts(t *testing.T) {
 		}
 	}
 }
+
+// Two sizes of one *outline* face, drawn at once.
+//
+// sfnt hands back the segments of a glyph as a view into the Buffer
+// they were loaded through — valid only until the next call that uses
+// it. Every one of the four places that load a glyph unlocked the face
+// and *then* walked those segments into a path, so two goroutines
+// drawing the same face at two sizes read each other's glyph. The race
+// detector says so; a wrong letter is what it looks like when it does
+// not. A music player found it with mixed text at two sizes, and
+// distinguished it from the colour-parser race it had already
+// reported.
+func TestOneOutlineFaceServesTwoSizesAtOnce(t *testing.T) {
+	t.Setenv("UITK_SYSTEM_FONTS", "0")
+	if err := LoadEmbeddedFonts(); err != nil {
+		t.Fatal(err)
+	}
+	// Cold sheets and a wide vocabulary, because a glyph is loaded
+	// *once*: a warm atlas never calls LoadGlyph again and the window
+	// in which two goroutines can cross is gone. Each goroutine takes
+	// its own size — a Font per size, one face under all of them —
+	// and draws enough different characters to keep baking.
+	const letters = "Handgloves AVAST quick brown fox 0123456789 ÀÉÎÕÜ àéîõü ‹›«»†‡"
+	var wg sync.WaitGroup
+	for size := 11; size < 11+12; size++ {
+		wg.Add(1)
+		go func(size float32) {
+			defer wg.Done()
+			f := BakeFamily(FamilyUI, WeightRegular, size, paintengine2d.White)
+			img := paintengine2d.NewImage(400, 80)
+			ctx := paintengine2d.NewContext(img)
+			rs := []rune(letters)
+			for i := 0; i+8 < len(rs); i += 3 {
+				s := string(rs[i : i+8])
+				f.Draw(ctx, s, paintengine2d.Pt(4, 4), paintengine2d.White)
+				_ = f.Advance(s)
+			}
+		}(float32(size))
+	}
+	wg.Wait()
+}
+
+// A keycap without its selector is still a keycap.
+//
+// `1⃣` is `1️⃣` without U+FE0F — unqualified, in UTS #51's words, and
+// composed by every emoji font all the same. The digit is not a
+// picture on its own, so marking the sequence only from left to right
+// left this form split: a text digit from one face and an enclosing
+// box from another, which the label's colour then tinted.
+func TestAnUnqualifiedKeycapIsOnePicture(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if glyphsDrawn(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	qualified := f.Advance("1️⃣")
+	for _, seq := range []struct{ text, what string }{
+		{"1⃣", "1 without the selector"},
+		{"#⃣", "# without the selector"},
+		{"*⃣", "* without the selector"},
+	} {
+		if n := glyphsDrawn(f, seq.text); n != 1 {
+			t.Errorf("%s drew %d glyphs; one keycap is one glyph", seq.what, n)
+		}
+		if got := f.Advance(seq.text); got != qualified {
+			t.Errorf("%s is %.3f wide and the qualified form is %.3f", seq.what, got, qualified)
+		}
+	}
+}

@@ -668,7 +668,18 @@ func (f *Font) shapeOf(text string) shapedRun {
 		// a borrowed one belongs to the face it came from, which
 		// republishes on its own account.
 		if cur := f.GlyphAtlas(); cur != nil && hit.primary() != cur && len(hit.runs) > 0 {
-			hit.runs[0].Atlas = cur
+			// On a *copy* of the groups. The slice in a cached run is
+			// shared with everyone the cache has already handed it to,
+			// and one of them may be drawing from it on another
+			// goroutine right now: writing the new sheet into it is a
+			// race the detector finds in the toolkit's own
+			// measure-and-paint test. The older sheet those holders
+			// keep is still correct — cells are only ever added — so
+			// they lose nothing by keeping it.
+			runs := make([]paintengine2d.GlyphRun, len(hit.runs))
+			copy(runs, hit.runs)
+			runs[0].Atlas = cur
+			hit.runs = runs
 			f.shaped.m[text] = hit
 		}
 		return hit

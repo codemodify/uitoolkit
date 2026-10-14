@@ -516,7 +516,17 @@ func (d *atlasDraft) rasterize(r rune) error {
 	if err != nil {
 		adv = 0
 	}
+	// The path is built while the lock is still held. sfnt's segments
+	// alias the Buffer they came through — valid only until the next
+	// call that uses it — so reading them after the unlock is a race
+	// the detector finds the moment two sizes of one face are drawn at
+	// once, and a wrong glyph the moment it does not (a music player,
+	// item 47).
 	segs, err := tf.font.LoadGlyph(&tf.buf, gid, ppem, nil)
+	var p *paintengine2d.Path
+	if err == nil && len(segs) > 0 {
+		p = segmentsPath(segs)
+	}
 	tf.mu.Unlock()
 	if err != nil {
 		return d.storeNotdef(r)
@@ -528,10 +538,7 @@ func (d *atlasDraft) rasterize(r rune) error {
 	if tf.embolden > 0 {
 		advance += tf.embolden * a.size
 	}
-	if len(segs) == 0 {
-		return d.blitPath(r, nil, advance)
-	}
-	return d.blitPath(r, segmentsPath(segs), advance)
+	return d.blitPath(r, p, advance)
 }
 
 // storeNotdef points r at the sheet's shared .notdef cell.
@@ -563,10 +570,10 @@ func (d *atlasDraft) notdefCell() (paintengine2d.AtlasCell, error) {
 		advance = fx32(adv)
 	}
 	segs, err := tf.font.LoadGlyph(&tf.buf, 0, ppem, nil)
-	tf.mu.Unlock()
 	if err == nil && len(segs) > 0 {
-		p = segmentsPath(segs)
+		p = segmentsPath(segs) // under the lock: see rasterize
 	}
+	tf.mu.Unlock()
 	if p == nil || p.Empty() {
 		p, advance = notdefBox(a.size)
 	}
