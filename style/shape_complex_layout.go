@@ -252,18 +252,13 @@ func emojiPresentation(runes []rune) []bool {
 		vs15        = 0xFE0E // text presentation
 		vs16        = 0xFE0F // emoji presentation
 		zwj         = 0x200D
+		keycap      = 0x20E3 // combining enclosing keycap
 	)
-	// No arm for U+20E3, the enclosing keycap of `1️⃣`, and none is
-	// needed: a font that composes the sequence has the character in
-	// its cmap, so the general rule keeps it with the picture — and a
-	// font that has not cannot compose it however it is routed, since
-	// a GSUB rule can only consume a glyph the cmap produced. An arm
-	// for it looked like standards compliance and was dead code; the
-	// mutation that deleted it changed nothing, which is what said so.
 	out := make([]bool, len(runes))
 	for i, r := range runes {
 		out[i] = r >= pictographs || r == vs16
 	}
+	// The selectors, which decide the character before them.
 	for i, r := range runes {
 		switch r {
 		case vs16:
@@ -277,10 +272,38 @@ func emojiPresentation(runes []rune) []bool {
 			if i > 0 {
 				out[i-1] = false
 			}
-		case zwj:
-			before := i > 0 && out[i-1]
-			after := i+1 < len(runes) && runes[i+1] >= pictographs
-			out[i] = before && after
+		}
+	}
+	// Then the joiners, which need both their neighbours *settled*: in
+	// `👩‍❤️‍👩` the heart is U+2764, which is not from the pictographic
+	// planes and is a picture only because the selector after it says
+	// so. Asking whether the next rune was pictographic, rather than
+	// whether it had been marked, left the joiner beside the heart
+	// looking like a joiner between text — and the couple came apart
+	// into three pictures (a video player measured it).
+	for i, r := range runes {
+		if r != zwj {
+			continue
+		}
+		before := i > 0 && out[i-1]
+		after := i+1 < len(runes) && out[i+1]
+		out[i] = before && after
+	}
+	// And last the enclosing keycap, which takes the mark of what it
+	// encloses: `1️⃣` is a digit, the selector and this.
+	//
+	// It was here, deleted as dead code when a mutation that removed
+	// it changed no test, and the mutation survived because the test
+	// installed nothing but the emoji face. Noto Sans Symbols has
+	// U+20E3 and is in the built-in fallback list, so on a machine
+	// that has it an *outline* face claimed the keycap and the digit
+	// and the box drew side by side (a mail client and two players,
+	// within the hour). An unmarked character is offered to the
+	// outline fallback first; that is the half the earlier reasoning
+	// missed.
+	for i, r := range runes {
+		if r == keycap && i > 0 {
+			out[i] = out[i-1]
 		}
 	}
 	return out

@@ -72,7 +72,18 @@ func TestAnEmojiKeepsItsOwnColours(t *testing.T) {
 	if path == "" {
 		t.Skip("no colour emoji face on this machine")
 	}
-	fakeFonts(t, "Noto Color Emoji\t80\t0\t0\t"+path)
+	// *With an outline face installed that has some of these
+	// characters.* Noto Sans Symbols carries U+20E3, the enclosing
+	// keycap, and is named in the built-in fallback list — so on an
+	// ordinary machine it is offered the keycap before the colour
+	// face is, and takes it. The first version of this test
+	// installed nothing but the emoji face, which is why it passed
+	// while a keycap drew as a digit beside a box for everyone else.
+	lines := []string{"Noto Color Emoji\t80\t0\t0\t" + path}
+	if sym := scriptFontFile(t, "symbols"); sym != "" {
+		lines = append(lines, "Noto Sans Symbols\t80\t0\t0\t"+sym)
+	}
+	fakeFonts(t, lines...)
 	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
 
 	box := drawnPixels(t, f, "", paintengine2d.White)
@@ -136,6 +147,16 @@ func TestTextBesideAnEmojiIsStillTinted(t *testing.T) {
 	if same {
 		t.Error("a letter drew the same pixels in red as in white; the tint is not being applied")
 	}
+}
+
+// glyphsDrawn is how many glyphs a string actually puts on screen,
+// across every sheet it borrows from.
+func glyphsDrawn(f *Font, s string) int {
+	n := 0
+	for _, run := range f.shapeOf(s).runs {
+		n += len(run.Glyphs)
+	}
+	return n
 }
 
 // inkBox is the rectangle the ink of s occupies, drawn at origin.
@@ -473,7 +494,9 @@ func TestASequenceTheFontComposesIsOnePicture(t *testing.T) {
 		{"👨‍👩‍👧", "a family"},
 		{"👨‍💻", "a profession"},
 		{"🏳️‍🌈", "a flag"},
+		{"\U0001F469\u200d\u2764\ufe0f\u200d\U0001F469", "a couple with a heart"},
 		{"1️⃣", "a keycap"},
+		{"#\ufe0f\u20e3", "a hash keycap"},
 		{"👍🏽", "a skin tone"},
 	} {
 		// A quarter over, which is loose enough for another emoji
@@ -481,10 +504,48 @@ func TestASequenceTheFontComposesIsOnePicture(t *testing.T) {
 		// drawn as a picture *plus a leftover box* — which is what a
 		// keycap did while the enclosing character was treated as
 		// text, and what a 1.5 threshold let through.
+		// Counted, not only measured. An enclosing keycap has *no
+		// advance* — it is a combining mark — so a stray one taken
+		// from an outline face draws over the picture and changes the
+		// width by nothing at all. Width alone said the keycap was
+		// fine while it was being drawn twice, from two faces.
+		if n := glyphsDrawn(f, seq.text); n != 1 {
+			t.Errorf("%s drew %d glyphs; one picture is one glyph", seq.what, n)
+		}
 		got := f.Advance(seq.text)
 		if got > one*1.25 {
 			t.Errorf("%s is %.2f wide and one picture is %.2f: it was drawn as %.1f pictures",
 				seq.what, got, one, got/one)
+		}
+	}
+}
+
+// The same sequences against the machine's own font set.
+//
+// The test above stubs the index with two families, which is
+// reproducible and is not what anybody runs. On a real machine the
+// built-in fallback list finds several outline faces, and one of them
+// — Noto Sans Symbols — carries U+20E3: offered the enclosing keycap
+// before the colour face is, it takes it, and `1️⃣` becomes a picture
+// with somebody else's box drawn over it. That is what a mail client
+// and two players saw while this file's stubbed test passed.
+func TestSequencesComposeAgainstTheMachinesOwnFonts(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+	if glyphsDrawn(f, "👩") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	for _, seq := range []struct {
+		text, what string
+	}{
+		{"\U0001F468‍\U0001F469‍\U0001F467", "a family"},
+		{"\U0001F469‍❤️‍\U0001F469", "a couple with a heart"},
+		{"1️⃣", "a keycap"},
+		{"#️⃣", "a hash keycap"},
+		{"\U0001F3F3️‍\U0001F308", "a flag"},
+	} {
+		if n := glyphsDrawn(f, seq.text); n != 1 {
+			t.Errorf("%s drew %d glyphs; one picture is one glyph", seq.what, n)
 		}
 	}
 }
