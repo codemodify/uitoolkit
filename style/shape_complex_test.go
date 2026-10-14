@@ -721,3 +721,33 @@ func TestPrefixIsTheLongestThatFits(t *testing.T) {
 		}
 	}
 }
+
+// Which characters are pictures with nobody asking.
+//
+// A table, because the rule is a range and the first version of it had
+// no top: `r >= 0x1F000` is true of the two planes above the
+// pictographs as well, and the one past U+1FAFF — Symbols for Legacy
+// Computing — is text that happens to sit next door. Plane 2 is
+// Han. [TestAHanIdeographAfterAnEmojiKeepsItsOwnFace] is what a user
+// saw; this is the rule underneath it.
+func TestOnlyTheEmojiPlanesArePicturesOnTheirOwn(t *testing.T) {
+	for _, c := range []struct {
+		r    rune
+		want bool
+		what string
+	}{
+		{'\U0001F004', true, "the mahjong tile that opens the block"},
+		{'\U0001F3AC', true, "a clapper board"},
+		{'\U0001FAFF', true, "the last of Symbols and Pictographs Extended-A"},
+		{'\U0001FB00', false, "the first of Symbols for Legacy Computing"},
+		{'\U00020BB7', false, "a Han ideograph from plane 2"},
+		{'\U0002F800', false, "a CJK compatibility ideograph"},
+		{'\U000E0041', false, "a tag character"},
+		{'❤', false, "a heart, which needs a selector"},
+		{'A', false, "a letter"},
+	} {
+		if got := emojiPresentation([]rune{c.r})[0]; got != c.want {
+			t.Errorf("%s (U+%04X) alone: emoji=%v, want %v", c.what, c.r, got, c.want)
+		}
+	}
+}

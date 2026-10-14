@@ -618,3 +618,110 @@ func TestAnUnqualifiedKeycapIsOnePicture(t *testing.T) {
 		}
 	}
 }
+
+// colourGlyphs is how many of the glyphs s draws come from a sheet
+// that carries its own colours.
+func colourGlyphs(f *Font, s string) int {
+	n := 0
+	for _, run := range f.shapeOf(s).runs {
+		if isColourSheet(run.Atlas) {
+			n += len(run.Glyphs)
+		}
+	}
+	return n
+}
+
+// untintedPixels is how many of the pixels s draws are the same colour
+// whatever the label's colour is — which is the definition of a
+// picture, and a defect anywhere else.
+func untintedPixels(t *testing.T, f *Font, s string) int {
+	t.Helper()
+	white := drawnPixels(t, f, s, paintengine2d.White)
+	red := drawnPixels(t, f, s, paintengine2d.Color{R: 1, A: 1})
+	n := 0
+	for i, p := range white {
+		if i < len(red) && p == red[i] {
+			n++
+		}
+	}
+	return n
+}
+
+// An enclosing keycap encloses a keycap, and leaves everything else to
+// the text it was combining with.
+//
+// The fix above this one — the unqualified `1⃣`, which has no selector
+// to mark it — marked whatever stood before U+20E3 as a picture, with
+// no question asked about what it was. UTS #51 asks two: ED-14c limits
+// the base of a keycap to `[0-9#*]`, and ED-8 says a text selector
+// requests the text form, which this file already honours everywhere
+// else. So `A⃣` went to the colour face, which has no A, and painted a
+// tintable letter beside an untinted cell; and `1︎⃣`, which asks for
+// text in as many words, got a picture anyway. A music player measured
+// both the morning after the release that did it (item 50).
+func TestAnEnclosingMarkOnPlainTextStaysText(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if colourGlyphs(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	for _, c := range []struct{ text, what string }{
+		{"A⃣", "an enclosing mark on a letter"},
+		{"1︎⃣", "an enclosing mark on a digit asked for as text"},
+		{"❤︎⃣", "an enclosing mark on a heart asked for as text"},
+	} {
+		if n := colourGlyphs(f, c.text); n != 0 {
+			t.Errorf("%s drew %d glyphs from a colour sheet; it is text", c.what, n)
+		}
+		if n := untintedPixels(t, f, c.text); n != 0 {
+			t.Errorf("%s left %d pixels the label's colour does not reach", c.what, n)
+		}
+	}
+	// And the keycaps themselves are still one picture, qualified or
+	// not: the half of this the release before got right.
+	for _, c := range []struct{ text, what string }{
+		{"1️⃣", "a qualified keycap"},
+		{"1⃣", "an unqualified keycap"},
+		{"#⃣", "an unqualified # keycap"},
+	} {
+		if n := colourGlyphs(f, c.text); n != 1 {
+			t.Errorf("%s drew %d glyphs from a colour sheet; it is one picture", c.what, n)
+		}
+	}
+}
+
+// A character past the emoji planes is not an emoji.
+//
+// The test for "a picture on its own" was `r >= 0x1F000`, which is
+// true of every character in the two planes above the pictographs as
+// well — including U+20BB7, a Han ideograph. A video player found it
+// in a file name, `🎬𠮷野家.mp4`: the Han was marked as colour, the
+// emoji run kept it (a run keeps the parts of its picture whether or
+// not the colour face has them), and the one installed face that could
+// draw it was never asked. The clapper board beside it is what made
+// the difference — `𠮷🎬` was always right, because nothing had marked
+// the Han before a run was open to swallow it.
+func TestAHanIdeographAfterAnEmojiKeepsItsOwnFace(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if colourGlyphs(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	const (
+		emoji = "\U0001F3AC" // 🎬 clapper board
+		han   = "\U00020BB7" // 𠮷, plane 2
+	)
+	if n := colourGlyphs(f, emoji+han); n != 1 {
+		t.Errorf("`%s` drew %d glyphs from a colour sheet; only the clapper board is a picture", emoji+han, n)
+	}
+	// Laid out together, it is laid out the same as each on its own:
+	// the measure the video player sent (toolkit 49.81, separate
+	// 44.91) with the emoji face answering for a character it has no
+	// glyph for.
+	if got, want := f.Advance(emoji+han), f.Advance(emoji)+f.Advance(han); got != want {
+		t.Errorf("`%s` is %.4f wide; the two apart are %.4f", emoji+han, got, want)
+	}
+	if n := untintedPixels(t, f, han); n != 0 {
+		t.Errorf("the Han alone left %d pixels untinted; it is text", n)
+	}
+}

@@ -248,15 +248,14 @@ func (m *uitkFontmap) faceRuns(in shaping.Input) []shaping.Input {
 // is not emoji and is left alone.
 func emojiPresentation(runes []rune) []bool {
 	const (
-		pictographs = 0x1F000
-		vs15        = 0xFE0E // text presentation
-		vs16        = 0xFE0F // emoji presentation
-		zwj         = 0x200D
-		keycap      = 0x20E3 // combining enclosing keycap
+		vs15   = 0xFE0E // text presentation
+		vs16   = 0xFE0F // emoji presentation
+		zwj    = 0x200D
+		keycap = 0x20E3 // combining enclosing keycap
 	)
 	out := make([]bool, len(runes))
 	for i, r := range runes {
-		out[i] = r >= pictographs || r == vs16
+		out[i] = pictographic(r) || r == vs16
 	}
 	// The selectors, which decide the character before them.
 	for i, r := range runes {
@@ -305,21 +304,67 @@ func emojiPresentation(runes []rune) []bool {
 		if r != keycap || i == 0 {
 			continue
 		}
+		// What the keycap encloses, which is the rune before it or the
+		// one before an emoji selector. UTS #51 spells the sequence
+		// out: ED-14c limits the base to a digit, a number sign or an
+		// asterisk, and the optional U+FE0F between them is all that
+		// separates the qualified form from the unqualified one.
+		//
+		// The *text* selector needs no case of its own, though it is
+		// the other half of what was reported: U+FE0E is not a keycap
+		// base either, so `1\uFE0E\u20E3` falls out at the same test
+		// and stays the digit and combining mark it asked to be
+		// (ED-8, and the rule the selector pass above already keeps).
+		base := i - 1
+		if runes[base] == vs16 {
+			if base == 0 {
+				continue
+			}
+			base--
+		}
+		if !keycapBase(runes[base]) {
+			continue
+		}
 		// The keycap takes the mark of what it encloses — and gives
-		// one back. `1️⃣` is a digit, the selector and this, and `1⃣`
-		// is the same sequence without the selector, which UTS #51
-		// calls unqualified and every emoji font still composes. The
-		// digit is not a picture by itself, so marking only from left
-		// to right left the unqualified form split in two: a text
-		// digit from one face and an enclosing box from another,
-		// tinted with the label (a music player, item 48).
-		out[i] = true
-		out[i-1] = true
-		if i > 1 && runes[i-1] == vs16 {
-			out[i-2] = true
+		// one back. `1\uFE0F\u20E3` is a digit, the selector and this,
+		// and `1\u20E3` is the same sequence without the selector,
+		// which UTS #51 calls unqualified and every emoji font still
+		// composes. The digit is not a picture by itself, so marking
+		// only from left to right left the unqualified form split in
+		// two: a text digit from one face and an enclosing box from
+		// another, tinted with the label (a music player, item 48).
+		//
+		// Marking it from *any* base is what the first version did, and
+		// `A\u20E3` then went to the colour face, which has no A — a
+		// tintable letter and an untinted cell side by side (the same
+		// player, item 50, within the release). An enclosing mark on
+		// anything else is ordinary combining text.
+		for j := base; j <= i; j++ {
+			out[j] = true
 		}
 	}
 	return out
+}
+
+// pictographic says whether r is one of the characters that are emoji on
+// their own, with no selector asked for.
+//
+// The planes, and not everything above them: the first version of this
+// said `r >= 0x1F000`, which is true of U+20BB7 — a Han ideograph from
+// plane 2, and of every other character in the two planes past the
+// pictographs. A video player found it in a file name, `🎬𠮷野家.mp4`:
+// the Han was marked as colour, the emoji run swallowed it, and the one
+// face that has it was never asked (item: emoji run swallows a following
+// Han fallback). U+1FAFF ends Symbols and Pictographs Extended-A; what
+// follows it is Symbols for Legacy Computing, which is text.
+func pictographic(r rune) bool {
+	return r >= 0x1F000 && r <= 0x1FAFF
+}
+
+// keycapBase says whether r can be enclosed by U+20E3 to make an emoji
+// keycap: UTS #51 ED-14c limits it to these twelve.
+func keycapBase(r rune) bool {
+	return r >= '0' && r <= '9' || r == '#' || r == '*'
 }
 
 // colour is the emoji face for r, remembered with its sheet.

@@ -120,6 +120,14 @@ machine's.
   drawn under `-tags font_emoji`, in a colour sheet of its own that
   [Font.Draw] leaves untinted. Layered outlines and SVG glyphs are
   parsed by go-text and not drawn.
+- **"A picture on its own" is a range, not the property.** A character
+  in the pictographic planes — U+1F000 to U+1FAFF — is drawn as emoji
+  with nobody asking. Unicode's `Emoji_Presentation` says the same of a
+  few dozen characters outside them (⌚ U+231A, ⚡ U+26A1, ⭐ U+2B50),
+  and the toolkit waits to be asked for those with U+FE0F, letting an
+  outline face answer otherwise. Honouring the property means carrying
+  the table. The range is bounded at both ends on purpose: U+1FB00 and
+  up is Symbols for Legacy Computing, and plane 2 is Han.
 - **Caret affinity.** At a change of direction one text position is two
   places on screen. The toolkit picks one: the leading edge of the
   character the index names.
