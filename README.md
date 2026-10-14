@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.8
+go get github.com/codemodify/uitoolkit@v0.23.9
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,19 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.9** — **Everything two applications found in 0.23.8, inside two
+hours of it.** Complex text had one day of real use: a shaping build
+would not borrow the very scripts it exists for (the fallback's "a
+glyph at a time cannot draw these honestly" rule is about the build
+with no shaper), every emoji was drawn a line too high and clipped, an
+outline face beat the colour one so ❤️ came out flat and 👍🏽 split in
+two, growing the emoji sheet turned drawn text back into a tinted mask,
+and three width helpers read the caret table as a running total — which
+it is only left to right, so Hebrew would not wrap or elide. Separately
+and for every build: a window closed through `Window.Close` never
+called its GPU device back, because 0.23.8 dropped the registration
+before the teardown that fires it.
 
 **0.23.8** — **Text that is not Latin, and a scroll bar that is not a
 row.** Two halves. Every view that scrolls asked "is there a row at this

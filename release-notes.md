@@ -7,6 +7,99 @@ about the problem it solved.
 
 ---
 
+## 0.23.9
+
+**Everything two applications found in 0.23.8, inside two hours of it.**
+Seven defects, six of them in what 0.23.8 added: complex text had one
+day of real use and this is what that day turned up. A mail client and
+a music player reported them separately and in most cases both found
+the same thing, which is the clearest signal a report can carry.
+
+No new API. A build without `font_complex` or `font_emoji` is affected
+by one of these — the GPU one — and otherwise unchanged.
+
+### A window closed the ordinary way never called its GPU device back
+
+0.23.8 gave the closing callback a registration per surface, which
+fixed one application overwriting another's, and dropped that
+registration in `Close` *before* closing the surface. Closing the
+surface is what makes the backend tear the GPU device down, and that
+teardown is what calls back — so a window closed through `Window.Close`
+emitted **zero** callbacks. A renderer holding textures on that device,
+which is what the callback exists for, would have lost them.
+
+A video player and a music player reported it independently, both from
+real EGL windows, and both pointed out that the test which should have
+caught it fires the notification by hand at a window that is still
+open. There is now one that opens a real GPU window, closes it the way
+an application does, and asserts the callback ran with a device still
+in hand — on X11 and on Wayland.
+
+### A shaping build would not borrow the scripts it exists for
+
+The fallback has always refused to lend Arabic, Hebrew and the Indic
+scripts: a glyph at a time draws them unjoined and unreordered, and a
+box is the honester answer. That is a rule about the build with no
+shaper in it. Carried into the shaping build unchanged, it meant the
+one thing `font_complex` is for never happened — Arabic drew boxes
+however many faces the machine had, unless the interface face itself
+had Arabic, which no interface face has.
+
+The refusal now asks whether this build shapes.
+
+### Four things about emoji
+
+- **Every picture was drawn a line too high.** A cell's bearing is
+  measured from the top of the line — an outline's is `ascent + ymin` —
+  and the colour cell measured its own from the baseline, so each emoji
+  sat a whole ascent above its text and the window clipped it away.
+- **An outline face beat the colour one.** `❤` and `❤️` are the same
+  character, the second followed by the selector that asks for its
+  emoji form; both came out flat wherever an installed face had an
+  outline for it. A character to be drawn as emoji — the pictographic
+  planes, a variation selector, a joiner between emoji (UTS #51) — now
+  goes to a colour face before anything else is asked.
+- **A skin tone was split from its hand**, the base taken from one face
+  and the tone from another, which no shaper can then join. The same
+  fix settles it: both halves go to the same face.
+- **Growing the sheet turned what was already drawn back into a mask.**
+  The colour sheets were kept in a set beside them, and each was
+  deleted as it was superseded — tidy, and wrong: a run shaped earlier
+  still names the older sheet, so the first emoji began taking the
+  label's colour as soon as a second one was baked. The mark that says
+  "these colours are the face's own" travels inside the sheet now.
+
+### Three width helpers read the caret table as a running total
+
+It is one only in text that reads left to right, which is what they
+were written against. In a right-to-left line the first rune's caret is
+the line's full width and the last one's is zero, so:
+
+- `CaretX` answered 0 for index zero *before* consulting the table, and
+  the caret before the first letter of a Hebrew word sat at the wrong
+  end of it — disagreeing with where a click on that same caret put it;
+- `Prefix` scanned for the first caret past the width, and so returned
+  the whole string or nothing at all;
+- `Wrap`'s per-rune memo measured each letter with the caret *after*
+  it, which is zero in a right-to-left run: every letter measured as
+  nothing, and four Hebrew words went onto one line four times the box.
+
+Widths are measured as widths now, which is the same number in both
+directions and sums to the same total.
+
+### And the suite's own blind spot
+
+The helper that rebuilds the installed-font index for a test resets the
+index and nothing derived from it. A parsed face outlives the index it
+was found through, so a test that handed the index a colour emoji face
+left that face remembered, and the next test — pinned to the bundled
+faces, expecting the toolkit's drawn paperclip — got the real one
+instead. It passed alone and failed in the suite, twice in one evening,
+which is the signature of exactly this. The derived caches are reset
+with the index now.
+
+---
+
 ## 0.23.8
 
 **Text that is not Latin, and a scroll bar that is not a row.** Two
