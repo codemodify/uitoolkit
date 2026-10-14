@@ -210,31 +210,39 @@ func (a *emojiAtlas) ensureGIDs(gids []uint32) *paintengine2d.FontAtlas {
 		cells[id] = cell
 	}
 	img.Bump()
+	cells[colourSheetMark] = paintengine2d.AtlasCell{}
 	sheet := &paintengine2d.FontAtlas{Image: img, Cells: cells}
-	if old := a.cur.Swap(sheet); old != nil {
-		colourSheets.Delete(old)
-	}
-	colourSheets.Store(sheet, true)
+	a.cur.Store(sheet)
 	return sheet
 }
 
-// colourSheets is every published emoji sheet, so that [Font.Draw] can
-// tell one from a coverage mask.
+// colourSheetMark is the key of a cell that is never drawn and says
+// only "the colours in this sheet are the face's own".
 //
-// By identity rather than by the image's format: the toolkit's own
-// bitmap font is an RGBA sheet as well, and it *is* tinted — it is a
-// white mask that happens to be stored in four bytes a pixel. What
-// matters is not how the pixels are kept but whether the colours in
-// them are the face's own.
-var colourSheets sync.Map
+// It lives in the sheet because that is what a cached run holds. The
+// first version kept a set of the sheets that were in colour and
+// deleted each one as it was superseded, which is tidy and wrong: a run
+// shaped earlier still names the older sheet, so growing the atlas
+// turned text that had been drawn in colour into text that was tinted
+// again — found by a music player, which baked a second emoji and
+// watched the first one change colour with the label.
+//
+// Nothing can collide with it: a rune key stops at 0x10FFFF and a glyph
+// key is an OpenType index below 0x10000 with the top bit set.
+const colourSheetMark = paintengine2d.GlyphID(1) << 30
 
 // isColourSheet reports that a sheet carries its own colours and must
 // be drawn as it is.
+//
+// Asked of the sheet, not of a table beside it. The image's format
+// cannot answer — the toolkit's own bitmap font is RGBA as well and
+// *is* tinted, being a white mask that happens to be kept in four
+// bytes a pixel — so the sheet carries [colourSheetMark].
 func isColourSheet(a *paintengine2d.FontAtlas) bool {
-	if a == nil {
+	if a == nil || a.Cells == nil {
 		return false
 	}
-	_, ok := colourSheets.Load(a)
+	_, ok := a.Cells[colourSheetMark]
 	return ok
 }
 
@@ -277,8 +285,13 @@ func (a *emojiAtlas) bake(img **paintengine2d.Image, gid uint32) (paintengine2d.
 		paintengine2d.XYWH(0, 0, float32(src.Width), float32(src.Height)),
 		paintengine2d.XYWH(float32(x), float32(y), float32(gw), float32(gh)))
 	return paintengine2d.AtlasCell{
-		Src:     paintengine2d.XYWH(float32(x), float32(y), float32(gw), float32(gh)),
-		Bearing: paintengine2d.Pt(0, -h),
+		Src: paintengine2d.XYWH(float32(x), float32(y), float32(gw), float32(gh)),
+		// From the top of the line, like every other cell on every
+		// other sheet: an outline's bearing is `ascent + ymin`, and
+		// the draw adds it to the origin, which is the line's top. A
+		// bearing measured from the *baseline* put each emoji a whole
+		// ascent above its line, where the window clipped it away.
+		Bearing: paintengine2d.Pt(0, a.ascent-h),
 		Advance: w + a.size*0.08,
 	}, true
 }

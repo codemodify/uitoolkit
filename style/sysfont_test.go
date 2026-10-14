@@ -22,10 +22,15 @@ func fakeFonts(t *testing.T, lines ...string) {
 	fcList = func() ([]byte, error) { return []byte(strings.Join(lines, "\n") + "\n"), nil }
 	sysIndex.once = sync.Once{}
 	sysIndex.faces, sysIndex.names = nil, nil
+	// And everything derived from the index, before and after: a face
+	// parsed from the machine's own files outlives the index it was
+	// found through (fontcaches_test.go).
+	resetDerivedFontCaches()
 	t.Cleanup(func() {
 		fcList = old
 		sysIndex.once = sync.Once{}
 		sysIndex.faces, sysIndex.names = nil, nil
+		resetDerivedFontCaches()
 	})
 }
 

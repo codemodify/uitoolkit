@@ -94,31 +94,100 @@ type uitkFontmap struct {
 	f    *Font
 	prim *gofont.Face
 	of   map[*gofont.Face]glyphSheet
+	// colourFirst are the runes of this string that are to be drawn as
+	// emoji if anything can: see [emojiPresentation].
+	colourFirst map[rune]bool
+}
+
+// emojiPresentation is the set of runes in this string that UTS #51
+// says to draw as emoji rather than as text.
+//
+// Three cases, and the string is needed for two of them: a character
+// from the pictographic planes, which is emoji on its own; one followed
+// by U+FE0F, the variation selector that asks for the emoji form of a
+// character that is text by default (❤ and ❤️ are the same rune); and a
+// zero-width joiner *between* emoji, which is one glyph's worth of
+// family or flag and must not be split off to another face. The same
+// joiner between Devanagari letters is not emoji and is left alone.
+func emojiPresentation(runes []rune) map[rune]bool {
+	const (
+		pictographs = 0x1F000
+		vs16        = 0xFE0F
+		zwj         = 0x200D
+	)
+	var out map[rune]bool
+	mark := func(r rune) {
+		if out == nil {
+			out = make(map[rune]bool, 4)
+		}
+		out[r] = true
+	}
+	for i, r := range runes {
+		switch {
+		case r >= pictographs:
+			mark(r)
+		case r == vs16:
+			mark(r)
+		case i+1 < len(runes) && runes[i+1] == vs16:
+			mark(r)
+		case r == zwj:
+			before := i > 0 && runes[i-1] >= pictographs
+			after := i+1 < len(runes) && runes[i+1] >= pictographs
+			if before || after {
+				mark(r)
+			}
+		}
+	}
+	return out
 }
 
 func (m *uitkFontmap) ResolveFace(r rune) *gofont.Face {
+	// A character to be drawn as emoji goes to a colour face before
+	// anything else is asked, including the face this font is. An
+	// outline face that happens to carry a black-and-white 👍 is not
+	// the answer when the machine has the picture, and taking it split
+	// 👍🏽 in two: the base from one face and the skin tone from
+	// another, which no shaper can then join.
+	if m.colourFirst[r] {
+		if g := m.colour(r); g != nil {
+			return g
+		}
+	}
 	if m.f.ot != nil && m.f.ot.face.hasGlyph(r) {
 		return m.prim
 	}
-	if borrowable(r) {
-		if fb := fallbackFor(m.f, r); fb != nil && fb.ot != nil {
-			if g := fb.ot.face.gotext(); g != nil {
-				m.of[g] = fb.ot
-				return g
-			}
-		}
-		// Nothing with an outline for it. A colour face may still have
-		// a picture — 👀 is a PNG in Noto Color Emoji and an outline in
-		// nothing at all — and in a font_emoji build this is where it
-		// comes from.
-		if g, sheet := emojiSheetFor(m.f, r); g != nil && sheet != nil {
-			m.of[g] = sheet
+	// No `borrowable` gate here. That rule refuses to lend the scripts
+	// a glyph at a time cannot honestly draw — the ones that join or
+	// reorder — and it is right in the build that has no shaper. This
+	// is the shaper, so Arabic, Hebrew and Devanagari are exactly what
+	// it should be borrowing; keeping the gate meant a font_complex
+	// build drew boxes for them however many faces the machine had
+	// (reported by a mail client and a music player, the same hour).
+	if fb := fallbackFor(m.f, r); fb != nil && fb.ot != nil {
+		if g := fb.ot.face.gotext(); g != nil {
+			m.of[g] = fb.ot
 			return g
 		}
+	}
+	// Nothing with an outline for it. A colour face may still have a
+	// picture — 👀 is a PNG in Noto Color Emoji and an outline in
+	// nothing at all.
+	if g := m.colour(r); g != nil {
+		return g
 	}
 	// Never nil: the sheet's .notdef box is the honest answer, and the
 	// caller still needs a face to measure it with.
 	return m.prim
+}
+
+// colour is the emoji face for r, remembered with its sheet.
+func (m *uitkFontmap) colour(r rune) *gofont.Face {
+	g, sheet := emojiSheetFor(m.f, r)
+	if g == nil || sheet == nil {
+		return nil
+	}
+	m.of[g] = sheet
+	return g
 }
 
 // part is one shaped run: glyphs in visual order, from one face, at one
@@ -160,7 +229,11 @@ func complexLayout(f *Font, text string) (shapedRun, bool) {
 		}
 	}
 
-	fm := &uitkFontmap{f: f, prim: prim, of: map[*gofont.Face]glyphSheet{prim: f.ot}}
+	fm := &uitkFontmap{
+		f: f, prim: prim,
+		of:          map[*gofont.Face]glyphSheet{prim: f.ot},
+		colourFirst: emojiPresentation(runes),
+	}
 	seg := segPool.Get().(*shaping.Segmenter)
 	defer segPool.Put(seg)
 	sh := shaperPool.Get().(*shaping.HarfbuzzShaper)

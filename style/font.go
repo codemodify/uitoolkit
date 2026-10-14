@@ -147,9 +147,23 @@ func (f *Font) Prefix(text string, maxW float32) string {
 	if f.Advance(text) <= maxW {
 		return text
 	}
-	xs := f.shapeOf(text).xs
+	// By width, not by caret position. The caret table holds each
+	// rune's *leading* edge, which climbs only in text that reads left
+	// to right: in a right-to-left line the first rune's caret is the
+	// line's full width and the last one's is zero, so a scan for "the
+	// first caret past maxW" ended at once or never — a Hebrew string
+	// came back whole from a Prefix that was asked for two thirds of
+	// it. Each rune's own width says the same thing in both
+	// directions, and sums to the same total.
+	run := f.shapeOf(text)
+	var w float32
 	n := 0
-	for n+1 < len(xs) && xs[n+1] <= maxW {
+	for i := 0; i+1 < len(run.xs); i++ {
+		lo, hi := run.span(i)
+		if w+(hi-lo) > maxW {
+			break
+		}
+		w += hi - lo
 		n++
 	}
 	if n <= 0 {
@@ -311,7 +325,12 @@ func (f *Font) runeAdvances() func(rune) float32 {
 		if w, ok := table[r]; ok {
 			return w
 		}
-		w := f.CaretX(string(r), 1)
+		// Advance, not the caret after it. They are the same number for
+		// a rune that reads left to right and nothing alike for one
+		// that does not: a single Hebrew letter's trailing caret is 0,
+		// so every letter measured as nothing and a paragraph of them
+		// wrapped onto one line four times its box.
+		w := f.Advance(string(r))
 		table[r] = w
 		return w
 	}
@@ -539,11 +558,23 @@ func (f *Font) runeAdvance(r rune) float32 {
 	return cell.Src.Dx()
 }
 
+// CaretX is where the caret sits before rune i: the *leading* edge of
+// that rune, which is its left in text that reads left to right and its
+// right in text that does not.
+//
+// Index zero is asked of the table like any other. It was answered with
+// 0 before the table was consulted, which is right for a left-to-right
+// line and wrong for every other kind: the caret before the first
+// character of a Hebrew word belongs at the right-hand end of it, where
+// hit-testing a click already put it, and the two disagreed.
 func (f *Font) CaretX(text string, i int) float32 {
-	if f == nil || i <= 0 || text == "" {
+	if f == nil || text == "" || i < 0 {
 		return 0
 	}
 	xs := f.shapeOf(text).xs
+	if len(xs) == 0 {
+		return 0
+	}
 	if i >= len(xs) {
 		i = len(xs) - 1
 	}

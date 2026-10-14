@@ -115,6 +115,12 @@ func parseGotext(src []byte, index int) (*gofont.Face, error) {
 	return gofont.ParseTTF(bytes.NewReader(src))
 }
 
+// shapes reports whether this build can draw a script that joins or
+// reorders. It can, so nothing is held back from the fallback: the
+// scripts [borrowable] refuses are precisely the ones this build was
+// added for.
+func shapes() bool { return true }
+
 var shaperPool = sync.Pool{New: func() any { return &shaping.HarfbuzzShaper{} }}
 
 // shapeComplex runs the face's own OpenType tables over text: GSUB for the

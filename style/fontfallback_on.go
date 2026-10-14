@@ -40,7 +40,7 @@ type fallbackKey struct {
 // fallbackFor is the face that lends f the glyph for r, or nil for none
 // — which is every rune f draws itself, and every rune nobody has.
 func fallbackFor(f *Font, r rune) *Font {
-	if f == nil || r == ' ' || r == '\t' || r == '\n' || !borrowable(r) {
+	if f == nil || r == ' ' || r == '\t' || r == '\n' || (!shapes() && !borrowable(r)) {
 		return nil
 	}
 	key := fallbackKey{r: r, family: f.Family, size: quantFont(f.Size),

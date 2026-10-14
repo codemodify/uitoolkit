@@ -514,3 +514,106 @@ func collectionFontFile(t *testing.T) string {
 	}
 	return ""
 }
+
+// The helpers that measure text must not read the caret table as if it
+// were a running total.
+//
+// It is one in text that reads left to right, and that is what Prefix,
+// CaretX and the wrap's per-rune memo were written against. In a
+// right-to-left line the first rune's caret is the line's full width
+// and the last one's is zero, so: CaretX said the caret before the
+// first letter was at the left edge while a click there said otherwise,
+// Prefix handed back a whole string it had been asked to cut to two
+// thirds, and Wrap measured every letter as nothing and ran four copies
+// onto one line four times its box. A music player found all three.
+func TestTheWidthHelpersDoNotReadCaretsAsWidths(t *testing.T) {
+	path := scriptFontFile(t, "hebrew")
+	if path == "" {
+		t.Skip("no face on this machine covers Hebrew")
+	}
+	fakeFonts(t, "Noto Hebrew Test\t80\t0\t0\t"+path)
+	f, err := bakeFaceAscent("Noto Hebrew Test", WeightRegular, 24, 20)
+	if err != nil || f == nil {
+		t.Skipf("the Hebrew face at %s did not load: %v", path, err)
+	}
+
+	const word = "שלום"
+	adv := f.Advance(word)
+	if adv <= 0 {
+		t.Fatal("the word measured nothing")
+	}
+
+	t.Run("the caret agrees with the click", func(t *testing.T) {
+		if got := f.CaretX(word, 0); got != adv {
+			t.Errorf("the caret before the first letter is at %.2f; the line is %.2f wide and it reads from the right", got, adv)
+		}
+		if got := f.IndexAt(word, f.CaretX(word, 0)); got != 0 {
+			t.Errorf("a click at the first letter's caret gave index %d", got)
+		}
+	})
+
+	t.Run("a prefix fits the width it was given", func(t *testing.T) {
+		runes := []rune(word)
+		want := adv * 0.6
+		got := f.Prefix(word, want)
+		if got == word {
+			t.Fatalf("Prefix(%.2f) returned the whole %.2f-wide string", want, adv)
+		}
+		if w := f.Advance(got); w > want {
+			t.Errorf("Prefix(%.2f) returned %q, which is %.2f wide", want, got, w)
+		}
+		// And as much of it as fits: the caret scan it replaced read
+		// the table backwards in a right-to-left line and gave up at
+		// the first letter, which also "fits".
+		n := len([]rune(got))
+		if n == 0 {
+			t.Fatalf("Prefix(%.2f) returned nothing, though one letter is %.2f wide", want, f.Advance(string(runes[0])))
+		}
+		if n < len(runes) {
+			more := string(runes[:n+1])
+			if w := f.Advance(more); w <= want {
+				t.Errorf("Prefix(%.2f) stopped at %d letters, but %d of them are only %.2f wide", want, n, n+1, w)
+			}
+		}
+	})
+
+	t.Run("a paragraph wraps", func(t *testing.T) {
+		para := word + " " + word + " " + word + " " + word
+		box := f.Advance(para) / 3
+		lines := f.Wrap(para, box)
+		if len(lines) < 2 {
+			t.Fatalf("a paragraph three times its box wrapped into %d line(s)", len(lines))
+		}
+		for _, ln := range lines {
+			if w := f.Advance(ln); w > box*1.6 {
+				t.Errorf("line %q is %.1f wide, the box is %.1f", ln, w, box)
+			}
+		}
+	})
+}
+
+// A shaping build borrows the scripts that need shaping.
+//
+// The fallback has always refused to lend Arabic, Hebrew and the Indic
+// scripts, because a glyph at a time draws them wrong and a box is the
+// honester answer. That reasoning is about the build with no shaper in
+// it. Carrying the same refusal into the shaping build meant the one
+// thing font_complex is for — Arabic that joins — never happened unless
+// the interface face itself had Arabic, which no interface face has.
+func TestAShapingBuildBorrowsTheScriptsThatNeedShaping(t *testing.T) {
+	path := scriptFontFile(t, "hebrew")
+	if path == "" {
+		t.Skip("no face on this machine covers Hebrew")
+	}
+	fakeFonts(t, "Noto Hebrew Test\t80\t0\t0\t"+path)
+	SetFallbackFamilies("Noto Hebrew Test")
+	t.Cleanup(func() { SetFallbackFamilies() })
+
+	f := BakeFamily(FamilyUI, WeightRegular, 16, paintengine2d.White)
+	box := runeInk(t, f, '')
+	for _, r := range []rune{'ש', 'ל', 'ם'} {
+		if got := runeInk(t, f, r); got == box {
+			t.Errorf("%q drew the %d-pixel box; a shaping build refused to borrow it", r, box)
+		}
+	}
+}

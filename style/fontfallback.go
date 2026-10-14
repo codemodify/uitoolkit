@@ -118,6 +118,10 @@ func FallbackFamilies() []string {
 // not pretend here either — these scripts stay boxes until it does.
 //
 // Checked against Go's own script tables, which are the Unicode ones.
+//
+// The rule is about *this build*, not about the scripts: a build that
+// shapes (`font_complex`) draws them properly and borrows them like
+// anything else, so it asks [shapes] first and never gets here.
 func borrowable(r rune) bool {
 	for _, t := range unshapedScripts {
 		if unicode.Is(t, r) {
