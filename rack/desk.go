@@ -173,9 +173,48 @@ func (d *Desk) followNow() {
 		d.again = false
 		d.Follow()
 		if !d.again {
+			d.rearm()
 			return
 		}
 	}
+}
+
+// rearm asks for another look while any window is still waiting for a
+// move it was promised.
+//
+// Each pass reconciles what it can and clears those deadlines; what is
+// left is a window whose patience has not run out yet, and the timer
+// that would have woken for it may have died with a window that closed
+// in the meantime. One wake for the earliest of them is enough: a pass
+// looks at every window.
+func (d *Desk) rearm() {
+	var soonest time.Time
+	for i, until := range d.until {
+		if until.IsZero() {
+			continue
+		}
+		w := d.Window(i)
+		if w == nil || w.Closed() {
+			continue
+		}
+		if soonest.IsZero() || until.Before(soonest) {
+			soonest = until
+		}
+	}
+	if !soonest.IsZero() {
+		d.wakeAt(d.openWindow(), soonest)
+	}
+}
+
+// openWindow is any window of this desk that is still open: a road for a
+// timer that has to outlive the satellite that asked for it.
+func (d *Desk) openWindow() *app.Window {
+	for _, w := range d.wins {
+		if w != nil && !w.Closed() {
+			return w
+		}
+	}
+	return nil
 }
 
 // clock is the time this Desk tells.
@@ -343,15 +382,28 @@ func (d *Desk) Apply() {
 //
 // One wake-up at a time, replaced by each new request, because they all
 // ask the same question: has what we asked for arrived? The window's own
-// timer is the road, so it dies with the window and lands on the loop's
-// goroutine, and the pass it asks for is coalesced with anything else
-// owed.
+// timer is the road, so it lands on the loop's goroutine, and the pass it
+// asks for is coalesced with anything else owed.
+//
+// *Whose* timer matters, though, and it used to be the window being
+// moved. A timer dies with its window, so asking two satellites to move
+// and then closing the second one took the wake with it and left the
+// first stale and bonded for ever — a music player closed a satellite
+// before its patience ran out and found the other one stuck. The wake
+// rides on a window that is still open and has a deadline of its own to
+// answer for, which the pass below re-arms as deadlines come and go.
 func (d *Desk) wakeAt(w *app.Window, until time.Time) {
-	if d == nil || w == nil || until.IsZero() {
+	if d == nil || until.IsZero() {
 		return
 	}
 	in := until.Sub(d.clock())
 	if in <= 0 {
+		return
+	}
+	if w == nil || w.Closed() {
+		w = d.openWindow()
+	}
+	if w == nil {
 		return
 	}
 	if d.stopWake != nil {
@@ -404,6 +456,20 @@ func (d *Desk) Show(i int, on bool) {
 		if w.Move(p.Box.X, p.Box.Y) {
 			d.want[i] = p.Box
 			d.until[i] = d.patience(w, p.Box)
+			// And something to look again when that patience runs
+			// out. Setting the deadline and arming nothing left a
+			// satellite that was hidden, moved behind the rack's back
+			// and re-shown bonded to a position it was not in, until
+			// the application called Follow itself (a music player,
+			// item 10).
+			//
+			// No test fails without this line, and it stays: the
+			// test passes through [Desk.rearm] instead, which runs
+			// off the pass that the *show itself* reports. A backend
+			// that says nothing when a window is shown would report
+			// nothing to run that pass, and this is the arming that
+			// does not depend on being told.
+			d.wakeAt(w, d.until[i])
 		}
 	}
 	w.Show()
