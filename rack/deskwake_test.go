@@ -150,3 +150,54 @@ func TestADirectRequestSurvivesItsSatelliteClosing(t *testing.T) {
 		}
 	})
 }
+
+// **A later request does not postpone an earlier deadline.** The wake
+// was "one at a time, replaced by each new request", and the
+// replacement asked nothing about *when*: ask to move one window, then
+// another a moment later, and the second request's patience — which
+// runs from the moment it was made — cancelled the wake the first one
+// was waiting on. The first window's deadline passed with nobody
+// looking and it stayed bonded to a position it was never in until the
+// later one ran out as well. The same symptom as a lost wake, arriving
+// late rather than never, which is what the music player still saw
+// after the lost-wake paths were closed (item 10).
+//
+// The later deadline is handed to [Desk.wakeAt] rather than waited for.
+// It is the one road every request takes, and a test that produced a
+// deadline this much later by making a second request would have to
+// sleep for the difference and then measure the margin that was left:
+// a second and three quarters of real time to watch a window not
+// reconcile.
+func TestALaterRequestDoesNotPostponeAnEarlierDeadline(t *testing.T) {
+	a, d, main, sat, mi, si, _ := coalesceRig(t)
+	d.SetClock(nil)
+
+	sat2, err := a.NewWindow(platform.WindowOptions{X: 0, Y: 200, Width: 200, Height: 100, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	si2 := d.Add("Sat2", sat2)
+	a.PumpOnce()
+	d.Rack.MoveTo(si2, 0, 200)
+	if d.Rack.Pane(si).To != mi {
+		t.Skipf("the first satellite bonded to %d, which this rig did not arrange", d.Rack.Pane(si).To)
+	}
+
+	// The first satellite refuses, and the drag gives it a deadline a
+	// quarter of a second out with a wake armed for it.
+	sat.Surface().(*platform.Offscreen).SetMoveHonoured(false)
+	main.Surface().(*platform.Offscreen).SimulateDesktopMove(600, 600)
+	settle(a)
+	if d.until[si].IsZero() {
+		t.Skip("the first satellite's move was honoured, so there is no deadline to postpone")
+	}
+
+	// And now the other one is asked to move, with its own patience
+	// running from here.
+	d.wakeAt(d.Window(si2), time.Now().Add(2*time.Second))
+
+	if !reconciled(t, a, d, si, time.Second) {
+		t.Errorf("the first satellite is still bonded to %d at %v a second on, with its own deadline a quarter of a second out",
+			d.Rack.Pane(si).To, d.Rack.Pane(si).Box)
+	}
+}

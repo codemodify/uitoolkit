@@ -57,8 +57,11 @@ type Desk struct {
 	owed bool
 	// stopWake cancels the pass owed when a move request's patience runs
 	// out, so a new request replaces the old deadline instead of adding
-	// to it.
+	// to it, and wakeWhen is the deadline it was armed for — which is
+	// how [Desk.wakeAt] knows whether a new request is asking for an
+	// earlier look or a later one.
 	stopWake func()
+	wakeWhen time.Time
 	// now is the clock, so a test can hold it still. nil is time.Now.
 	now func() time.Time
 	// Moved runs after Follow has moved anything, so a player can repaint
@@ -380,10 +383,12 @@ func (d *Desk) Apply() {
 // own pulse or an explicit Follow reconciled it. A player with no pulse
 // waited for ever.
 //
-// One wake-up at a time, replaced by each new request, because they all
-// ask the same question: has what we asked for arrived? The window's own
-// timer is the road, so it lands on the loop's goroutine, and the pass it
-// asks for is coalesced with anything else owed.
+// One wake-up at a time — for the *earliest* deadline outstanding,
+// because they all ask the same question: has what we asked for
+// arrived? One pass answers it for every window, so the nearest
+// deadline is the only one that has to be armed for. The window's own
+// timer is the road, so it lands on the loop's goroutine, and the pass
+// it asks for is coalesced with anything else owed.
 //
 // *Whose* timer matters, though, and it used to be the window being
 // moved. A timer dies with its window, so asking two satellites to move
@@ -416,14 +421,31 @@ func (d *Desk) wakeAt(w *app.Window, until time.Time) {
 	if w == nil || w.Closed() {
 		return
 	}
+	// The earliest deadline wins, and a later request does not push it
+	// out. "One wake-up at a time, replaced by each new request" was
+	// half a rule: the replacement was unconditional, so asking to move
+	// one window and then another a moment later armed for the *second*
+	// one's patience and cancelled the first's. The first window's
+	// deadline then passed with nobody looking, and it stayed bonded to
+	// a position it was never in until the later one's ran out too —
+	// the same symptom as a lost wake, arriving late instead of never
+	// (a music player, item 10, after the lost-wake paths were closed).
+	//
+	// Keeping the earlier one costs nothing: a pass looks at every
+	// window, and [Desk.rearm] arms again for whatever is still
+	// outstanding when it is done.
+	if d.stopWake != nil && !d.wakeWhen.IsZero() && !until.Before(d.wakeWhen) {
+		return
+	}
 	if d.stopWake != nil {
 		d.stopWake()
 		d.stopWake = nil
 	}
+	d.wakeWhen = until
 	// A hair past the deadline: at exactly it Follow is still inside its
 	// patience (the comparison is Before) and would wait another round.
 	d.stopWake = w.AfterFunc(in+time.Millisecond, func() {
-		d.stopWake = nil
+		d.stopWake, d.wakeWhen = nil, time.Time{}
 		d.followFromEvent()
 	})
 }
