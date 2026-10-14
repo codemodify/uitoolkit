@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.12
+go get github.com/codemodify/uitoolkit@v0.23.13
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,17 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.13** — **Two data races, one of them in every build.** A glyph's
+outline is a view into the buffer it was loaded through, and all four
+places that load one walked it into a path *after* unlocking the face —
+so two goroutines drawing one face at two sizes read each other's
+glyph. Chasing that, the toolkit's own measure-and-paint test turned up
+a second: the shape cache re-pointed a run by writing into a slice it
+had already handed out. That one is not behind a build tag. With them:
+an unqualified keycap (`1⃣`) composes, and a rack's wake-up rides on
+the anchor rather than on whichever satellite asked, so a direct Apply
+or Show survives that satellite closing.
 
 **0.23.12** — **The last two emoji sequences, and the test that could
 not see them.** `👩‍❤️‍👩` came apart because the joiner beside the heart

@@ -1,4 +1,4 @@
 package uitoolkit
 
 // Version is the library version (semver).
-const Version = "0.23.12"
+const Version = "0.23.13"

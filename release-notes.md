@@ -7,6 +7,63 @@ about the problem it solved.
 
 ---
 
+## 0.23.13
+
+**Two data races, one of them in every build, and the last of the
+rack's lost wake-ups.** A music player found the first race and, in
+chasing it, this repository's own test found the second. Nothing new
+to call.
+
+### A glyph's outline belongs to the buffer it came through
+
+`sfnt.LoadGlyph` hands back the segments of a glyph as a *view into*
+the Buffer they were loaded through — valid only until the next call
+that uses it. All four places that load a glyph unlocked the face and
+then walked those segments into a path, so two goroutines drawing one
+face at two sizes read each other's glyph. The race detector says so,
+and a wrong letter is what it looks like when it does not.
+
+The path is built while the lock is held now. Reported as the player's
+item 47, which was careful to distinguish it from the colour-parser
+race fixed in 0.23.10 — a different thing in a different package.
+
+### A cached shape's groups are shared
+
+**This one affects every build, with or without a font tag.** When the
+shape cache re-points an older run at a newer sheet it wrote into the
+slice it had already handed out, and another goroutine could be
+drawing from that slice at the time. The toolkit's own
+measure-and-paint test had been racing on it for as long as the
+re-point has existed; nothing caught it because nothing ran that test
+under `-race` beside another that kept the atlas growing.
+
+The re-point copies the groups. The holders of the older sheet lose
+nothing by keeping it, because cells are only ever added to a sheet.
+
+### An unqualified keycap is still a keycap
+
+`1⃣` is `1️⃣` without the selector — the form UTS #51 calls unqualified
+and every emoji font composes regardless. A digit is not a picture by
+itself, so marking the sequence only from left to right split this one
+in two: a text digit from one face and an enclosing box from another,
+which the label's colour then tinted. At 24 pixels it measured 37.969
+where the font's own glyph is 29.891.
+
+### A rack wake-up rides on the anchor
+
+0.23.11 made the wake outlive a closed window by re-arming at the end
+of each follow pass, which covers every case that *has* a pass — and a
+direct `Apply` or `Show` has no event behind it to cause one. So two
+cases survived: ask two satellites to move through the public API,
+close the later one before its patience runs out, and the only timer
+went with it.
+
+The wake rides on the desk's first window now — the anchor the others
+follow — so the only window whose closing can take it is the one whose
+going means the group is over.
+
+---
+
 ## 0.23.12
 
 **The last two emoji sequences, and the test that could not see
