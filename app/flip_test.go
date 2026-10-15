@@ -535,18 +535,24 @@ func TestTheWindowsPhotographsAreWipedWhenTheTurnEnds(t *testing.T) {
 // The direction shows in where the card sits part way through: turning
 // to the back, the near edge is on one side; coming home, the other.
 func TestAFramedWindowComesBackTheWayItWent(t *testing.T) {
-	_, win, _ := framedFlipWindow(t)
+	_, win, fp := framedFlipWindow(t)
+	// One clock for both turns: it only ever goes forward, and each
+	// Flip reads its start from it as the turn begins.
+	step := heldTurn(t, fp)
 
 	// Part way through a turn, which side of the window the card's
 	// bounding box is pushed towards.
 	side := func() float32 {
-		deadline := time.Now().Add(10 * time.Second)
 		var at float32 = -1
-		for win.Turning() {
-			if time.Now().After(deadline) {
-				t.Fatal("the turn was still running after ten seconds")
+		for n := 0; win.Turning(); n++ {
+			if n > 1000 {
+				t.Fatal("the turn never ended")
 			}
 			win.Capture()
+			// Stepped here and not at the end of the body, because
+			// the body has a continue in it and a held clock that
+			// skips a step does not move.
+			step()
 			p := win.turn
 			if p == nil || p.CardOutline() == nil {
 				continue
@@ -572,8 +578,14 @@ func TestAFramedWindowComesBackTheWayItWent(t *testing.T) {
 	if win.ShowingBack() {
 		t.Fatal("the window did not come home")
 	}
+	// Not a skip. It was one — "the clock beat the painter" — and
+	// under the race detector it always did, so this test reported
+	// green without checking the one thing it is for. A video player
+	// read the skip in a `-race` run and said so. With the clock held
+	// there are fourteen frames in a turn and the middle ones are
+	// always caught, so a miss here is a defect.
 	if toBack < 0 || home < 0 {
-		t.Skip("neither turn was caught part way; the clock beat the painter")
+		t.Fatalf("no frame of either turn had the card part way across (%.3f and %.3f)", toBack, home)
 	}
 	// Turning one way leans the card to one side of the window and the
 	// other way to the other, so the two are on opposite sides of the
