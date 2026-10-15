@@ -415,6 +415,18 @@ func (f *FlipPanel) upFace() widget.Component {
 // itself. (The rack's Desk.SetClock is the same seam for the same reason.)
 func (f *FlipPanel) SetClock(now func() time.Time) { f.now = now }
 
+// Clock is the clock [FlipPanel.SetClock] installed, or nil for the
+// real one.
+//
+// A window that turns as one picture builds a panel for that turn as
+// the turn starts, and carries this to it the way it carries the
+// perspective and the strips — so a test that holds the clock of the
+// panel it can reach holds the one the turn actually runs on. Without
+// that a framed window could not be held at all from outside this
+// package: a password manager's test of the turn stood down under the
+// race detector and said so (its item 94).
+func (f *FlipPanel) Clock() func() time.Time { return f.now }
+
 // clock is the time this panel tells.
 func (f *FlipPanel) clock() time.Time {
 	if f.now != nil {

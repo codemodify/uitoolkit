@@ -270,15 +270,17 @@ func TestAFramedWindowTurnsWithItsFrame(t *testing.T) {
 		t.Fatalf("the window at rest has %d accent pixels; the caption's close button is not in it", n)
 	}
 
+	// A framed window turns as one picture, in a panel Flip builds for
+	// the purpose as the turn starts. Holding the clock of the panel
+	// the application has is enough: the built one is handed this
+	// clock with the perspective and the strips. Held from outside
+	// here on purpose — reaching in for win.turn would not be a test
+	// of what an application can do (secretvault item 94).
+	step := heldTurn(t, fp)
 	win.Flip()
 	if !win.Turning() {
 		t.Fatal("the window is not turning")
 	}
-	// A framed window turns as one picture, in a panel Flip builds for
-	// the purpose — so the clock to hold is that one's, and it does not
-	// exist until here. Nothing expensive has run since, so the turn has
-	// barely begun.
-	step := heldTurn(t, win.turn)
 	// The content under the picture is already the face being turned to,
 	// so when the picture goes there is nothing left to swap.
 	if !fp.Showing() {

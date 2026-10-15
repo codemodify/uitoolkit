@@ -273,6 +273,11 @@ func (w *Window) turnWholeWindow() {
 		p.ShowNow(true)
 	}
 	p.Perspective, p.Strips = w.flip.Perspective, w.flip.Strips
+	// And the clock, which is how a turn is held still. The panel the
+	// application can reach is w.flip; the one the turn runs on is
+	// this one, built here and reachable from nowhere outside — so a
+	// test that held the first held nothing (secretvault item 94).
+	p.SetClock(w.flip.Clock())
 	// The decision was taken above, by the panel this one stands in for.
 	p.SetMotion(style.MotionAlways)
 	p.SetHost(w)
