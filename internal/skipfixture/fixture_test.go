@@ -13,17 +13,25 @@ package skipfixture
 import "testing"
 
 func TestOuter(t *testing.T) {
-	// A child that says something before it gives its reason. The
-	// reporter kept the *first* line a test logged, so this one came
-	// out as "setup talk, not a reason" (a music player, item 55).
+	// A child that talks on both sides of its reason: setup before,
+	// and a cleanup that runs after the skip. The reporter guessed the
+	// first line a test logged and this came out as "setup talk"; it
+	// then guessed the last and this came out as "teardown talk". Both
+	// guesses were reported by applications, a morning apart, and
+	// there is nothing in the output to guess from — t.Skip's message
+	// is an ordinary log line. So all three are reported.
 	t.Run("logged", func(t *testing.T) {
+		t.Cleanup(func() { t.Log("teardown talk, after the skip") })
 		t.Log("setup talk, not a reason")
 		t.Skip("the capability this needs is absent")
 	})
-	// And a child that skips without a word. Both are children, which
-	// is the other half of it: go test indents a subtest's verdict, so
-	// a grep for a line starting "--- SKIP" finds neither.
+	// A child that skips with one word, which is the ordinary case and
+	// still reads as one line beside its name.
 	t.Run("plain", func(t *testing.T) { t.Skip("nothing to say first") })
+	// And one that gives no reason at all: t.SkipNow logs nothing, so
+	// there is no line to find and the report has to say so rather
+	// than reach for somebody else's.
+	t.Run("silent", func(t *testing.T) { t.SkipNow() })
 }
 
 func TestThatRuns(t *testing.T) {}

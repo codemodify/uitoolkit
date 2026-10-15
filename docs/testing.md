@@ -302,11 +302,20 @@ tools/skips.sh ./app/
 tools/skips.sh -race ./app/ ./widgets/ ./rack/     # 6 expected
 ```
 
-Every test that skipped, with its reason, subtests included. The two
-are matched by test name rather than by being next to each other,
-because the reason is logged while the test runs and the verdict is
-printed afterwards. A failed run exits non-zero and says so, rather
-than reporting `0 skipped`.
+Every test that skipped and everything it said, subtests included,
+matched by test name because the logs come out while the test runs and
+the verdict afterwards. A failed run exits non-zero and says so,
+rather than reporting `0 skipped`.
+
+It reports what the test said rather than naming one line as *the*
+reason, because nothing in the output identifies one: `t.Skip` is
+`t.Log` plus `t.SkipNow`, so its message is an ordinary log line, and
+`t.SkipNow` on its own logs nothing. A test that logged once has it
+printed beside its name, a test that logged more has all of its lines
+in order, and a test that said nothing is reported as having said
+nothing. Guessing the first line reported a setup log as the reason
+and guessing the last reported a cleanup's; both were found from
+outside, a morning apart.
 
 The skips to expect:
 
