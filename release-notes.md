@@ -7,6 +7,57 @@ about the problem it solved.
 
 ---
 
+## 0.23.20
+
+**No runtime change. The skip reporter keeps two packages' tests
+apart.**
+
+Two packages may each have a test of the same name — that is ordinary
+Go — and the reporter keyed what was said by the bare test name. So
+running them together, a child in the second package that called
+`t.SkipNow` and logged nothing at all was reported with the first
+package's reason. A video player built the two-package fixture and
+measured it:
+
+```go
+// internal/first:  func TestShared(t *testing.T) { t.Skip("capability missing only in first package") }
+// internal/second: func TestShared(t *testing.T) { t.SkipNow() }
+```
+
+Both rows carried the first package's line.
+
+`go test` prints each package's output as a block that ends in its own
+`ok <pkg>` line, so the block is the scope: what a package said is
+forgotten when its block closes, and nothing can reach the next one.
+The package is named above its rows whenever more than one had
+something to report, and left out when there is only one, where it
+would be noise.
+
+Each row still begins with the name of its test at the left margin.
+That is deliberate — the first attempt indented the rows under their
+package heading, which reads well and broke the video player's probe,
+and anything else reading this output would have broken the same way.
+
+### What pins it
+
+`internal/skipfixture` and `internal/skipfixture2` now share a
+`TestOuter/shared`: the first skips with a reason, the second says
+nothing, so the only line the second could be reported with is the
+first's. With `TestTheSkipReporterReportsSkipsAndFailures` that makes
+five cases — a child logging on both sides of its skip, a child with
+no reason, a shared name across packages, a failed invocation, and a
+tree with no `Skip` in it at all — and each of the four mutations of
+the script fails it.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, under
+`-race` in `app`, `widgets` and `rack`, and on Windows 11 and macOS 15
+in two builds each. Both applications' probes pass against this tree,
+the video player's in both its single- and multiple-package modes.
+
+---
+
 ## 0.23.19
 
 **No runtime change. The skip reporter identifies the skip's reason

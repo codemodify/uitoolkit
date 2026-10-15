@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.19
+go get github.com/codemodify/uitoolkit@v0.23.20
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,15 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.20** — **The skip reporter keeps two packages' tests apart.**
+Two packages may each have a `TestFoo`, and keying what a test said by
+its name alone handed the second one the first one's reason — so a
+child that called `t.SkipNow` and logged nothing was reported with
+another package's words. `go test` prints each package's output as a
+block ending in its `ok <pkg>` line, so the block is the scope now,
+and the package is named whenever more than one had something to
+report. No runtime change.
 
 **0.23.19** — **The skip reporter finds the reason instead of
 guessing at it.** 0.23.18 took the last line a test logged; a cleanup
