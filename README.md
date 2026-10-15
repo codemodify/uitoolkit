@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.14
+go get github.com/codemodify/uitoolkit@v0.23.15
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,19 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.15** — **Unicode decides which characters are pictures, not a
+range.** 0.23.14 bounded the old `r >= 0x1F000` test to
+U+1F000–U+1FAFF, and two applications found the two halves it still
+got wrong: ⚡, ⭐ and ⌚ are pictures by default and sit *below* that
+range, so they came out as black outlines; the alchemical symbols, the
+chess pieces and the squared letters sit *inside* it and are not
+pictures, so each was swallowed by the emoji run beside it. The
+marking now asks the database — `Emoji_Presentation` for "a picture on
+its own", `Extended_Pictographic` for "could be part of one", which is
+what keeps `🏳‍🌈` together when nobody qualified it. And a framed
+window's turn takes its flip panel's clock, so a test outside this
+repository can hold one still.
 
 **0.23.14** — **Two characters the emoji marking claimed, and a
 deadline it postponed.** "A picture on its own" was tested as
