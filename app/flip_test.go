@@ -400,7 +400,8 @@ func TestAMaximizedWindowDoesNotStandBehindItsOwnTurn(t *testing.T) {
 // the recorded one and the immediate one. A layer the window draws has
 // to be in both, and this one was added to both.
 func maximizedTurnStandsAlone(t *testing.T) {
-	a, win, _ := framedFlipWindow(t)
+	a, win, fp := framedFlipWindow(t)
+	step := heldTurn(t, fp)
 	o := win.Surface().(*platform.Offscreen)
 	o.SimulateWindowState(platform.WindowState{Activated: true, Maximized: true})
 	a.PumpOnce()
@@ -419,15 +420,18 @@ func maximizedTurnStandsAlone(t *testing.T) {
 	// The first frame whose card leaves a wide strip of window beside it.
 	var mid *paintengine2d.Image
 	var cardRight float32
-	deadline := time.Now().Add(10 * time.Second)
-	for win.Turning() && mid == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the turn was still running after ten seconds")
+	for n := 0; win.Turning() && mid == nil; n++ {
+		if n > 1000 {
+			t.Fatal("the turn never ended")
 		}
 		img := win.Capture()
 		if img == nil || !win.Turning() {
 			break
 		}
+		// Before the continue below, for the reason the other held
+		// loops say: a step that is skipped does not happen, and a
+		// held clock that does not move never ends the turn.
+		step()
 		p := win.turn
 		if p == nil || p.CardOutline() == nil {
 			continue
@@ -437,11 +441,22 @@ func maximizedTurnStandsAlone(t *testing.T) {
 			mid, cardRight = img.Clone(), b.Max.X
 		}
 	}
+	// Not a skip. It was one — "the clock beat the painter" — and
+	// under the race detector it always did, so both halves of this
+	// test reported nothing while the parent reported PASS. A music
+	// player inspected the *child* results and found it (item 54);
+	// 0.23.16's note that app's remaining skips were all no-display
+	// ones was written from a grep that did not match the indented
+	// lines subtests print, and was wrong.
 	if mid == nil {
-		t.Skip("the turn never reached a frame narrow enough to read; the clock beat the painter")
+		t.Fatal("no frame of the turn had the card narrow enough to read beside")
 	}
-	for win.Turning() {
+	for n := 0; win.Turning(); n++ {
+		if n > 1000 {
+			t.Fatal("the turn never ended")
+		}
 		win.Capture()
+		step()
 	}
 	flat := win.Capture()
 	if flat == nil || flat.Width != mid.Width || flat.Height != mid.Height {
@@ -452,7 +467,7 @@ func maximizedTurnStandsAlone(t *testing.T) {
 	// rest means the window is being drawn there.
 	x0 := int(cardRight) + 8
 	if x0 >= mid.Width-4 {
-		t.Skipf("the card reaches %v of %d: no strip beside it to read", cardRight, mid.Width)
+		t.Fatalf("the card reaches %v of %d: no strip beside it to read", cardRight, mid.Width)
 	}
 	same, total := 0, 0
 	for y := 0; y < mid.Height; y += 3 {
