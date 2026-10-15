@@ -17,6 +17,14 @@
 #     said "the remaining skips are all no-display ones" came to be
 #     written. This script does not have that bug.
 #
+# It had two of its own, both found by applications the morning after
+# it shipped and both pinned now by the root package's
+# TestTheSkipReporterReportsSkipsAndFailures, against the fixture in
+# internal/skipfixture: it reported the *first* line a test logged
+# rather than its skip reason, and it hid a failed test run behind
+# "0 skipped" and exit 0 — which is this script's own version of the
+# mistake it is for.
+#
 # What is left after those were fixed, and what is expected here:
 #
 #   no DISPLAY / no WAYLAND_DISPLAY     tools/test-display.sh covers it
@@ -27,15 +35,28 @@
 # one of those terms. Read it before believing the suite is green.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-out=$(tools/test.sh -v "$@" 2>&1) || true
+
+# The run's own status is the first thing reported, because a reporter
+# that hides a failed invocation behind "0 skipped" is doing the exact
+# thing it exists to catch. It did: `tools/skips.sh ./nosuchpkg/` used
+# to print "0 skipped" and exit 0 while tools/test.sh exited 1, and a
+# video player caught it the morning after this script shipped.
+status=0
+out=$(tools/test.sh -v "$@" 2>&1) || status=$?
+
 # The reason is logged while the test runs and the verdict is printed
 # afterwards — for a subtest, in a block under its parent — so they are
-# matched up by name rather than by being next to each other.
+# matched up by name rather than by being next to each other. The
+# *last* line a test logs is its reason: t.Skip logs its message and
+# returns, so anything earlier is setup. Keeping the first instead
+# reported "fixture ordinary setup log" where the skip reason should
+# have been, which a music player caught the same morning (its item
+# 55).
 echo "$out" | awk '
   /^ *=== (RUN|CONT|NAME) / { name = $3; next }
   /^ *[A-Za-z0-9_]+\.go:[0-9]+: / {
     line = $0; sub(/^ */, "", line)
-    if (name != "" && !(name in why)) why[name] = line
+    if (name != "") why[name] = line
     next
   }
   /^ *--- SKIP: / {
@@ -46,3 +67,11 @@ echo "$out" | awk '
   }
   END { printf "\n%d skipped\n", n }
 '
+
+if [ "$status" != 0 ]; then
+  echo
+  echo "the test run itself failed (tools/test.sh exited $status) —"
+  echo "the skips above, if any, are from a run that did not finish:"
+  echo "$out" | grep -E "^(FAIL|# |.*\[build failed\]|--- FAIL)" | head -20 || true
+fi
+exit "$status"

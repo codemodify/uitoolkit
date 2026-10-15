@@ -284,6 +284,46 @@ must update a running Mail look via that watcher.
 A display is **not** required for `go test` or `uitest-driver`. Native
 backends stay behind `CGO` build tags; headless contracts always run.
 
+## A green run is not a run that checked anything
+
+`go test` reports a test that skipped as neither a pass nor a failure,
+and a package whose tests all skipped still prints `ok`. Three times —
+in three consecutive releases — a test here skipped on every run under
+the race detector and was read as passing, and each time an application
+auditing the release found it rather than this repository.
+
+The worst of the three is worth knowing about, because the obvious
+check does not catch it: **`go test` prints a subtest's verdict
+indented** under its parent, so a parent can print `PASS` while both of
+its children skipped, and `grep '^--- SKIP'` matches nothing.
+
+```bash
+tools/skips.sh ./app/
+tools/skips.sh -race ./app/ ./widgets/ ./rack/     # 6 expected
+```
+
+Every test that skipped, with its reason, subtests included. The two
+are matched by test name rather than by being next to each other,
+because the reason is logged while the test runs and the verdict is
+printed afterwards. A failed run exits non-zero and says so, rather
+than reporting `0 skipped`.
+
+The skips to expect:
+
+| reason | what covers it instead |
+| --- | --- |
+| `no DISPLAY`, `no WAYLAND_DISPLAY` | `tools/test-display.sh`, in a nested KWin |
+| `no display` (a real GPU device) | the same |
+| `this build has no ...` (a font tag) | `tools/test-fonts.sh` |
+
+Anything else is a test that is not running and is not saying so in
+those terms.
+
+What the script itself claims is pinned by
+`TestTheSkipReporterReportsSkipsAndFailures` in the root package,
+against `internal/skipfixture` — a package whose tests skip on purpose,
+behind `-tags skipfixture` so that an ordinary run never sees them.
+
 ## The samples build on the published API
 
 `TestSamplesUseOnlyThePublicAPI` (root package) parses every Go file under
