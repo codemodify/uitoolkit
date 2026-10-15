@@ -7,6 +7,71 @@ about the problem it solved.
 
 ---
 
+## 0.23.18
+
+**No runtime change. The skip reporter 0.23.17 added had, between its
+two defects, both of the faults it was written to prevent** — and two
+applications found them the morning after it shipped.
+
+### It reported the wrong line as the reason
+
+The reporter kept the first file-prefixed line a test logged and
+called that the skip reason. A child that logs anything before it
+skips therefore lost the reason it skipped:
+
+```go
+t.Run("logged", func(t *testing.T) {
+    t.Log("setup talk, not a reason")
+    t.Skip("the capability this needs is absent")
+})
+```
+
+came out as `setup talk, not a reason`. A music player built exactly
+that fixture, ran the script against it and reported the substitution
+(its item 55).
+
+The last line a test logs is its reason — `t.Skip` logs its message
+and returns, so anything earlier is setup — and that is what is kept
+now.
+
+### It hid a failed run behind "0 skipped"
+
+`out=$(tools/test.sh -v "$@" 2>&1) || true` swallowed the status. A
+run that never compiled reported `0 skipped` and exited 0, while
+`tools/test.sh` on the same arguments exited 1. A video player ran
+both against a missing package and compared, which is as direct a
+demonstration as there could be: a reporter written because *a skip is
+what green looks like when nothing ran* was itself reporting green
+when nothing ran.
+
+The status is kept and returned now, and a failed run says so and
+shows the failure rather than leaving a zero count to speak for it.
+
+### Both are pinned
+
+`TestTheSkipReporterReportsSkipsAndFailures`, in the root package,
+drives the script against `internal/skipfixture` — a package whose
+tests skip on purpose, behind `-tags skipfixture` so an ordinary run
+never sees them — and checks all of it: that both children are found
+where a `grep '^--- SKIP'` finds neither, that the reason is the skip
+and not the setup log, that a test which ran is not listed, and that a
+failed invocation is a failure.
+
+Restoring either defect fails it. [docs/testing.md](docs/testing.md)
+gains the section this belongs in, with the three skip reasons to
+expect and what covers each instead.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, under
+`-race` in `app`, `widgets` and `rack`, and on Windows 11 and macOS 15
+in two builds each. Both applications' own probes pass against this
+tree: the music player's reports the actual reason after an earlier
+setup log, and the video player's confirms the failed status is
+preserved.
+
+---
+
 ## 0.23.17
 
 **No runtime change: this release is two tests that were skipping

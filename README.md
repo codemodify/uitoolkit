@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.17
+go get github.com/codemodify/uitoolkit@v0.23.18
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,15 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.18** — **The skip reporter had the two defects it exists to
+prevent.** Shipped in 0.23.17 and audited by two applications the same
+morning: it reported the *first* line a test logged rather than its
+skip reason, so a child that logs its setup lost the reason it
+skipped; and it hid a failed test run behind `0 skipped` and exit 0,
+which is its own version of the mistake it is for. Both are fixed and
+both are pinned by a test, against a fixture package that skips on
+purpose. No runtime change.
 
 **0.23.17** — **Tests, not the toolkit: the last two that skipped
 instead of checking.** Both halves of the maximized-window turn test
