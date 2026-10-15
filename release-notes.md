@@ -7,6 +7,78 @@ about the problem it solved.
 
 ---
 
+## 0.23.16
+
+**A tag flag draws its own country again, and a test that had been
+skipping instead of checking does neither.** Both came from
+applications auditing 0.23.15 within the hour.
+
+### A tag sequence is one flag, tags and all
+
+`🏴󠁧󠁢󠁥󠁮󠁧󠁿` is a waving black flag followed by `gbeng` spelled in tag
+characters and closed with U+E007F (UTS #51 ED-14a). The tags are
+invisible on their own and Unicode gives them no emoji property at
+all — they are not pictures, and not pictographic either — but they
+are what tells the font *which* flag, and a font that has England
+draws all seven as one glyph.
+
+`r >= 0x1F000` swept them into the colour run by accident, U+E0067
+being well above it. 0.23.14 bounded that range to the pictographic
+planes and took them back out; 0.23.15's property tables had no reason
+to put them back, because no property covers them. England, Scotland
+and Wales have been the bare black flag since 0.23.14.
+
+**It hid for two releases because every cheap check passed.** Tag
+characters have no advance of their own, so the three flags still drew
+as *one* untinted colour cell of exactly the right width. Advance,
+cell count and tint all agreed with the bug. A music player's artwork
+guard — which shapes the sequence against the installed face itself
+and compares the picture — was the only thing that could see it, and
+it has been saying so since 0.23.14 (its item 53).
+
+A terminator now takes the tags before it and the picture they
+qualify, the way the enclosing keycap takes its base. A terminator
+with no tags ends nothing, tags behind something that is not a picture
+stay text, and U+FE0E on the base still refuses the whole sequence.
+
+So the marking now has four things to keep together that no single
+property describes: a variation selector, a joined sequence nobody
+qualified, an unqualified keycap, and this.
+
+### A test that skips is not a test that passes
+
+0.23.14 and 0.23.15 moved three of `app`'s four window-turn tests onto
+a clock a test can hold. The fourth — the one that checks a framed
+window comes back the way it went — was left on the wall clock, and it
+ends in `t.Skip("neither turn was caught part way; the clock beat the
+painter")`. Under the race detector it skipped every time, so it
+reported green for two releases without checking the one thing it is
+for.
+
+A video player read that skip in its own `-race` run of this
+repository's tests and reported it, which is the only reason it is
+fixed: the `-race ./app/` run added in 0.23.14 was green, and a skip is
+what green looks like when nothing ran.
+
+It holds the clock now, and the skip is a failure: with fourteen frames
+in a turn the middle ones are always caught, so a miss is a defect and
+not a stopwatch. The four skips left in `./app/` are the documented
+no-display ones that `tools/test-display.sh` covers in a nested KWin.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, under
+`-race` in `style`-with-`font_emoji`, `app`, `widgets` and `rack`, and
+on Windows 11 and macOS 15 in two builds each.
+
+The music player's strict artwork guard, run against this tree,
+resolves the three flags to their own glyphs — 1913, 1914, 1915 — with
+`equalsBlackFlag` false, and its whole strengthened suite passes under
+`-race`. The video player's eight-sample fallback probe still matches
+throughout.
+
+---
+
 ## 0.23.15
 
 **Unicode decides which characters are pictures, and a framed window's

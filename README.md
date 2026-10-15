@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.15
+go get github.com/codemodify/uitoolkit@v0.23.16
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,16 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.16** — **A tag flag draws its own country again.** `🏴󠁧󠁢󠁥󠁮󠁧󠁿` is a
+black flag and `gbeng` spelled in tag characters, which have no emoji
+property at all: only the original `r >= 0x1F000` ever kept them with
+the picture they qualify, and it kept them by accident. England,
+Scotland and Wales had been the bare black flag since 0.23.14 — one
+untinted cell of exactly the right width, because tag characters have
+no advance, which is why nothing but an artwork comparison saw it. A
+terminator now takes its tags and their base, the way the keycap takes
+its base.
 
 **0.23.15** — **Unicode decides which characters are pictures, not a
 range.** 0.23.14 bounded the old `r >= 0x1F000` test to
