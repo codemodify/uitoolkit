@@ -724,30 +724,90 @@ func TestPrefixIsTheLongestThatFits(t *testing.T) {
 
 // Which characters are pictures with nobody asking.
 //
-// A table, because the rule is a range and the first version of it had
-// no top: `r >= 0x1F000` is true of the two planes above the
-// pictographs as well, and the one past U+1FAFF — Symbols for Legacy
-// Computing — is text that happens to sit next door. Plane 2 is
-// Han. [TestAHanIdeographAfterAnEmojiKeepsItsOwnFace] is what a user
-// saw; this is the rule underneath it.
-func TestOnlyTheEmojiPlanesArePicturesOnTheirOwn(t *testing.T) {
+// A table, because this was a *range* twice and a range cannot answer
+// it. `r >= 0x1F000` let in plane-2 Han; bounding it to U+1F000–U+1FAFF
+// left the alchemical symbols, the chess pieces and the squared letters
+// inside, all of them text, and left ⚡, ⭐ and ⌚ outside, all of them
+// pictures. Two applications found the two halves the same day. Every
+// row below is one of theirs or the boundary of a block they named.
+func TestOnlyEmojiPresentationIsAPictureOnItsOwn(t *testing.T) {
 	for _, c := range []struct {
 		r    rune
 		want bool
 		what string
 	}{
-		{'\U0001F004', true, "the mahjong tile that opens the block"},
+		// Pictures by default, and all three below the range the old
+		// test used (a mail client, item 66).
+		{'\u26A1', true, "high voltage"},
+		{'\u2B50', true, "star"},
+		{'\u231A', true, "watch"},
+		{'\u2705', true, "check mark button"},
+		// Text by default: they ask with U+FE0F, which the selector
+		// pass answers.
+		{'\u2764', false, "a heart"},
+		{'\U0001F3F3', false, "a white flag"},
+		{'\U0001F321', false, "a thermometer"},
+		// Inside the old range and not emoji (a video player).
+		{'\U0001F701', false, "an alchemical symbol"},
+		{'\U0001FA00', false, "a chess symbol"},
+		{'\U0001F130', false, "a squared letter"},
+		{'\U0001F000', false, "the mahjong tile that opens the block"},
+		{'\U0001FAFF', false, "the last code point of the old range"},
+		// Inside the old range and emoji.
+		{'\U0001F004', true, "the one mahjong tile that is an emoji"},
 		{'\U0001F3AC', true, "a clapper board"},
-		{'\U0001FAFF', true, "the last of Symbols and Pictographs Extended-A"},
+		{'\U0001FAF8', true, "a rightwards pushing hand"},
+		// Outside it either way.
 		{'\U0001FB00', false, "the first of Symbols for Legacy Computing"},
 		{'\U00020BB7', false, "a Han ideograph from plane 2"},
-		{'\U0002F800', false, "a CJK compatibility ideograph"},
 		{'\U000E0041', false, "a tag character"},
-		{'❤', false, "a heart, which needs a selector"},
 		{'A', false, "a letter"},
 	} {
 		if got := emojiPresentation([]rune{c.r})[0]; got != c.want {
 			t.Errorf("%s (U+%04X) alone: emoji=%v, want %v", c.what, c.r, got, c.want)
+		}
+	}
+}
+
+// A sequence nobody qualified is still the one picture a font makes of
+// it.
+//
+// `🏳‍🌈` is `🏳️‍🌈` without the selector: a white flag, a joiner and a
+// rainbow. The flag is *text* by default — Emoji_Presentation says no —
+// so moving from a range to the property would have taken the marking
+// off it and let the sequence come apart into a flag, nothing, and a
+// rainbow. The joiner gives its mark to pictographic neighbours for
+// exactly this, which is the same answer `1⃣` gets.
+func TestAnUnqualifiedJoinedSequenceIsStillJoined(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		want []bool
+		what string
+	}{
+		{"\U0001F3F3\u200D\U0001F308", []bool{true, true, true}, "a rainbow flag with no selector"},
+		{"\U0001F3F3\uFE0F\u200D\U0001F308", []bool{true, true, true, true}, "the qualified form"},
+		{"\U0001F469\u200D\u2764\uFE0F\u200D\U0001F469", []bool{true, true, true, true, true, true}, "a couple"},
+		// Not a sequence: a joiner between letters is a joiner
+		// between letters, in Devanagari as anywhere else.
+		{"\u0915\u200D\u0937", []bool{false, false, false}, "a Devanagari conjunct"},
+		{"A\u200DB", []bool{false, false, false}, "a joiner between letters"},
+		// And the text selector is not overruled by a joiner. It has
+		// to be the rune the joiner *reaches* — put the selector
+		// between them and the joiner never sees the heart at all,
+		// which is a weaker case than it looks.
+		{"\U0001F469\u200D\u2764\uFE0E", []bool{true, false, false, false}, "a heart asked for as text after a joiner"},
+		{"\u2764\uFE0E\u200D\U0001F469", []bool{false, false, false, true}, "a heart asked for as text before one"},
+	} {
+		got := emojiPresentation([]rune(c.text))
+		if len(got) != len(c.want) {
+			t.Errorf("%s: %d marks for %d runes", c.what, len(got), len(c.want))
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: marks %v, want %v", c.what, got, c.want)
+				break
+			}
 		}
 	}
 }

@@ -240,12 +240,21 @@ func (m *uitkFontmap) faceRuns(in shaping.Input) []shaping.Input {
 // music player found that, and that U+FE0E — the selector that asks
 // for the *text* form — was being ignored.
 //
-// The rules: a character from the pictographic planes is emoji on its
-// own; U+FE0F after one asks for the emoji form of a character that is
-// text by default; U+FE0E after one asks for the text form and wins;
-// and a zero-width joiner between emoji is part of the one glyph a
-// family or a flag becomes. The same joiner between Devanagari letters
-// is not emoji and is left alone.
+// The rules: a character Unicode gives emoji presentation to is emoji
+// on its own; U+FE0F after one asks for the emoji form of a character
+// that is text by default; U+FE0E after one asks for the text form and
+// wins; and a zero-width joiner between two pictographic characters is
+// part of the one glyph a family or a flag becomes. The same joiner
+// between Devanagari letters is not emoji and is left alone.
+//
+// Both properties come from the Unicode Character Database
+// ([emojidata.go]), and the two questions are different ones:
+// [emojiByDefault] asks "a picture with nobody asking", which ⚡ is and
+// ❤ is not, and [pictographic] asks "could be part of a picture",
+// which both are. A joiner needs the second, because 🏳‍🌈 is a flag and
+// a rainbow and the flag is not emoji by default — UTS #51 calls that
+// sequence unqualified and every emoji font composes it anyway, the
+// same way it composes `1⃣`.
 func emojiPresentation(runes []rune) []bool {
 	const (
 		vs15   = 0xFE0E // text presentation
@@ -255,9 +264,13 @@ func emojiPresentation(runes []rune) []bool {
 	)
 	out := make([]bool, len(runes))
 	for i, r := range runes {
-		out[i] = pictographic(r) || r == vs16
+		out[i] = emojiByDefault(r) || r == vs16
 	}
-	// The selectors, which decide the character before them.
+	// The selectors, which decide the character before them. asText
+	// remembers where U+FE0E spoke, because the joiner pass below can
+	// mark a character the base pass did not, and must not mark one
+	// that was asked for as text.
+	asText := make([]bool, len(runes))
 	for i, r := range runes {
 		switch r {
 		case vs16:
@@ -267,26 +280,37 @@ func emojiPresentation(runes []rune) []bool {
 		case vs15:
 			// Asked for as text, which is the whole point of the
 			// selector: neither it nor what it follows is a picture.
-			out[i] = false
+			out[i], asText[i] = false, true
 			if i > 0 {
-				out[i-1] = false
+				out[i-1], asText[i-1] = false, true
 			}
 		}
 	}
-	// Then the joiners, which need both their neighbours *settled*: in
-	// `👩‍❤️‍👩` the heart is U+2764, which is not from the pictographic
-	// planes and is a picture only because the selector after it says
-	// so. Asking whether the next rune was pictographic, rather than
-	// whether it had been marked, left the joiner beside the heart
-	// looking like a joiner between text — and the couple came apart
+	// Then the joiners, which take their neighbours *and* give to them.
+	//
+	// Taking, because in `👩‍❤️‍👩` the heart is U+2764, which is text by
+	// default and a picture only because the selector after it says
+	// so: asking whether the next rune was pictographic rather than
+	// whether it had been *marked* left the joiner beside the heart
+	// looking like a joiner between text, and the couple came apart
 	// into three pictures (a video player measured it).
+	//
+	// Giving, because a sequence can be written without the selectors
+	// that qualify it — `🏳‍🌈` is a flag that is text by default and a
+	// rainbow that is not — and a font composes it all the same. So a
+	// joiner between two *pictographic* neighbours marks all three,
+	// which is the same answer the unqualified keycap gets below. What
+	// it will not do is overrule U+FE0E: a character asked for as text
+	// is text, joined or not.
+	joinable := func(i int) bool {
+		return i >= 0 && i < len(runes) && !asText[i] &&
+			(out[i] || pictographic(runes[i]))
+	}
 	for i, r := range runes {
-		if r != zwj {
+		if r != zwj || !joinable(i-1) || !joinable(i+1) {
 			continue
 		}
-		before := i > 0 && out[i-1]
-		after := i+1 < len(runes) && out[i+1]
-		out[i] = before && after
+		out[i-1], out[i], out[i+1] = true, true, true
 	}
 	// And last the enclosing keycap, which takes the mark of what it
 	// encloses: `1️⃣` is a digit, the selector and this.
@@ -346,19 +370,49 @@ func emojiPresentation(runes []rune) []bool {
 	return out
 }
 
-// pictographic says whether r is one of the characters that are emoji on
-// their own, with no selector asked for.
+// emojiByDefault says whether r is drawn as a picture with nobody
+// asking: Unicode's Emoji_Presentation.
 //
-// The planes, and not everything above them: the first version of this
-// said `r >= 0x1F000`, which is true of U+20BB7 — a Han ideograph from
-// plane 2, and of every other character in the two planes past the
-// pictographs. A video player found it in a file name, `🎬𠮷野家.mp4`:
-// the Han was marked as colour, the emoji run swallowed it, and the one
-// face that has it was never asked (item: emoji run swallows a following
-// Han fallback). U+1FAFF ends Symbols and Pictographs Extended-A; what
-// follows it is Symbols for Legacy Computing, which is text.
+// It was a range, twice, and a range cannot answer this. `r >= 0x1F000`
+// let in U+20BB7, a Han ideograph in plane 2, and a video player found
+// it in `🎬𠮷野家.mp4`. Bounding that to U+1F000–U+1FAFF fixed the Han
+// and left the rest: inside the range sit the alchemical symbols, the
+// chess pieces and the squared letters, none of them emoji, and the
+// same player found 🜁, 🨀 and 🄰 going the same way. Below it sit ⚡, ⭐
+// and ⌚, which *are* pictures by default, and a mail client found them
+// coming out as black outlines wherever an outline face happens to
+// carry them.
+//
+// So the property itself, from the database (tools/emoji/gen.go). It is
+// eighty ranges.
+func emojiByDefault(r rune) bool {
+	return inRanges(emojiPresentationRanges[:], r)
+}
+
+// pictographic says whether r could be *part* of a picture: Unicode's
+// Extended_Pictographic. It is the wider set — ❤ and 🏳 are in it and
+// are not emoji by default — and it is what a joiner asks about its
+// neighbours.
 func pictographic(r rune) bool {
-	return r >= 0x1F000 && r <= 0x1FAFF
+	return inRanges(extendedPictographicRanges[:], r)
+}
+
+// inRanges is a binary search of one of the tables in emojidata.go,
+// which are sorted and have no range touching the next.
+func inRanges(table []struct{ lo, hi rune }, r rune) bool {
+	i, j := 0, len(table)
+	for i < j {
+		h := (i + j) / 2
+		switch {
+		case r < table[h].lo:
+			j = h
+		case r > table[h].hi:
+			i = h + 1
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // keycapBase says whether r can be enclosed by U+20E3 to make an emoji

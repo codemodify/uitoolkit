@@ -725,3 +725,78 @@ func TestAHanIdeographAfterAnEmojiKeepsItsOwnFace(t *testing.T) {
 		t.Errorf("the Han alone left %d pixels untinted; it is text", n)
 	}
 }
+
+// A symbol that is not an emoji keeps its own face, even beside one.
+//
+// Bounding the pictographic test to U+1F000–U+1FAFF fixed the Han a
+// video player found in `🎬𠮷野家.mp4` and left everything inside the
+// range: the alchemical symbols, the chess pieces and the squared
+// letters are all in it and none of them is an emoji, so each was
+// marked, swallowed by the emoji run beside it, and asked of a colour
+// face that has no such glyph. The same player found all three within
+// the release. Only *after* an emoji — before one there is no run open
+// to take them.
+func TestASymbolThatIsNotAnEmojiKeepsItsOwnFace(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if colourGlyphs(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	const emoji = "\U0001F3AC" // 🎬
+	for _, c := range []struct{ text, what string }{
+		{"\U0001F701", "an alchemical symbol"},
+		{"\U0001FA00", "a chess symbol"},
+		{"\U0001F130", "a squared letter"},
+		{"\U00020BB7", "a Han ideograph"},
+	} {
+		// Whether an outline face here covers the symbol or draws a
+		// box for it does not matter: either is the *text* path, and the
+		// count below is one when the colour face was not asked.
+		if n := colourGlyphs(f, emoji+c.text); n != 1 {
+			t.Errorf("`%s` after an emoji drew %d glyphs from a colour sheet; only the clapper board is a picture", c.what, n)
+		}
+		if got, want := f.Advance(emoji+c.text), f.Advance(emoji)+f.Advance(c.text); got != want {
+			t.Errorf("%s after an emoji is %.4f wide; the two apart are %.4f", c.what, got, want)
+		}
+	}
+}
+
+// A character that is emoji by default is a picture without being
+// asked.
+//
+// ⚡, ⭐ and ⌚ are Emoji_Presentation in the database and sit below the
+// pictographic planes, so the range test never marked them: they came
+// out as black outlines wherever an installed face happens to carry
+// them, which Noto Sans Symbols 2 does. A mail client writes them bare
+// in subject lines — "⚡ Flash sale" — and cannot add U+FE0F, because
+// that would be editing what somebody else wrote (item 66).
+func TestACharacterThatIsEmojiByDefaultNeedsNoSelector(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if colourGlyphs(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	for _, c := range []struct{ text, what string }{
+		{"⚡", "high voltage"},
+		{"⭐", "a star"},
+		{"⌚", "a watch"},
+	} {
+		if n := colourGlyphs(f, c.text); n != 1 {
+			t.Errorf("%s bare drew %d glyphs from a colour sheet; it is a picture by default", c.what, n)
+		}
+		// And the selector changes nothing, because there is nothing
+		// left to ask for.
+		if bare, asked := f.Advance(c.text), f.Advance(c.text+"️"); bare != asked {
+			t.Errorf("%s is %.4f wide bare and %.4f with U+FE0F; the selector asks for what it already is", c.what, bare, asked)
+		}
+		// U+FE0E still asks the other way.
+		if n := colourGlyphs(f, c.text+"︎"); n != 0 {
+			t.Errorf("%s with the text selector drew %d glyphs from a colour sheet", c.what, n)
+		}
+	}
+	// A heart is still text by default: the property, not "everything
+	// an emoji font happens to have".
+	if n := colourGlyphs(f, "❤"); n != 0 {
+		t.Errorf("a bare heart drew %d glyphs from a colour sheet; it asks with U+FE0F", n)
+	}
+}

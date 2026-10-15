@@ -31,6 +31,36 @@ runes are four isolated letters, each drawn as if alone. With it they are
 four joining forms — four glyphs that *no rune maps to*, which is why
 this needs the shaper and not a bigger table.
 
+### Which characters are pictures
+
+Under `-tags font_emoji` the toolkit has to decide, for every *position*
+in a string, whether to draw a colour picture or an outline. It asks the
+Unicode Character Database rather than a range, because a range cannot
+answer it: ⚡ U+26A1 and ⌚ U+231A are pictures by default and sit below
+the pictographic planes, while 🜁 U+1F701, 🨀 U+1FA00 and 🄰 U+1F130 sit
+inside them and are text.
+
+Two properties, generated into `style/emojidata.go` by
+`tools/emoji/gen.go` from `emoji-data.txt` (236 ranges, about 5 KB of
+source, and only in builds with the tag):
+
+- **`Emoji_Presentation`** — a picture with nobody asking. `⚡` is;
+  `❤` and `🏳` are not, and ask with U+FE0F.
+- **`Extended_Pictographic`** — could be *part* of a picture, which is
+  what a zero-width joiner needs to know about its neighbours.
+
+On top of them, UTS #51's own rules: U+FE0F asks for the emoji form and
+U+FE0E for the text form, the text form wins, and a sequence nobody
+qualified is still composed — `🏳‍🌈` without the selector, and `1⃣`
+without it, are each one picture, because every emoji font makes one of
+them.
+
+To refresh the table after a Unicode release:
+
+```sh
+go run tools/emoji/gen.go          # fetches the current emoji-data.txt
+```
+
 ## What an application has to do
 
 Nothing. Every widget that draws text goes through `style.Font`, and
@@ -120,14 +150,6 @@ machine's.
   drawn under `-tags font_emoji`, in a colour sheet of its own that
   [Font.Draw] leaves untinted. Layered outlines and SVG glyphs are
   parsed by go-text and not drawn.
-- **"A picture on its own" is a range, not the property.** A character
-  in the pictographic planes — U+1F000 to U+1FAFF — is drawn as emoji
-  with nobody asking. Unicode's `Emoji_Presentation` says the same of a
-  few dozen characters outside them (⌚ U+231A, ⚡ U+26A1, ⭐ U+2B50),
-  and the toolkit waits to be asked for those with U+FE0F, letting an
-  outline face answer otherwise. Honouring the property means carrying
-  the table. The range is bounded at both ends on purpose: U+1FB00 and
-  up is Symbols for Legacy Computing, and plane 2 is Han.
 - **Caret affinity.** At a change of direction one text position is two
   places on screen. The toolkit picks one: the leading edge of the
   character the index names.
