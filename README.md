@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.16
+go get github.com/codemodify/uitoolkit@v0.23.17
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,16 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.17** — **Tests, not the toolkit: the last two that skipped
+instead of checking.** Both halves of the maximized-window turn test
+skipped under the race detector while the parent printed PASS and the
+command exited zero — `go test` indents a subtest's verdict, so the
+grep behind 0.23.16's "the remaining skips are all no-display ones"
+never matched them and the claim was wrong. They hold the turn's clock
+now and a missed frame is a failure. `tools/skips.sh` lists every
+skip with its reason, subtests included, so this is a thing you can
+check rather than a thing I have to remember. No runtime change.
 
 **0.23.16** — **A tag flag draws its own country again.** `🏴󠁧󠁢󠁥󠁮󠁧󠁿` is a
 black flag and `gbeng` spelled in tag characters, which have no emoji

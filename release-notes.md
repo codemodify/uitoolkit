@@ -7,6 +7,65 @@ about the problem it solved.
 
 ---
 
+## 0.23.17
+
+**No runtime change: this release is two tests that were skipping
+instead of checking, and a way to notice the next one.**
+
+### Both halves of the maximized-turn test
+
+0.23.16 fixed one window-turn test that ended in a `t.Skip` and so
+reported green under the race detector without checking anything, and
+its notes said the skips left in `app` were all no-display ones. That
+was wrong, and wrong in an instructive way: `go test` prints a
+*subtest's* verdict indented under its parent, so the
+`grep '^--- SKIP'` behind the claim matched none of them.
+
+`TestAMaximizedWindowDoesNotStandBehindItsOwnTurn` runs its body
+against each of the two painters. Under `-race` both children skipped
+at "the clock beat the painter" while the parent printed PASS and the
+command exited zero — so neither painter was checked for the thing the
+test exists to catch, a maximized window still drawing itself behind
+its own turning picture. A music player inspected the child results
+rather than the parent and reported it (its item 54), with the note
+that this repository's claim was too broad. It was.
+
+The helper holds the turn's clock now, like the three before it, and
+both of its skips are failures: a frame that is never narrow enough to
+read, and a card with no strip of window beside it, are each a defect
+with a held clock rather than a stopwatch.
+
+### tools/skips.sh
+
+A skip is what green looks like when nothing ran, and that is now three
+separate times an application has had to tell this repository so. The
+script lists every test that skipped and why, subtests included:
+
+```sh
+tools/skips.sh ./app/
+tools/skips.sh -race ./app/ ./widgets/ ./rack/
+```
+
+It matches a skip to its reason by test name, because the reason is
+logged while the test runs and the verdict is printed afterwards — for
+a subtest, in a block under its parent, which is the detail that made
+the plain grep wrong.
+
+Six skips are expected across `app`, `widgets` and `rack`: four for a
+missing display or GPU, which `tools/test-display.sh` covers in a
+nested KWin, and two for a build without `font_complex`, which
+`tools/test-fonts.sh` covers. Anything else is a test that is not
+running and not saying so in those terms.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, under
+`-race` in `app`, `widgets` and `rack`, and on Windows 11 and macOS 15
+in two builds each. The music player's own command for item 54 now
+reports PASS for the parent and for both children.
+
+---
+
 ## 0.23.16
 
 **A tag flag draws its own country again, and a test that had been
