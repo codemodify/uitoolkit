@@ -800,3 +800,57 @@ func TestACharacterThatIsEmojiByDefaultNeedsNoSelector(t *testing.T) {
 		t.Errorf("a bare heart drew %d glyphs from a colour sheet; it asks with U+FE0F", n)
 	}
 }
+
+// A tag flag draws its own country, not the flag it starts with.
+//
+// This is the case that advance, cell count and tint all miss: with
+// the tags dropped from the run, `🏴󠁧󠁢󠁥󠁮󠁧󠁿` still comes out as *one*
+// untinted colour cell of exactly the right width — the right width
+// because tag characters have no advance of their own — and that cell
+// is the bare black flag. A music player's artwork guard was the only
+// thing that saw it (item 53), so this compares the pixels.
+func TestATagFlagDrawsItsOwnCountry(t *testing.T) {
+	realFonts(t)
+	f := BakeFamily(FamilyUI, WeightRegular, 24, paintengine2d.White)
+	if colourGlyphs(f, "\U0001F469") != 1 {
+		t.Skip("this machine has no colour emoji face")
+	}
+	const black = "\U0001F3F4"
+	flags := []struct{ text, what string }{
+		{"\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F", "England"},
+		{"\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F", "Scotland"},
+		{"\U0001F3F4\U000E0067\U000E0062\U000E0077\U000E006C\U000E0073\U000E007F", "Wales"},
+	}
+	bare := drawnPixels(t, f, black, paintengine2d.White)
+	same := func(a, b []uint32) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+	drawn := map[string][]uint32{}
+	for _, c := range flags {
+		if n := colourGlyphs(f, c.text); n != 1 {
+			t.Errorf("%s drew %d glyphs from a colour sheet; a tag flag is one picture", c.what, n)
+			continue
+		}
+		px := drawnPixels(t, f, c.text, paintengine2d.White)
+		if same(px, bare) {
+			t.Errorf("%s is pixel for pixel the bare black flag; its tags left the run", c.what)
+		}
+		for other, prev := range drawn {
+			if same(px, prev) {
+				t.Errorf("%s and %s draw the same picture", c.what, other)
+			}
+		}
+		drawn[c.what] = px
+	}
+	if len(drawn) == 0 {
+		t.Skip("this machine's emoji face has none of the three")
+	}
+}

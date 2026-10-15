@@ -261,6 +261,11 @@ func emojiPresentation(runes []rune) []bool {
 		vs16   = 0xFE0F // emoji presentation
 		zwj    = 0x200D
 		keycap = 0x20E3 // combining enclosing keycap
+		// A tag sequence spells a subdivision out in tag characters
+		// and closes with the terminator (UTS #51 ED-14a).
+		tagSpecLo = 0xE0020
+		tagSpecHi = 0xE007E
+		tagTerm   = 0xE007F
 	)
 	out := make([]bool, len(runes))
 	for i, r := range runes {
@@ -363,6 +368,39 @@ func emojiPresentation(runes []rune) []bool {
 		// tintable letter and an untinted cell side by side (the same
 		// player, item 50, within the release). An enclosing mark on
 		// anything else is ordinary combining text.
+		for j := base; j <= i; j++ {
+			out[j] = true
+		}
+	}
+	// And the tag sequences, which are the other thing a font composes
+	// out of characters that are not pictures themselves.
+	//
+	// `🏴󠁧󠁢󠁥󠁮󠁧󠁿` is a waving black flag and then `gbeng` spelled in tag
+	// characters, terminated by U+E007F (UTS #51 ED-14a). The tags are
+	// invisible on their own and Unicode gives them no emoji property
+	// at all — but they are what tells the font *which* flag, and a
+	// font that has England draws it as one glyph.
+	//
+	// The marking that said `r >= 0x1F000` swept them up by accident,
+	// U+E0067 being well above that, and bounding the range to the
+	// pictographic planes took them back out. England, Scotland and
+	// Wales then came out as the bare black flag: one cell, untinted,
+	// the right width, and the wrong picture — which is why a music
+	// player's advance and glyph-count checks all passed and only its
+	// artwork guard caught it (item 53).
+	for i, r := range runes {
+		if r != tagTerm || i == 0 {
+			continue
+		}
+		base := i - 1
+		for base >= 0 && runes[base] >= tagSpecLo && runes[base] <= tagSpecHi {
+			base--
+		}
+		// A terminator with no tags before it ends nothing, and tags
+		// after something that is not a picture are not a flag.
+		if base < 0 || base == i-1 || !out[base] {
+			continue
+		}
 		for j := base; j <= i; j++ {
 			out[j] = true
 		}

@@ -769,6 +769,50 @@ func TestOnlyEmojiPresentationIsAPictureOnItsOwn(t *testing.T) {
 	}
 }
 
+// A tag sequence is one flag, tags and all.
+//
+// `🏴󠁧󠁢󠁥󠁮󠁧󠁿` is a waving black flag followed by `gbeng` in tag characters
+// and a terminator. Unicode gives the tags no emoji property — they are
+// not pictures and not pictographic — so the property tables alone
+// leave them behind, and the font is asked for a black flag and some
+// invisible text instead of England. `r >= 0x1F000` had swept them up
+// by accident; bounding the range took them out again (a music player,
+// item 53).
+func TestATagSequenceIsOneFlag(t *testing.T) {
+	const (
+		eng = "\U0001F3F4\U000E0067\U000E0062\U000E0065\U000E006E\U000E0067\U000E007F"
+		sct = "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F"
+	)
+	for _, c := range []struct {
+		text string
+		want []bool
+		what string
+	}{
+		{eng, []bool{true, true, true, true, true, true, true}, "England"},
+		{sct, []bool{true, true, true, true, true, true, true}, "Scotland"},
+		// A terminator alone ends nothing, and tags behind something
+		// that is not a picture are tag characters.
+		{"\U000E007F", []bool{false}, "a lone terminator"},
+		{"\U0001F3F4\U000E007F", []bool{true, false}, "a flag and a terminator with no tags"},
+		{"A\U000E0067\U000E007F", []bool{false, false, false}, "tags behind a letter"},
+		{"\U0001F3F4\uFE0E\U000E0067\U000E007F", []bool{false, false, false, false}, "a flag asked for as text"},
+		// And a tag run that nobody terminated is not a sequence.
+		{"\U0001F3F4\U000E0067\U000E0062", []bool{true, false, false}, "tags with no terminator"},
+	} {
+		got := emojiPresentation([]rune(c.text))
+		if len(got) != len(c.want) {
+			t.Errorf("%s: %d marks for %d runes", c.what, len(got), len(c.want))
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: marks %v, want %v", c.what, got, c.want)
+				break
+			}
+		}
+	}
+}
+
 // A sequence nobody qualified is still the one picture a font makes of
 // it.
 //
