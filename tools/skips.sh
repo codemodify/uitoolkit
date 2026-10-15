@@ -39,6 +39,14 @@
 # them printed instead of a guess, and a test that logged nothing at
 # all — `t.SkipNow()` logs nothing — is reported as having said so.
 #
+# All of that is per *package*. Two packages may each have a TestFoo,
+# and keying what was said by test name alone handed the second one
+# the first one's reason — a silent SkipNow reported with somebody
+# else's words (a video player, the release after). `go test` prints
+# each package's output as a block ending in its `ok <pkg>` line, so
+# the block is the scope, and the package is shown whenever more than
+# one of them had something to report.
+#
 # What is left after those were fixed, and what is expected here:
 #
 #   no DISPLAY / no WAYLAND_DISPLAY     tools/test-display.sh covers it
@@ -71,11 +79,20 @@ sites=$(grep -rn --include='*_test.go' -E '\.(Skip|Skipf|SkipNow)\(' . 2>/dev/nu
 # The log lines are emitted while the test runs and the verdict is
 # printed afterwards — for a subtest, in a block under its parent — so
 # they are matched up by name rather than by being next to each other.
+# The package's own line comes last of all, which is why the rows are
+# held until the end rather than printed as they are found.
 echo "$out" | awk -v sites="$sites" '
+  function forget(   k) {
+    for (k in said) delete said[k]
+    for (k in count) delete count[k]
+    for (k in from) delete from[k]
+    for (k in fromCount) delete fromCount[k]
+    name = ""
+  }
   BEGIN {
-    n = split(sites, s, "\n")
-    for (i = 1; i <= n; i++) if (s[i] != "") site[s[i]] = 1
-    n = 0
+    parts = split(sites, s, "\n")
+    for (i = 1; i <= parts; i++) if (s[i] != "") site[s[i]] = 1
+    pending = 1
   }
   /^ *=== (RUN|CONT|NAME) / { name = $3; next }
   /^ *[A-Za-z0-9_]+\.go:[0-9]+: / {
@@ -92,20 +109,40 @@ echo "$out" | awk -v sites="$sites" '
   }
   /^ *--- SKIP: / {
     who = $0; sub(/^ *--- SKIP: /, "", who); sub(/ \(.*/, "", who)
-    n++
-    if (!(who in said)) { printf "%-68s %s\n", who, "(said nothing)"; next }
-    if (fromCount[who] == 1) { printf "%-68s %s\n", who, from[who]; next }
-    if (count[who] == 1) { printf "%-68s %s\n", who, said[who]; next }
-    # No line came from a Skip, or more than one did: show them all
-    # rather than name the wrong one.
-    print who
-    split(said[who], lines, "\n")
-    for (i = 1; i <= count[who]; i++) printf "    %s\n", lines[i]
-    unsure++
+    rows++
+    rowName[rows] = who
+    if (!(who in said))            rowWhy[rows] = "(said nothing)"
+    else if (fromCount[who] == 1)  rowWhy[rows] = from[who]
+    else if (count[who] == 1)      rowWhy[rows] = said[who]
+    else { rowWhy[rows] = said[who]; rowMany[rows] = count[who]; unsure++ }
+    next
+  }
+  # A package has finished: everything buffered since the last one was
+  # its, and nothing it said may reach the next.
+  /^(ok|FAIL|\?)[ \t]+[^ \t[]/ {
+    for (i = pending; i <= rows; i++) rowPkg[i] = $2
+    pending = rows + 1
+    if (rows >= pending - 1 && pending > 1) pkgs[$2] = 1
+    forget()
     next
   }
   END {
-    printf "\n%d skipped\n", n
+    for (i = pending; i <= rows; i++) rowPkg[i] = "(no package line)"
+    for (i = 1; i <= rows; i++) seen[rowPkg[i]] = 1
+    many = 0
+    for (p in seen) many++
+    last = ""
+    for (i = 1; i <= rows; i++) {
+      # The package as a heading above its rows, and never as an
+      # indent on them: a row begins with the name of the test it is
+      # about, which is what anything reading this output keys on.
+      if (many > 1 && rowPkg[i] != last) { printf "%s\n", rowPkg[i]; last = rowPkg[i] }
+      if (!(i in rowMany)) { printf "%-68s %s\n", rowName[i], rowWhy[i]; continue }
+      print rowName[i]
+      split(rowWhy[i], lines, "\n")
+      for (j = 1; j <= rowMany[i]; j++) printf "    %s\n", lines[j]
+    }
+    printf "\n%d skipped\n", rows
     if (unsure) printf "%d of them logged lines this could not trace to a Skip call; every line is shown for those\n", unsure
   }
 '

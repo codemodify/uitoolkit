@@ -32,6 +32,10 @@ func TestOuter(t *testing.T) {
 	// there is no line to find and the report has to say so rather
 	// than reach for somebody else's.
 	t.Run("silent", func(t *testing.T) { t.SkipNow() })
+	// This one shares its name with a child of [skipfixture2], which
+	// says nothing. Two packages may each have a test of the same
+	// name, and what this one says must not be handed to that one.
+	t.Run("shared", func(t *testing.T) { t.Skip("only this package is missing anything") })
 }
 
 func TestThatRuns(t *testing.T) {}

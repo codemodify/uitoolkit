@@ -75,7 +75,7 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 	// neither, because go test indents a subtest's verdict under its
 	// parent — which is how a release note came to say that the only
 	// skips left were the no-display ones.
-	for _, want := range []string{"TestOuter/logged", "TestOuter/plain", "TestOuter/silent"} {
+	for _, want := range []string{"TestOuter/logged", "TestOuter/plain", "TestOuter/silent", "TestOuter/shared"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%s is not in the report:\n%s", want, out)
 		}
@@ -83,8 +83,13 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 	if strings.Contains(out, "TestThatRuns") {
 		t.Errorf("a test that ran is reported as skipped:\n%s", out)
 	}
-	if !strings.Contains(out, "3 skipped") {
-		t.Errorf("the count is not three:\n%s", out)
+	if !strings.Contains(out, "4 skipped") {
+		t.Errorf("the count is not four:\n%s", out)
+	}
+	// One package, so it is not named: the heading is there to tell
+	// two apart and is noise when there is only one.
+	if strings.Contains(out, "github.com/codemodify/uitoolkit/internal/skipfixture\n") {
+		t.Errorf("a single package is named in its own report:\n%s", out)
 	}
 	// The child that talked on both sides of its reason is reported
 	// with the reason and nothing else. Guessing the first line lost
@@ -126,6 +131,50 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 	if !strings.Contains(out, "the test run itself failed") {
 		t.Errorf("a failed test run does not say so:\n%s", out)
 	}
+
+	// Two packages with a test of the same name keep their own words.
+	// Keying what was said by test name alone handed the second one
+	// the first one's reason, so a child that called t.SkipNow and
+	// logged nothing was reported with another package's line.
+	t.Run("two packages sharing a test name", func(t *testing.T) {
+		out, code := run("-tags", "skipfixture",
+			"./internal/skipfixture/", "./internal/skipfixture2/")
+		if code != 0 {
+			t.Fatalf("exited %d:\n%s", code, out)
+		}
+		if !strings.Contains(out, "5 skipped") {
+			t.Errorf("the count is not five:\n%s", out)
+		}
+		// Both packages are named, since there is more than one.
+		for _, want := range []string{
+			"github.com/codemodify/uitoolkit/internal/skipfixture",
+			"github.com/codemodify/uitoolkit/internal/skipfixture2",
+		} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("%s is not named in the report:\n%s", want, out)
+			}
+		}
+		// Both packages have a TestOuter/shared. The first skips with
+		// a reason, the second says nothing at all — so the only
+		// line the second could be reported with is the first's. A
+		// row begins with the name of its test, at the left margin,
+		// because that is what reads this output.
+		var shared []string
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "TestOuter/shared ") {
+				shared = append(shared, line)
+			}
+		}
+		if len(shared) != 2 {
+			t.Fatalf("expected two rows for the shared name, got %d:\n%s", len(shared), out)
+		}
+		if !strings.Contains(shared[0], "only this package is missing anything") {
+			t.Errorf("the first package's reason is not reported:\n  %s", strings.TrimSpace(shared[0]))
+		}
+		if !strings.Contains(shared[1], "(said nothing)") {
+			t.Errorf("the silent child in the other package borrowed its words:\n  %s", strings.TrimSpace(shared[1]))
+		}
+	})
 
 	// And it works in a tree that has no Skip anywhere, which this
 	// repository can never be and so can never check from here.

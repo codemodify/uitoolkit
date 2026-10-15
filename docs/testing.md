@@ -307,15 +307,20 @@ matched by test name because the logs come out while the test runs and
 the verdict afterwards. A failed run exits non-zero and says so,
 rather than reporting `0 skipped`.
 
-It reports what the test said rather than naming one line as *the*
-reason, because nothing in the output identifies one: `t.Skip` is
-`t.Log` plus `t.SkipNow`, so its message is an ordinary log line, and
-`t.SkipNow` on its own logs nothing. A test that logged once has it
-printed beside its name, a test that logged more has all of its lines
-in order, and a test that said nothing is reported as having said
-nothing. Guessing the first line reported a setup log as the reason
-and guessing the last reported a cleanup's; both were found from
-outside, a morning apart.
+The reason is found rather than guessed at. Nothing in the output
+marks it — `t.Skip` is `t.Log` plus `t.SkipNow`, so its message is an
+ordinary log line, and a test may talk on either side of it — but
+every log line carries the file and line of the call that wrote it,
+and the `Skip` calls are in the test sources to be found. A test whose
+lines trace to no `Skip`, or to more than one, has all of them printed
+instead, and the count at the bottom says how many were reported that
+way; `t.SkipNow`, which logs nothing, is reported as nothing said.
+
+All of it is per package, and the package is named whenever more than
+one had something to report: two packages may each have a `TestFoo`,
+and keying what was said by test name alone handed the second one the
+first one's reason. Each row still begins with the name of its test at
+the left margin, so the output stays readable by anything parsing it.
 
 The skips to expect:
 
