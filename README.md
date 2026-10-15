@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.18
+go get github.com/codemodify/uitoolkit@v0.23.19
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,15 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.19** — **The skip reporter finds the reason instead of
+guessing at it.** 0.23.18 took the last line a test logged; a cleanup
+that logs after `t.Skip` made that wrong, as taking the first had been
+wrong for a setup log. Position cannot answer it — `t.Skip` is
+`t.Log` plus `t.SkipNow`, so its message is an ordinary log line — but
+*provenance* can: every log line carries the file and line of the call
+that wrote it, and the Skip calls are in the test sources to be found.
+No runtime change.
 
 **0.23.18** — **The skip reporter had the two defects it exists to
 prevent.** Shipped in 0.23.17 and audited by two applications the same

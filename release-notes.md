@@ -7,6 +7,67 @@ about the problem it solved.
 
 ---
 
+## 0.23.19
+
+**No runtime change. The skip reporter identifies the skip's reason
+rather than guessing which line it was.**
+
+### Position cannot answer it; provenance can
+
+0.23.17 took the first file-prefixed line a test logged and called it
+the reason, and a setup log displaced it. 0.23.18 took the last
+instead, and a `t.Cleanup` that logs after the skip displaced it the
+other way — both players reported that within hours of the release,
+and they were right that there was no third guess worth making.
+`t.Skip` is `t.Log` plus `t.SkipNow`, so its message is an ordinary
+log line with nothing to mark it, and `t.SkipNow` on its own writes no
+line at all.
+
+What does identify it is where the line came from. Every log line is
+stamped with the file and line of the call that wrote it, and the
+skip's call is a call to `Skip` — which is in the test sources, to be
+found before reading the output:
+
+```sh
+grep -rn --include='*_test.go' -E '\.(Skip|Skipf|SkipNow)\(' .
+```
+
+A logged line stamped with one of those positions is the reason. A
+test whose lines match none of them, or more than one, has everything
+it said printed instead of a guess, and the count at the bottom says
+how many were reported that way. A test that logged nothing is
+reported as having said nothing rather than handed somebody else's
+line.
+
+### Three mistakes in one script, and what pins them now
+
+This is the third release in a row to correct this script, which is
+more than enough to stop describing its behaviour and start checking
+it. `TestTheSkipReporterReportsSkipsAndFailures` drives it against
+`internal/skipfixture` — tests that skip on purpose, behind a tag so
+an ordinary run never sees them — and now covers a child that logs on
+*both* sides of its skip, a child that gives no reason at all, and a
+tree with no `Skip` anywhere in it.
+
+That last one is not reachable from this repository, which always has
+skips, and it is where the newest mistake landed: `grep` exits 1 when
+it matches nothing, and under `set -o pipefail` the script ended
+before printing a thing. Silently producing nothing, in the tool
+written because silence reads as success. A video player's probe
+caught it within the hour; the test now copies the scripts into a
+quiet tree and checks the same thing.
+
+### Verified
+
+Green on Linux in the default build and all three font builds, under
+`-race` in `app`, `widgets` and `rack`, and on Windows 11 and macOS 15
+in two builds each. Both applications' own probes pass against this
+tree: the music player's reports the actual reason after an earlier
+setup log, and the video player's reports it after a later cleanup log
+and confirms a failed invocation is still exposed.
+
+---
+
 ## 0.23.18
 
 **No runtime change. The skip reporter 0.23.17 added had, between its
