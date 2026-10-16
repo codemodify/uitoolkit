@@ -141,6 +141,28 @@ nursed. See [tools/vm/README.md](../tools/vm/README.md), which also
 records the two things that cost an afternoon each: the 108-byte cap on
 a unix socket path, and that Windows drops a burst of `sendkey`.
 
+**When the other two platforms are worth the twenty-five minutes.**
+Run them whenever a `.go` file changed, and that includes a `_test.go`
+file: the one thing the rigs caught across five releases of tooling
+work was a *test* that could not run on either of them — it executed a
+shell script, which Windows cannot do at all and which needs a
+`dbus-daemon` macOS does not have. Nothing on Linux could have found
+that.
+
+Skip them when the change is only shell scripts, documentation or
+screenshots. `git diff --name-only <last tag> -- '*.go'` answers it,
+and the applications auditing a release check the sharper version of
+the same thing — counting the non-test Go files that are byte-identical
+to the previous tag.
+
+What is never worth skipping is cheaper than either: reproduce the
+reported case before fixing it, and mutate the new test to confirm it
+fails. The first has twice shown that a defect was not in the commits
+it appeared to be in, and the second catches a test that would not have
+noticed the bug — including the two occasions when an edit meant to
+break the code silently changed nothing, and the pass was read as the
+test being weak.
+
 The Mac is found by **name**: `~/.config/uitoolkit/mac-host` holds
 `user@something.local` and `tools/test-darwin.sh` reads it. A laptop's
 address changes with the network it is on — this one has been three
