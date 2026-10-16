@@ -7,6 +7,58 @@ about the problem it solved.
 
 ---
 
+## 0.23.21
+
+**No runtime change. A second attempt at a test starts with nothing
+said, and the rule for when the other two platforms are worth
+testing on is written down.**
+
+### `-count=2` and the first attempt's words
+
+0.23.20 scoped what a test said to its package, because two packages
+may each have a `TestFoo`. One package may also run the same test
+twice: `-count=2` repeats it inside the one block, and the reporter
+forgot only at the block boundary — so a second attempt that said
+nothing was reported with whatever the first one said.
+
+`=== RUN` starts an invocation and clears what that name said;
+`=== CONT` and `=== NAME` resume one, so they only move the cursor.
+
+Only a test that speaks once and then goes quiet can show this. An
+ordinary test says the same thing on both attempts, so quoting the
+first for the second looks exactly right — which is why it took a
+built fixture to find, and why there is now a deliberately contrived
+`TestRepeated` in `internal/skipfixture` to keep it found.
+
+### When the Mac and Windows are worth twenty-five minutes
+
+[docs/testing.md](docs/testing.md) gains the rule, after a session in
+which most of the time went on rig runs that confirmed nothing:
+
+- Run them whenever a `.go` file changed, **including a `_test.go`
+  file**. Across five releases of tooling work they caught exactly one
+  thing and it was a test — one that execs a shell script, which
+  Windows cannot do and which needs a `dbus-daemon` macOS does not
+  have. Nothing on Linux could have found that.
+- Skip them when the change is only shell scripts, documentation or
+  screenshots.
+
+And the two steps never worth skipping, because they cost seconds:
+reproduce the reported case before fixing it, and mutate the new test
+to watch it fail. The first has twice shown a defect was not in the
+commits it appeared to be in; the second catches a test that would not
+have noticed the bug at all.
+
+### Verified
+
+This release changed `.go` files, so: green on Linux in the default
+build and all three font builds, under `-race` in `app`, `widgets` and
+`rack`, and on Windows 11 and macOS 15 in two builds each. Both
+applications' probes pass, the video player's in all three of its
+modes.
+
+---
+
 ## 0.23.20
 
 **No runtime change. The skip reporter keeps two packages' tests

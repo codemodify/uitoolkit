@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.23.20
+go get github.com/codemodify/uitoolkit@v0.23.21
 go get github.com/codemodify/paintengine2d@v0.12.2
 ```
 
@@ -952,6 +952,13 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md). A few
 are summarised here; the list below is not continuous.
+
+**0.23.21** — **A second attempt at a test starts with nothing said.**
+Under `-count=2` one test runs twice inside one package block, and the
+reporter forgot what was said only at the package boundary — so a
+second attempt that said nothing was reported with whatever the first
+one said. Only a test that speaks once and then goes quiet can show
+it, which is why it took a built fixture to find. No runtime change.
 
 **0.23.20** — **The skip reporter keeps two packages' tests apart.**
 Two packages may each have a `TestFoo`, and keying what a test said by
