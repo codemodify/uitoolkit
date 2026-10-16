@@ -39,3 +39,24 @@ func TestOuter(t *testing.T) {
 }
 
 func TestThatRuns(t *testing.T) {}
+
+// attempts counts this package's runs of [TestRepeated], so that its
+// second attempt can say nothing where its first said something.
+var attempts int
+
+// A test that speaks once and then goes quiet, which is what -count=2
+// makes it possible to see: the same test runs twice inside one
+// package block, and the second attempt was being reported with
+// whatever the first one said (a video player, the release after
+// packages were separated).
+//
+// Contrived on purpose. An ordinary test says the same thing on every
+// attempt, which is exactly why nobody would notice the first
+// attempt being quoted for the second.
+func TestRepeated(t *testing.T) {
+	attempts++
+	if attempts == 1 {
+		t.Skip("only the first attempt has anything to say")
+	}
+	t.SkipNow()
+}

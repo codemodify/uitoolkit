@@ -83,8 +83,8 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 	if strings.Contains(out, "TestThatRuns") {
 		t.Errorf("a test that ran is reported as skipped:\n%s", out)
 	}
-	if !strings.Contains(out, "4 skipped") {
-		t.Errorf("the count is not four:\n%s", out)
+	if !strings.Contains(out, "5 skipped") {
+		t.Errorf("the count is not five:\n%s", out)
 	}
 	// One package, so it is not named: the heading is there to tell
 	// two apart and is noise when there is only one.
@@ -142,8 +142,8 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("exited %d:\n%s", code, out)
 		}
-		if !strings.Contains(out, "5 skipped") {
-			t.Errorf("the count is not five:\n%s", out)
+		if !strings.Contains(out, "6 skipped") {
+			t.Errorf("the count is not six:\n%s", out)
 		}
 		// Both packages are named, since there is more than one.
 		for _, want := range []string{
@@ -173,6 +173,33 @@ func TestTheSkipReporterReportsSkipsAndFailures(t *testing.T) {
 		}
 		if !strings.Contains(shared[1], "(said nothing)") {
 			t.Errorf("the silent child in the other package borrowed its words:\n  %s", strings.TrimSpace(shared[1]))
+		}
+	})
+
+	// A second attempt at the same test starts with nothing said.
+	// Under -count=2 one test runs twice inside one package block,
+	// and the second attempt was being reported with whatever the
+	// first one said — invisible for an ordinary test, which says
+	// the same thing both times.
+	t.Run("the same test run twice", func(t *testing.T) {
+		out, code := run("-tags", "skipfixture", "-count=2", "./internal/skipfixture/")
+		if code != 0 {
+			t.Fatalf("exited %d:\n%s", code, out)
+		}
+		var repeated []string
+		for _, line := range strings.Split(out, "\n") {
+			if strings.HasPrefix(line, "TestRepeated ") {
+				repeated = append(repeated, line)
+			}
+		}
+		if len(repeated) != 2 {
+			t.Fatalf("expected two attempts, got %d:\n%s", len(repeated), out)
+		}
+		if !strings.Contains(repeated[0], "only the first attempt has anything to say") {
+			t.Errorf("the first attempt is not reported with what it said:\n  %s", strings.TrimSpace(repeated[0]))
+		}
+		if !strings.Contains(repeated[1], "(said nothing)") {
+			t.Errorf("the second attempt borrowed the first one's words:\n  %s", strings.TrimSpace(repeated[1]))
 		}
 	})
 

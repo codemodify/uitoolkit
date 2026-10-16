@@ -94,7 +94,21 @@ echo "$out" | awk -v sites="$sites" '
     for (i = 1; i <= parts; i++) if (s[i] != "") site[s[i]] = 1
     pending = 1
   }
-  /^ *=== (RUN|CONT|NAME) / { name = $3; next }
+  # A fresh RUN is a fresh invocation and starts with nothing said:
+  # under -count=2 the same test runs twice in the one package block,
+  # and a second attempt that says nothing was being reported with
+  # whatever the first one said. CONT and NAME resume an invocation
+  # rather than start one, so they only move the cursor.
+  #
+  # (No apostrophes in here: the whole program is inside a shell
+  # single-quoted string, and one of them ended it.)
+  /^ *=== RUN / {
+    name = $3
+    delete said[name]; delete count[name]
+    delete from[name]; delete fromCount[name]
+    next
+  }
+  /^ *=== (CONT|NAME) / { name = $3; next }
   /^ *[A-Za-z0-9_]+\.go:[0-9]+: / {
     line = $0; sub(/^ */, "", line)
     if (name == "") next
